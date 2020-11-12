@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Tuple, Callable, Dict, Union
+from typing import Tuple, Callable, Dict, Union, Iterable
 
 
 class Parametrized(object):
@@ -15,6 +15,12 @@ class Parametrized(object):
     @property
     def param_dict(self) -> Dict[str, 'Parametrized']:
         return dict(zip(self.params_names, self._params))
+
+    @property
+    def names_and_params(self) -> Iterable[Tuple['Parametrized', str]]:
+        for p, name in zip(self._params, self.params_names):
+            if p.params:
+                yield name, p
 
     def __repr__(self):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
@@ -49,7 +55,10 @@ class Parameter(float, Parametrized):
         return self,
 
     def with_params(self, params):
-        return type(self)(next(iter(params)))
+        param = next(iter(params))
+        if isinstance(param, ConstantParameter):
+            return param
+        return type(self)(param)
 
     def __call__(self):
         return self
@@ -97,6 +106,3 @@ class ParametrizedFunction(Parametrized):
         for param in self._params:
             new_params.append(param.with_params(params))
         return type(self)(self.f, **dict(zip(self.params_names, new_params)))
-
-
-

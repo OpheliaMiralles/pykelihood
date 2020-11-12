@@ -34,6 +34,7 @@ pandas2ri.activate()
 
 EULER = -scipy.special.psi(1)
 
+
 def hash_with_series(*args, **kwargs):
     to_hash = []
     for v in args:
@@ -66,7 +67,7 @@ class Distribution:
         return NotImplemented
 
     @abstractmethod
-    def with_params(self, params: Tuple):
+    def with_params(self, params: Iterable):
         return NotImplemented
 
     @abstractmethod
@@ -92,7 +93,7 @@ class Distribution:
 
     @classmethod
     def param_dict_to_vec(cls, x: dict):
-        return tuple([x.get(p) for p in cls.params_names])
+        return tuple(x.get(p) for p in cls.params_names)
 
     def sf(self, x: Union[np.array, float]):
         return 1 - self.cdf(x)
@@ -109,11 +110,11 @@ class Distribution:
     def inverse_cdf(self, q: float):
         return self.isf(1 - q)
 
-    @abstractmethod
-    def log_likelihood(self, data: Union[np.array, pd.Series, robjects.FloatVector],
+    def log_likelihood(self, data: Union[np.array, pd.Series],
                        conditioning_method: Callable = ConditioningMethod.no_conditioning,
                        *args, **kwds):
-        return NotImplemented
+        res = self.logpdf(data, *args, **kwds)
+        return np.sum(res - conditioning_method(data, self))
 
     def opposite_log_likelihood(self, data: Union[np.array, pd.Series],
                                 conditioning_method: Callable = ConditioningMethod.no_conditioning,
@@ -146,12 +147,6 @@ class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
         g = cachetools.cached(self._cache, key=hash_with_series)(g)
         self.__dict__[item] = g
         return g
-
-    def log_likelihood(self, data: Union[np.array, pd.Series],
-                       conditioning_method: Callable = ConditioningMethod.no_conditioning,
-                       *args, **kwds):
-        res = self.logpdf(data, *args, **kwds)
-        return np.sum(res - conditioning_method(data, self))
 
     @classmethod
     def fit(cls, data, x0=None, conditioning_method=ConditioningMethod.no_conditioning, **fixed_values):
@@ -208,6 +203,7 @@ class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
         x0 = x0 if x0 is not None else init.params
         if len(x0) != len(init.params):
             raise ValueError(f"Expected {len(init.params)} values in x0, got {len(x0)}")
+
         def to_minimize(x):
             o = init.with_params(x)
             return o.opposite_log_likelihood(data, conditioning_method=conditioning_method)
@@ -558,14 +554,30 @@ class JointDistribution(Distribution):
         self.d2 = d2
 
     @property
+    def params_names(self):
+        d1_names = [f"d1_{p}" for p in self.d1.params_names]
+        d2_names = [f"d2_{p}" for p in self.d2.params_names]
+        return tuple(d1_names) + tuple(d2_names)
+
+    @property
     def params(self):
         return self.d1.params + self.d2.params
 
+    @property
+    def _params(self):
+        return self.d1._params + self.d2._params
+
+    @property
+    def names_and_params(self):
+        for name, p in self.d1.names_and_params:
+            yield f"d1_{name}", p
+        for name, p in self.d2.names_and_params:
+            yield f"d2_{name}", p
+
     def with_params(self, new_params):
-        d1_params = new_params[:len(self.d1.params)]
-        d2_params = new_params[len(self.d1.params):]
-        d1 = self.d1.with_params(d1_params)
-        d2 = self.d2.with_params(d2_params)
+        new_params = iter(new_params)
+        d1 = self.d1.with_params(new_params)
+        d2 = self.d2.with_params(new_params)
         return type(self)(d1, d2)
 
     def rvs(self, size):
@@ -581,28 +593,39 @@ class JointDistribution(Distribution):
         return self.d2.pdf(x) * self.d1.pdf(self.d2.cdf(x))
 
     def _process_fit_params(self, **kwds):
-        d1_fixed_params = {k[:-1]: v for k, v in kwds.items() if k.endswith("1")}
-        d2_fixed_params = {k[:-1]: v for k, v in kwds.items() if k.endswith("2")}
-        return self.d1.param_dict_to_vec(d1_fixed_params) + self.d2.param_dict_to_vec(d2_fixed_params)
+        d1_params = []
+        for name, _ in self.d1.names_and_params:
+            k = f"d1_{name}"
+            if k in kwds:
+                d1_params.append(ConstantParameter(kwds.pop(k)))
+            else:
+                d1_params.append(getattr(self.d1, name))
+        d2_params = []
+        for name, _ in self.d2.names_and_params:
+            k = f"d2_{name}"
+            if k in kwds:
+                d2_params.append(ConstantParameter(kwds.pop(k)))
+            else:
+                d2_params.append(getattr(self.d2, name))
+        if kwds:
+            raise ValueError(f"Unexpected parameters: {kwds}")
+        return d1_params, d2_params
 
     def fit(self, data: pd.Series,
             conditioning_method=ConditioningMethod.no_conditioning,
             x0=None, opt_method="Nelder-Mead",
             *args, **kwds):
-        params = self._process_fit_params(**kwds)
-        x0 = type(self.d1)().params + type(self.d2)().params if x0 is None else x0
-        x0 = np.array([x for p, x in zip(params, x0) if p is None])
+        params_d1, params_d2 = self._process_fit_params(**kwds)
+        obj = self.with_params(params_d1 + params_d2)
 
-        def rebuild_params(var_params):
-            var_params = iter(var_params)
-            return [p if p is not None else next(var_params) for p in params]
+        x0 = obj.params if x0 is None else x0
 
         def to_minimize(var_params):
-            return self.with_params(rebuild_params(var_params)).opposite_log_likelihood(data, conditioning_method)
+            return obj.with_params(var_params).opposite_log_likelihood(data, conditioning_method)
 
         result = minimize(to_minimize,
                           method=opt_method,
                           options={"adaptive": True, 'maxfev': 1000},
                           x0=x0)
         res = list(result.x)
-        return self.with_params(rebuild_params(res))
+        return obj.with_params(res)
