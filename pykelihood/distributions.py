@@ -5,19 +5,19 @@ import sys
 from abc import abstractmethod
 from collections.abc import MutableSequence
 from functools import partial
-from typing import Sequence, Iterable, Union, Callable, Tuple, Any
+from typing import Any, Callable, Iterable, Sequence, Tuple, Union
 
 import cachetools
 import numpy as np
 import pandas as pd
 import scipy.special
 from rpy2 import robjects
-from rpy2.robjects import pandas2ri, conversion
+from rpy2.robjects import conversion, pandas2ri
 from rpy2.robjects.packages import importr
 from scipy.optimize import minimize
-from scipy.stats import uniform, pareto, beta, expon, norm, genextreme, genpareto
+from scipy.stats import beta, expon, genextreme, genpareto, norm, pareto, uniform
 
-from pykelihood.parameters import Parameter, Parametrized, ConstantParameter
+from pykelihood.parameters import ConstantParameter, Parameter, Parametrized
 from pykelihood.stats_utils import ConditioningMethod
 
 evd = importr('evd')
@@ -68,6 +68,10 @@ class Distribution:
 
     @abstractmethod
     def with_params(self, params: Iterable):
+        return NotImplemented
+
+    @abstractmethod
+    def names_and_params(self):
         return NotImplemented
 
     @abstractmethod
@@ -279,8 +283,8 @@ class Beta(ScipyDistribution):
                  ifnone(loc, self.loc()), ifnone(scale, self.scale()))
 
     def rvs(self, size, loc=None, scale=None, alpha=None, beta=None):
-        return beta.rvs(ifnone(alpha, self.alpha()), ifnone(beta, self.beta()),
-                        ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
+        return self.base_module.rvs(ifnone(alpha, self.alpha()), ifnone(beta, self.beta()),
+                                    ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
 
 class Normal(ScipyDistribution):
@@ -473,23 +477,27 @@ class RGPD(RDistribution):
 
 class PointProcess(Distribution):
     def __init__(self, threshold: int,
-                 pot_distribution: Distribution = GPD,
-                 iat_distribution: Distribution = Exponential,
+                 jumps_size_distribution: Distribution = GPD,
+                 counting_process_distribution: Distribution = Exponential,
                  under_threshold_distribution=Uniform,
                  npp=365.25):
-        self.pot_distribution = pot_distribution
-        self.iat_distribution = iat_distribution
+        self.jumps_size_distribution = jumps_size_distribution
+        self.counting_process_distribution = counting_process_distribution
         self.under_threshold_distribution = under_threshold_distribution
         self.threshold = threshold
         self.npp = npp
 
     @property
     def params(self):
-        return self.pot_distribution.params + self.iat_distribution.params
+        return self.jumps_size_distribution.params + self.counting_process_distribution.params
+
+    @property
+    def _params(self):
+        return self.jumps_size_distribution._params + self.counting_process_distribution._params
 
     @property
     def params_names(self):
-        return self.pot_distribution.params_names + self.iat_distribution.params_names
+        return self.jumps_size_distribution.params_names + self.counting_process_distribution.params_names
 
     def fit(self, data: pd.Series,
             conditioning_method=ConditioningMethod.no_conditioning, *args, **kwds):
@@ -502,53 +510,53 @@ class PointProcess(Distribution):
         :param kwds:
         :return:
         """
-        pot = clusters(np.array(data), u=self.threshold, cmax=True)
-        pot_dist = self.pot_distribution.fit(pot, conditioning_method=conditioning_method, *args, **kwds)
+        pot = data[data >= self.threshold]
+        pot_dist = self.jumps_size_distribution.fit(pot, conditioning_method=conditioning_method, *args, **kwds)
         if isinstance(list(data.index.values)[0], datetime.date):
-            iat = pot.reset_index().diff()[data.index.name].dropna().apply(lambda x: x.days)
+            tau = pd.Series(pot.index)
+            tau = (tau - tau.iloc[0]).apply(lambda x: x.days)
         else:
-            iat = np.diff(np.where(data >= self.threshold)[0])
-        iat = iat / len(data)
-        iat_dist = self.iat_distribution.fit(iat, floc=0.)
-        ut_dist = self.under_threshold_distribution.fit(data[data < self.threshold], floc=0.)
-        return PointProcess(self.threshold, pot_dist, iat_dist, ut_dist)
+            tau = np.where(data >= self.threshold)[0]
+        counting_process_dist = self.counting_process_distribution.fit(tau)
+        ut_dist = self.under_threshold_distribution.fit(data[data < self.threshold])
+        return PointProcess(self.threshold, pot_dist, counting_process_dist, ut_dist)
 
     def rvs(self, size):
-        freq = 1 / self.iat_distribution.scale
+        freq = 1 / self.counting_process_distribution.scale
         threshold = self.threshold
         nb_exceedances = int(freq * size)
-        expo = np.cumsum(self.iat_distribution.rvs(size=nb_exceedances))
-        exceedances = np.array(self.pot_distribution.rvs(nb_exceedances))
+        expo = np.cumsum(self.counting_process_distribution.rvs(size=nb_exceedances))
+        exceedances = np.array(self.jumps_size_distribution.rvs(nb_exceedances))
         non_exceedances = size - nb_exceedances
         others = threshold * self.under_threshold_distribution.rvs(size=non_exceedances)
         sizes = np.insert(others, [math.ceil(e) for e in expo], exceedances)
         return np.array(list(enumerate(sizes)))
 
     def cdf(self, x):
-        freq = 1 / self.iat_distribution.scale
+        freq = 1 / self.counting_process_distribution.scale
         res = np.where(x < self.threshold,
                        self.under_threshold_distribution.cdf(x) * (1 - freq),
-                       freq * self.pot_distribution.cdf(x))
+                       freq * self.jumps_size_distribution.cdf(x))
         if isinstance(x, float):
             return res[0]
         else:
             return res
 
     def isf(self, q):
-        freq = self.iat_distribution.scale
+        freq = self.counting_process_distribution.scale
         res = np.where(q > freq,
                        self.under_threshold_distribution.isf(q * (1 - freq)),
-                       self.pot_distribution.isf(q * freq))
+                       self.jumps_size_distribution.isf(q * freq))
         return res
 
     def pdf(self, x):
-        freq = self.iat_distribution.scale
+        freq = self.counting_process_distribution.scale
         res = np.where(x < self.threshold, (1 - freq) * self.under_threshold_distribution.pdf(x),
-                       self.pot_distribution.pdf(x) * freq)
+                       self.jumps_size_distribution.pdf(x) * freq)
         return res
 
 
-class JointDistribution(Distribution):
+class CompositionDistribution(Distribution):
     def __init__(self, d1: Distribution, d2: Distribution):
         self.d1 = d1
         self.d2 = d2
@@ -581,13 +589,13 @@ class JointDistribution(Distribution):
         return type(self)(d1, d2)
 
     def rvs(self, size):
-        return self.d2.inverse_cdf(self.d1.inverse_cdf(Uniform().rvs(size)))
+        return self.d2.inverse_cdf(self.d1.rvs(size))
 
     def cdf(self, x):
         return self.d1.cdf(self.d2.cdf(x))
 
     def isf(self, q):
-        return self.d2.isf(self.d1.isf(q))
+        return self.d2.isf(self.d1.isf(1 - q))
 
     def pdf(self, x, *args):
         return self.d2.pdf(x) * self.d1.pdf(self.d2.cdf(x))
