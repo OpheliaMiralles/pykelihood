@@ -252,7 +252,7 @@ class Exponential(ScipyDistribution):
         return f(x, ifnone(loc, self.loc()), ifnone(rate, 1 / self.rate()))
 
     def rvs(self, size, loc=None, rate=None):
-        return uniform.rvs(ifnone(loc, self.loc()), ifnone(rate, 1 / self.scale()), size)
+        return self.base_module.rvs(ifnone(loc, self.loc()), ifnone(rate, 1 / self.scale()), size)
 
 
 class Pareto(ScipyDistribution):
@@ -267,7 +267,7 @@ class Pareto(ScipyDistribution):
         return f(x, ifnone(alpha, self.alpha()), ifnone(loc, self.loc()), ifnone(scale, self.scale()))
 
     def rvs(self, size, loc=None, scale=None, alpha=None):
-        return pareto.rvs(ifnone(alpha, self.alpha()), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
+        return self.base_module.rvs(ifnone(alpha, self.alpha()), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
 
 class Beta(ScipyDistribution):
@@ -299,7 +299,7 @@ class Normal(ScipyDistribution):
         return f(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()))
 
     def rvs(self, size, loc=None, scale=None):
-        return norm.rvs(ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
+        return self.base_module.rvs(ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
 
 class GEV(ScipyDistribution):
@@ -336,7 +336,7 @@ class GEV(ScipyDistribution):
         return f(x, ifnone(shape, -self.shape()), ifnone(loc, self.loc()), ifnone(scale, self.scale()))
 
     def rvs(self, size, c=None, loc=None, scale=None):
-        return genextreme.rvs(ifnone(c, self.c), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
+        return self.base_module.rvs(ifnone(c, self.c), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
 
 class GPD(ScipyDistribution):
@@ -351,7 +351,7 @@ class GPD(ScipyDistribution):
         return f(x, ifnone(shape, self.shape()), ifnone(loc, self.loc()), ifnone(scale, self.scale()))
 
     def rvs(self, size, loc=None, scale=None, shape=None):
-        return genpareto.rvs(ifnone(shape, self.shape()), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
+        return self.base_module.rvs(ifnone(shape, self.shape()), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
 
 class RGEV(RDistribution):
