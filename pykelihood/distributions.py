@@ -252,7 +252,7 @@ class Exponential(ScipyDistribution):
         return f(x, ifnone(loc, self.loc()), ifnone(rate, 1 / self.rate()))
 
     def rvs(self, size, loc=None, rate=None):
-        return self.base_module.rvs(ifnone(loc, self.loc()), ifnone(rate, 1 / self.scale()), size)
+        return self.base_module.rvs(ifnone(loc, self.loc()), ifnone(rate, 1 / self.rate()), size)
 
 
 class Pareto(ScipyDistribution):

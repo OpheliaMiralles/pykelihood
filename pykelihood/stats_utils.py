@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 import warnings
 from itertools import count
@@ -9,13 +11,11 @@ from rpy2.robjects import FloatVector
 from scipy.stats import chi2
 
 from pykelihood.cached_property import cached_property
-from pykelihood.distributions import Distribution
 
 if TYPE_CHECKING:
     from pykelihood.distributions import Distribution
 
 warnings.filterwarnings('ignore')
-
 
 class ConditioningMethod(object):
     @staticmethod
