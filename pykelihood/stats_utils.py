@@ -63,7 +63,9 @@ class Likelihood(object):
     @cached_property
     def mle(self):
         x0 = self.distribution.params
-        estimate = self.distribution.fit(self.data, conditioning_method=self.conditioning_method, x0=x0)
+        estimate = self.distribution.fit(self.data,
+                                         conditioning_method=self.conditioning_method,
+                                         x0=x0, **self.distribution.param_dict)
         return (estimate, estimate.log_likelihood(self.data,
                                                   conditioning_method=self.conditioning_method))
 
