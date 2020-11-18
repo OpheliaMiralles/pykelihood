@@ -1,40 +1,41 @@
+from __future__ import annotations
+
 from functools import partial
-from typing import Tuple, Callable, Dict, Union, Iterable
+from typing import Any, Callable, Dict, Iterable, Tuple, TypeVar, Union
+
+_T = TypeVar('_T')
 
 
 class Parametrized(object):
     params_names: Tuple[str]
 
-    def __init__(self, *params: Union['Parametrized', float]):
+    def __init__(self, *params: Union[Parametrized, Any]):
         self._params = tuple(Parameter(p) if not isinstance(p, Parametrized) else p for p in params)
 
     @property
-    def params(self):
-        return tuple(p_ for p in self._params for p_ in p.params)
+    def params(self) -> Tuple[Parametrized]:
+        return self._params
 
     @property
-    def param_dict(self) -> Dict[str, 'Parametrized']:
-        return dict(zip(self.params_names, self._params))
+    def param_dict(self) -> Dict[str, Parametrized]:
+        return dict(zip(self.params_names, self.params))
 
     @property
-    def names_and_params(self) -> Iterable[Tuple['Parametrized', str]]:
-        for p, name in zip(self._params, self.params_names):
-            if p.params:
-                yield name, p
+    def optimisation_params(self) -> Tuple[Parametrized]:
+        return tuple(p_ for p in self.params for p_ in p.optimisation_params)
 
     def __repr__(self):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
         return f"{type(self).__name__}({', '.join(args)})"
 
-    def with_params(self, params):
+    def with_params(self: _T, params: Iterable[Union[Parametrized, Any]]) -> _T:
         params = iter(params)
         new_params = []
         for param in self._params:
             new_params.append(param.with_params(params))
         return type(self)(*new_params)
 
-    def __getattr__(self, param):
-        param = param
+    def __getattr__(self, param: str) -> Parametrized:
         try:
             idx = self.params_names.index(param)
         except ValueError:
@@ -52,6 +53,10 @@ class Parameter(float, Parametrized):
 
     @property
     def params(self):
+        return self,
+
+    @property
+    def optimisation_params(self):
         return self,
 
     def with_params(self, params):
@@ -75,7 +80,7 @@ class ConstantParameter(Parameter):
         return self
 
     @property
-    def params(self):
+    def optimisation_params(self):
         # do not show up in the params
         return ()
 

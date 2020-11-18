@@ -78,7 +78,7 @@ class Likelihood(object):
         if param is not None:
             params = [param]
         else:
-            params = [x[0] for x in mle.names_and_params]
+            params = mle.params_names
         if hasattr(self.distribution, "fast_profile_likelihood"):
             try:
                 pre_profiled_params = self.distribution.fast_profile_likelihood(self.data, conf=conf)
@@ -127,7 +127,7 @@ class Likelihood(object):
                     conditioning_method=self.conditioning_method)
                 if np.isfinite(pl_value):
                     profile_ll.append(pl_value)
-                    params.append(list(pl._params))
+                    params.append(list(pl.params))
             except:
                 pass
         delta = [2 * (ll_xi0 - ll) for ll in profile_ll if np.isfinite(ll)]
