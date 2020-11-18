@@ -45,7 +45,7 @@ class Parametrized(object):
 
 class Parameter(float, Parametrized):
 
-    def __new__(cls, x):
+    def __new__(cls, x=0.):
         return float.__new__(cls, x)
 
     def __init__(self, *args, **kwargs):
