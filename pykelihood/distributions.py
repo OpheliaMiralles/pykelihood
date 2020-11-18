@@ -56,7 +56,6 @@ def ifnone(x, default):
 
 
 class Distribution:
-    _params: Tuple[Parameter]
     params_names: Tuple[str]
 
     def __hash__(self):
@@ -68,10 +67,6 @@ class Distribution:
 
     @abstractmethod
     def with_params(self, params: Iterable):
-        return NotImplemented
-
-    @abstractmethod
-    def names_and_params(self):
         return NotImplemented
 
     @abstractmethod
@@ -163,7 +158,7 @@ class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
                 else:
                     init_parms[k] = ConstantParameter(v)
         init = cls(**init_parms)
-        x0 = x0 if x0 is not None else init.params
+        x0 = x0 if x0 is not None else init.optimisation_params
         if len(x0) != len(init.params):
             raise ValueError(f"Expected {len(init.params)} values in x0, got {len(x0)}")
 
@@ -205,8 +200,8 @@ class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
                     init_parms[k] = ConstantParameter(v)
         init = cls(**init_parms)
         x0 = x0 if x0 is not None else init.params
-        if len(x0) != len(init.params):
-            raise ValueError(f"Expected {len(init.params)} values in x0, got {len(x0)}")
+        if len(x0) != len(init.optimisation_params):
+            raise ValueError(f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}")
 
         def to_minimize(x):
             o = init.with_params(x)
@@ -492,8 +487,8 @@ class PointProcess(Distribution):
         return self.jumps_size_distribution.params + self.counting_process_distribution.params
 
     @property
-    def _params(self):
-        return self.jumps_size_distribution._params + self.counting_process_distribution._params
+    def optimisation_params(self):
+        return self.jumps_size_distribution.optimisation_params + self.counting_process_distribution.optimisation_params
 
     @property
     def params_names(self):
@@ -572,15 +567,8 @@ class CompositionDistribution(Distribution):
         return self.d1.params + self.d2.params
 
     @property
-    def _params(self):
-        return self.d1._params + self.d2._params
-
-    @property
-    def names_and_params(self):
-        for name, p in self.d1.names_and_params:
-            yield f"d1_{name}", p
-        for name, p in self.d2.names_and_params:
-            yield f"d2_{name}", p
+    def optimisation_params(self):
+        return self.d1.optimisation_params + self.d2.optimisation_params
 
     def with_params(self, new_params):
         new_params = iter(new_params)
@@ -602,14 +590,14 @@ class CompositionDistribution(Distribution):
 
     def _process_fit_params(self, **kwds):
         d1_params = []
-        for name, _ in self.d1.names_and_params:
+        for name, _ in self.d1.param_dict.items():
             k = f"d1_{name}"
             if k in kwds:
                 d1_params.append(ConstantParameter(kwds.pop(k)))
             else:
                 d1_params.append(getattr(self.d1, name))
         d2_params = []
-        for name, _ in self.d2.names_and_params:
+        for name, _ in self.d2.param_dict.items():
             k = f"d2_{name}"
             if k in kwds:
                 d2_params.append(ConstantParameter(kwds.pop(k)))
