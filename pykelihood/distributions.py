@@ -5,7 +5,7 @@ import sys
 from abc import abstractmethod
 from collections.abc import MutableSequence
 from functools import partial
-from typing import Any, Callable, Iterable, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Sequence, Tuple, Union
 
 import cachetools
 import numpy as np
@@ -56,14 +56,13 @@ def ifnone(x, default):
 
 
 class Distribution:
+    params: Tuple[Parameter]
     params_names: Tuple[str]
+    names_and_params: Tuple[Tuple[str, 'Parametrized']]
+    param_dict: Dict[str, 'Parametrized']
 
     def __hash__(self):
         return (self.__class__.__name__,) + self.params
-
-    @abstractmethod
-    def params(self):
-        return NotImplemented
 
     @abstractmethod
     def with_params(self, params: Iterable):
@@ -123,6 +122,7 @@ class Distribution:
     def profile_likelihood(self, data, name_fixed_param, value_fixed_param,
                            conditioning_method: Callable = ConditioningMethod.no_conditioning, **kwds):
         kwds.update({name_fixed_param: value_fixed_param})
+        kwds.update({**self.param_dict})
         return self.fit(data, conditioning_method=conditioning_method,
                         **kwds)
 
@@ -177,9 +177,9 @@ class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
         res = self.logpdf(data, *args, **kwds)
         if hasattr(data, "rclass"):
             result = sum(res.ro - conditioning_method(data, self))
-            return result.ro
         else:
-            return np.sum(res - conditioning_method(data, self))
+            result = sum(res.ro - conditioning_method(conversion.py2ri(data), self))
+        return result.ro
 
     @classmethod
     def shuffle(cls, fixed_param_name: Union[str, Sequence[str]]):
