@@ -58,8 +58,9 @@ def ifnone(x, default):
 class Distribution:
     params: Tuple[Parameter]
     params_names: Tuple[str]
-    names_and_params: Tuple[Tuple[str, 'Parametrized']]
-    param_dict: Dict[str, 'Parametrized']
+    optimisation_params: Tuple[Parametrized]
+    optimisation_param_dict: Dict[str, Parametrized]
+    param_dict: Dict[str, Parametrized]
 
     def __hash__(self):
         return (self.__class__.__name__,) + self.params
@@ -121,8 +122,8 @@ class Distribution:
 
     def profile_likelihood(self, data, name_fixed_param, value_fixed_param,
                            conditioning_method: Callable = ConditioningMethod.no_conditioning, **kwds):
-        kwds.update({name_fixed_param: value_fixed_param})
         kwds.update({**self.param_dict})
+        kwds.update({name_fixed_param: value_fixed_param})
         return self.fit(data, conditioning_method=conditioning_method,
                         **kwds)
 
@@ -159,7 +160,7 @@ class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
                     init_parms[k] = ConstantParameter(v)
         init = cls(**init_parms)
         x0 = x0 if x0 is not None else init.optimisation_params
-        if len(x0) != len(init.params):
+        if len(x0) != len(init.optimisation_params):
             raise ValueError(f"Expected {len(init.params)} values in x0, got {len(x0)}")
 
         def to_minimize(x):
@@ -199,7 +200,7 @@ class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
                 else:
                     init_parms[k] = ConstantParameter(v)
         init = cls(**init_parms)
-        x0 = x0 if x0 is not None else init.params
+        x0 = x0 if x0 is not None else init.optimisation_params
         if len(x0) != len(init.optimisation_params):
             raise ValueError(f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}")
 

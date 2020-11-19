@@ -62,7 +62,7 @@ class Likelihood(object):
 
     @cached_property
     def mle(self):
-        x0 = self.distribution.params
+        x0 = self.distribution.optimisation_params
         estimate = self.distribution.fit(self.data,
                                          conditioning_method=self.conditioning_method,
                                          x0=x0, **self.distribution.param_dict)
@@ -79,7 +79,11 @@ class Likelihood(object):
             params = [param]
         else:
             params = mle.params_names
-        if hasattr(self.distribution, "fast_profile_likelihood"):
+        if hasattr(self.distribution, "fast_profile_likelihood")\
+                and len(mle.optimisation_params) == len(mle.params):
+            # we cannot use the profiling from R with a distribution whose parameters
+            # are fitted to regression kernels, as they implemented a standard fit with constant
+            # parameters.
             try:
                 pre_profiled_params = self.distribution.fast_profile_likelihood(self.data, conf=conf)
                 if self.conditioning_method == ConditioningMethod.excluding_last_obs_rule:
@@ -89,8 +93,8 @@ class Likelihood(object):
                     for name in params:
                         columns = list(pre_profiled_params[name].columns)
                         likelihoods = pre_profiled_params[name] \
-                            .apply(lambda row: self.distribution.log_likelihood(self.data.iloc[:-1],
-                                                                                **{k: row[k] for k in columns}), axis=1)
+                            .apply(lambda row: self.distribution.with_params([row[k] for k in columns])\
+                                   .log_likelihood(self.data.iloc[:-1]), axis=1)
                         pre_profiled_params[name] = pre_profiled_params[name].assign(likelihood=likelihoods)
                     return pre_profiled_params
                 for name in params:
@@ -105,7 +109,7 @@ class Likelihood(object):
                 return profiles
             except:
                 pass
-        for name, k in mle.names_and_params:
+        for name, k in mle.optimisation_param_dict.items():
             if name in params:
                 lb = k - 0.1 - 5 * (10 ** math.floor(math.log10(np.abs(k))))
                 ub = k + 0.1 + 5 * (10 ** math.floor(math.log10(np.abs(k))))

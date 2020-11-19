@@ -17,6 +17,7 @@ class TestParameter:
 def func():
     def f(x, p):
         return x + p
+
     return f
 
 
@@ -60,3 +61,20 @@ class TestInnerParameters:
         assert len(f.params) == 2
         assert len(f.optimisation_params) == 1
         assert f.with_params([4])() == 7
+
+    def test_parameter_optimisation_param_dict(self, func):
+        p1 = parameters.Parameter(2)
+        p2 = parameters.ParametrizedFunction(func, p=p1)
+        assert p2.optimisation_param_dict == {'p': p1}
+
+    def test_parameter_optimisation_param_dict_multi_level(self, func):
+        p1 = parameters.Parameter(2)
+        p2 = parameters.ParametrizedFunction(func, p=p1)
+        p3 = parameters.ParametrizedFunction(func, p=p2)
+        assert p3.optimisation_param_dict == {'p_p': p1}
+
+    def test_parameter_optimisation_param_dict_constant(self, func):
+        p1 = parameters.ConstantParameter(2)
+        p2 = parameters.ParametrizedFunction(func, p=p1)
+        p3 = parameters.ParametrizedFunction(func, p=p2)
+        assert p3.optimisation_param_dict == {}

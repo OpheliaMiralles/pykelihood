@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import partial
 from typing import Any, Callable, Dict, Iterable, Tuple, TypeVar, Union
+from pykelihood.utils import flatten_dict
 
 _T = TypeVar('_T')
 
@@ -23,6 +24,16 @@ class Parametrized(object):
     @property
     def optimisation_params(self) -> Tuple[Parametrized]:
         return tuple(p_ for p in self.params for p_ in p.optimisation_params)
+
+    @property
+    def optimisation_param_dict(self) -> Dict[str, Parametrized]:
+        p_dict = flatten_dict(self._optimisation_param_dict_helper())
+        return {'_'.join(names): value for names, value in p_dict.items()}
+
+    def _optimisation_param_dict_helper(self):
+        return {name: value._optimisation_param_dict_helper()
+                for name, value in self.param_dict.items()
+                if not isinstance(value, ConstantParameter)}
 
     def __repr__(self):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
@@ -58,6 +69,9 @@ class Parameter(float, Parametrized):
     @property
     def optimisation_params(self):
         return self,
+
+    def _optimisation_param_dict_helper(self, prefixes=()):
+        return self
 
     def with_params(self, params):
         param = next(iter(params))
