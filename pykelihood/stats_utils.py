@@ -49,45 +49,65 @@ class Likelihood(object):
     def __init__(self, distribution: Distribution,
                  data: pd.Series,
                  conditioning_method: Callable = ConditioningMethod.no_conditioning,
-                 name: str = "Standard"):
+                 name: str = "Standard",
+                 inference_confidence: float = 0.99,
+                 fit_chi2: bool = False,
+                 single_profiling_param = None
+                 ):
+        """
+
+        :param distribution: distribution on which the inference is based
+        :param data: variable of interest
+        :param conditioning_method: penalisation term for the likelihood
+        :param name: name (optional) of the likelihood if it needs to be compared to other likelihood functions
+        :param inference_confidence: wanted confidence for intervals
+        :param fit_chi2: whether the results from the likelihood ratio method must be fitted to a chi2
+        or a generic chi2 with degree of freedom 1 is used
+        :param single_profiling_param: parameter that we want to fix to create the profiles based on likelihood
+        """
         self.name = name
         self.distribution = distribution
         self.data = data
         self.conditioning_method = conditioning_method
+        self.inference_confidence = inference_confidence
+        self.fit_chi2 = fit_chi2
+        self.single_profiling_param = single_profiling_param
 
     @cached_property
     def standard_mle(self):
         estimate = self.distribution.fit(self.data)
-        return (estimate, estimate.log_likelihood(self.data))
+        ll = estimate.log_likelihood(self.data)
+        ll = ll if isinstance(ll, float) else ll[0]
+        return (estimate, ll)
 
     @cached_property
     def mle(self):
         x0 = self.distribution.optimisation_params
-        estimate = self.distribution.fit(self.data,
+        estimate = self.distribution.profile_likelihood(self.data,
                                          conditioning_method=self.conditioning_method,
-                                         x0=x0, **self.distribution.param_dict)
-        return (estimate, estimate.log_likelihood(self.data,
-                                                  conditioning_method=self.conditioning_method))
+                                         x0=x0)
+        ll_xi0 = estimate.log_likelihood(self.data,
+                                                  conditioning_method=self.conditioning_method)
+        ll_xi0 = ll_xi0 if isinstance(ll_xi0, float) else ll_xi0[0]
+        return (estimate, ll_xi0)
 
-    def profiles(self,
-                 conf=0.99,
-                 fit_chi2=False,
-                 param=None):
+    @cached_property
+    def profiles(self):
         profiles = {}
         mle, ll_xi0 = self.mle
-        if param is not None:
-            params = [param]
+        if self.single_profiling_param is not None:
+            params = [self.single_profiling_param]
         else:
-            params = mle.params_names
+            params = mle.optimisation_param_dict.keys()
         if hasattr(self.distribution, "fast_profile_likelihood")\
                 and len(mle.optimisation_params) == len(mle.params):
             # we cannot use the profiling from R with a distribution whose parameters
             # are fitted to regression kernels, as they implemented a standard fit with constant
             # parameters.
             try:
-                pre_profiled_params = self.distribution.fast_profile_likelihood(self.data, conf=conf)
+                pre_profiled_params = self.distribution.fast_profile_likelihood(self.data, conf=self.inference_confidence)
                 if self.conditioning_method == ConditioningMethod.excluding_last_obs_rule:
-                    pre_profiled_params = self.distribution.fast_profile_likelihood(self.data.iloc[:-1], conf=conf)
+                    pre_profiled_params = self.distribution.fast_profile_likelihood(self.data.iloc[:-1], conf=self.inference_confidence)
                 if self.conditioning_method in [ConditioningMethod.no_conditioning,
                                                 ConditioningMethod.excluding_last_obs_rule]:
                     for name in params:
@@ -96,6 +116,7 @@ class Likelihood(object):
                             .apply(lambda row: self.distribution.with_params([row[k] for k in columns])\
                                    .log_likelihood(self.data.iloc[:-1]), axis=1)
                         pre_profiled_params[name] = pre_profiled_params[name].assign(likelihood=likelihoods)
+
                     return pre_profiled_params
                 for name in params:
                     min_std = np.min(pre_profiled_params[name][name])
@@ -105,7 +126,7 @@ class Likelihood(object):
                     range = list(np.linspace(lb, min_std, 5)) \
                             + list(pre_profiled_params[name][name].values) \
                             + list(np.linspace(max_std, ub, 5))
-                    profiles[name] = self.test_profile_likelihood(range, name, conf, fit_chi2)
+                    profiles[name] = self.test_profile_likelihood(range, name)
                 return profiles
             except:
                 pass
@@ -114,36 +135,37 @@ class Likelihood(object):
                 lb = k - 0.1 - 5 * (10 ** math.floor(math.log10(np.abs(k))))
                 ub = k + 0.1 + 5 * (10 ** math.floor(math.log10(np.abs(k))))
                 range = list(np.linspace(lb, ub, 20))
-                profiles[name] = self.test_profile_likelihood(range, name, conf, fit_chi2)
+                profiles[name] = self.test_profile_likelihood(range, name)
         return profiles
 
-    def test_profile_likelihood(self, range_for_param, param,
-                                confidence=0.99, fit_chi2=False):
+    def test_profile_likelihood(self, range_for_param, param):
         mle, ll_xi0 = self.mle
         profile_ll = []
         params = []
         for x in range_for_param:
             try:
-                pl = mle.profile_likelihood(self.data, param, x,
-                                            conditioning_method=self.conditioning_method)
+                pl = mle.profile_likelihood(self.data,
+                                            conditioning_method=self.conditioning_method,
+                                            fixed_params={param: x})
                 pl_value = pl.log_likelihood(
                     self.data,
                     conditioning_method=self.conditioning_method)
+                pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
                 if np.isfinite(pl_value):
                     profile_ll.append(pl_value)
-                    params.append(list(pl.params))
+                    params.append(list(pl.flattened_params))
             except:
                 pass
         delta = [2 * (ll_xi0 - ll) for ll in profile_ll if np.isfinite(ll)]
-        if fit_chi2:
+        if self.fit_chi2:
             df, loc, scale = chi2.fit(delta)
             chi2_par = {"df": df, "loc": loc, "scale": scale}
         else:
             chi2_par = {"df": 1}
-        lower_bound = ll_xi0 - chi2.ppf(confidence, **chi2_par) / 2
+        lower_bound = ll_xi0 - chi2.ppf(self.inference_confidence, **chi2_par) / 2
         filtered_params = pd.DataFrame([x + [ll] for x, ll in zip(params, profile_ll)
                                         if ll >= lower_bound])
-        cols = list(mle.params_names) + ["likelihood"]
+        cols = list(mle.flattened_param_dict.keys()) + ["likelihood"]
         filtered_params = filtered_params.rename(columns=dict(zip(count(), cols)))
         return filtered_params
 
@@ -152,12 +174,11 @@ class Likelihood(object):
         return_level = mle.isf(1 / return_period)
         return return_level
 
-    def return_level_confidence_interval(self, return_period,
-                                         conf=0.99, fit_chi2=False, param=None):
+    def return_level_confidence_interval(self, return_period):
         rle = []
-        profiles = self.profiles(conf, fit_chi2, param)
-        if param is not None:
-            params = [param]
+        profiles = self.profiles
+        if self.single_profiling_param is not None:
+            params = [self.single_profiling_param]
         else:
             params = profiles.keys()
         for param in params:

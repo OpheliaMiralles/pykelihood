@@ -58,6 +58,7 @@ def ifnone(x, default):
 class Distribution:
     params: Tuple[Parameter]
     params_names: Tuple[str]
+    flattened_params: Tuple[Parametrized]
     optimisation_params: Tuple[Parametrized]
     optimisation_param_dict: Dict[str, Parametrized]
     param_dict: Dict[str, Parametrized]
@@ -120,10 +121,25 @@ class Distribution:
                                 *args, **kwds):
         return -self.log_likelihood(data, conditioning_method, *args, **kwds)
 
-    def profile_likelihood(self, data, name_fixed_param, value_fixed_param,
-                           conditioning_method: Callable = ConditioningMethod.no_conditioning, **kwds):
-        kwds.update({**self.param_dict})
-        kwds.update({name_fixed_param: value_fixed_param})
+    def _process_fit_params(self, **kwds):
+        param_dict = self.param_dict.copy()
+        for name in param_dict:
+            for name_fixed_param, value_fixed_param in kwds.items():
+                if name_fixed_param == name:
+                    param_dict[name] = ConstantParameter(value_fixed_param)
+                elif name_fixed_param.startswith(name):
+                    subparam = name_fixed_param.replace(f"{name}_", '')
+                    subdic = param_dict[name].param_dict.copy()
+                    subdic[subparam] = ConstantParameter(value_fixed_param)
+                    param_dict[name] = param_dict[name].with_params(subdic.values())
+        return param_dict
+
+    def profile_likelihood(self, data,
+                           conditioning_method: Callable = ConditioningMethod.no_conditioning,
+                           fixed_params=None,
+                           **kwds):
+        param_dict = self._process_fit_params(**(fixed_params or {}))
+        kwds.update(param_dict)
         return self.fit(data, conditioning_method=conditioning_method,
                         **kwds)
 
@@ -180,7 +196,12 @@ class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
             result = sum(res.ro - conditioning_method(data, self))
         else:
             result = sum(res.ro - conditioning_method(conversion.py2ri(data), self))
-        return result.ro
+        return result
+
+    def opposite_log_likelihood(self, data: Union[np.array, pd.Series],
+                                conditioning_method: Callable = ConditioningMethod.no_conditioning,
+                                *args, **kwds):
+        return -self.log_likelihood(data, conditioning_method, *args, **kwds).ro
 
     @classmethod
     def shuffle(cls, fixed_param_name: Union[str, Sequence[str]]):
@@ -552,8 +573,15 @@ class PointProcess(Distribution):
         return res
 
 
-class CompositionDistribution(Distribution):
+class CompositionDistribution(Distribution, Parametrized):
     def __init__(self, d1: Distribution, d2: Distribution):
+        """
+        Distribution of cdf GoF
+        :param d1: distribution aimed at replacing the uniform sampling in the formula used
+        to generate variables with distribution d2 (G in F^{-1}(G^{-1}(U))
+        :param d2: main objective distribution, especially aimed at determining the asymptotic behaviour.
+        """
+        super(CompositionDistribution, self).__init__(*(d1.params+d2.params))
         self.d1 = d1
         self.d2 = d2
 
@@ -590,32 +618,29 @@ class CompositionDistribution(Distribution):
         return self.d2.pdf(x) * self.d1.pdf(self.d2.cdf(x))
 
     def _process_fit_params(self, **kwds):
-        d1_params = []
-        for name, _ in self.d1.param_dict.items():
-            k = f"d1_{name}"
-            if k in kwds:
-                d1_params.append(ConstantParameter(kwds.pop(k)))
-            else:
-                d1_params.append(getattr(self.d1, name))
-        d2_params = []
-        for name, _ in self.d2.param_dict.items():
-            k = f"d2_{name}"
-            if k in kwds:
-                d2_params.append(ConstantParameter(kwds.pop(k)))
-            else:
-                d2_params.append(getattr(self.d2, name))
-        if kwds:
-            raise ValueError(f"Unexpected parameters: {kwds}")
+        d1_kwds = {k.replace("d1_", ""): v for (k,v) in kwds.items() if k.startswith("d1_")}
+        d2_kwds = {k.replace("d2_", ""): v for (k,v) in kwds.items() if k.startswith("d2_")}
+        d1_params = self.d1._process_fit_params(**d1_kwds)
+        d2_params = self.d2._process_fit_params(**d2_kwds)
+        if len(kwds) > len(d1_kwds) + len(d2_kwds) :
+            raise ValueError(f"Unexpected parameters encountered in keywords: {kwds}")
         return d1_params, d2_params
+
+    def profile_likelihood(self, data,
+                           conditioning_method: Callable = ConditioningMethod.no_conditioning,
+                           fixed_params=None,
+                           **kwds):
+        kwds.update(**(fixed_params or {}))
+        return self.fit(data, conditioning_method=conditioning_method,
+                        **kwds)
 
     def fit(self, data: pd.Series,
             conditioning_method=ConditioningMethod.no_conditioning,
             x0=None, opt_method="Nelder-Mead",
             *args, **kwds):
         params_d1, params_d2 = self._process_fit_params(**kwds)
-        obj = self.with_params(params_d1 + params_d2)
-
-        x0 = obj.params if x0 is None else x0
+        obj = type(self)(type(self.d1)(**params_d1), type(self.d2)(**params_d2))
+        x0 = obj.optimisation_params if x0 is None else x0
 
         def to_minimize(var_params):
             return obj.with_params(var_params).opposite_log_likelihood(data, conditioning_method)

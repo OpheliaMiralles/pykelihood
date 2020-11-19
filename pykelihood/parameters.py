@@ -22,6 +22,19 @@ class Parametrized(object):
         return dict(zip(self.params_names, self.params))
 
     @property
+    def flattened_params(self) -> Tuple[Parametrized]:
+        return tuple(p_ for p in self.params for p_ in p.params)
+
+    @property
+    def flattened_param_dict(self) -> Dict[str, Parametrized]:
+        p_dict = flatten_dict(self._flattened_param_dict_helper())
+        return {'_'.join(names): value for names, value in p_dict.items()}
+
+    def _flattened_param_dict_helper(self):
+        return {name: value._optimisation_param_dict_helper()
+                for name, value in self.param_dict.items()}
+
+    @property
     def optimisation_params(self) -> Tuple[Parametrized]:
         return tuple(p_ for p in self.params for p_ in p.optimisation_params)
 
