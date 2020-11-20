@@ -163,7 +163,7 @@ class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
             # if res is a matrix, then we only want the diagonal
             try:
                 x, y = res.shape
-            except TypeError:
+            except ValueError:
                 # only 1 dimension
                 return res
             else:

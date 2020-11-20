@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import partial
 from typing import Any, Callable, Dict, Iterable, Tuple, TypeVar, Union
+
 from pykelihood.utils import flatten_dict
 
 _T = TypeVar('_T')
