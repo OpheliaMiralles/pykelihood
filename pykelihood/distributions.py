@@ -4,7 +4,7 @@ import math
 import sys
 from abc import abstractmethod
 from collections.abc import MutableSequence
-from functools import partial
+from functools import partial, wraps
 from typing import Any, Callable, Dict, Iterable, Sequence, Tuple, Union
 
 import cachetools
@@ -155,11 +155,31 @@ class AvoidAbstractMixin(object):
 class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
     base_module: Any
 
+    def _correct_trends(self, f):
+        @wraps(f)
+        def g(*args, **kwargs):
+            res = f(*args, **kwargs)
+            res = np.array(res)
+            # if res is a matrix, then we only want the diagonal
+            try:
+                x, y = res.shape
+            except TypeError:
+                # only 1 dimension
+                return res
+            else:
+                if x == 1 or y == 1:
+                    return res.flatten()
+                if x != y:
+                    raise ValueError("Unexpected size of arguments")
+                return np.diag(res)
+        return g
+
     def __getattr__(self, item):
         if item not in ('pdf', 'logpdf', 'cdf', 'logcdf', 'ppf', 'isf', 'sf', 'logsf'):
             return super(ScipyDistribution, self).__getattr__(item)
         f = getattr(self.base_module, item)
         g = partial(self._wrapper, f)
+        g = self._correct_trends(g)
         g = cachetools.cached(self._cache, key=hash_with_series)(g)
         self.__dict__[item] = g
         return g
@@ -234,6 +254,7 @@ class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
             results = list(nm_get(fminsearch(to_minimize,
                                              x0=np.array(x0)), "xopt"))
         except:
+            data = conversion.ri2py(data)
             results = minimize(to_minimize, np.array(x0),
                                bounds=[(None, None), (0, None), (None, None)],
                                method="Nelder-Mead").x
