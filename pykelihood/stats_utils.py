@@ -92,6 +92,17 @@ class Likelihood(object):
         return (estimate, ll_xi0)
 
     @cached_property
+    def AIC(self):
+        mle_aic = -2*self.mle[1]+2*len(self.mle[0].optimisation_params)
+        std_mle_aic = -2*self.standard_mle[1]+2*len(self.standard_mle[0].optimisation_params)
+        return {"AIC MLE": mle_aic, "AIC Standard MLE Fit": std_mle_aic}
+
+    def Deviance(self):
+        mle_deviance = -2*self.mle[1]
+        std_mle_deviance = -2*self.standard_mle[1]
+        return {"Deviance MLE": mle_deviance, "AIC Standard MLE Deviance": std_mle_deviance}
+
+    @cached_property
     def profiles(self):
         profiles = {}
         mle, ll_xi0 = self.mle
