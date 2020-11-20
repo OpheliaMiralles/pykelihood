@@ -513,51 +513,73 @@ class RGPD(RDistribution):
         return result
 
 
-class PointProcess(Distribution):
+class PointProcess(Distribution, Parametrized):
     def __init__(self, threshold: int,
-                 jumps_size_distribution: Distribution = GPD,
-                 counting_process_distribution: Distribution = Exponential,
-                 under_threshold_distribution=Uniform,
-                 npp=365.25):
-        self.jumps_size_distribution = jumps_size_distribution
-        self.counting_process_distribution = counting_process_distribution
-        self.under_threshold_distribution = under_threshold_distribution
+                 jumps_size_distribution: Distribution = GPD(),
+                 iat_distribution: Distribution = Exponential(),
+                 remaining_points_distribution: Distribution = Uniform(ConstantParameter(0.), ConstantParameter(1.))):
+        """
+
+        :param threshold: defines what is a jump in term of exceeding of a certain threshold
+        :param jumps_size_distribution: the jump size distribution
+        :param iat_distribution: the inter-arrival times distribution with intensity lambda which can depend on time
+        (non homogeneous Poisson Process) or history (Hawkes Process)
+        :param remaining_points_distribution: optional, handles the points that are not jumps (appearing with frequency
+        1-lambda on average)
+        """
+        super(PointProcess, self).__init__(*(iat_distribution.params +
+                                             jumps_size_distribution.params +
+                                             remaining_points_distribution.params))
+        self.jumps_size = jumps_size_distribution
+        self.iat = iat_distribution
+        self.remaining_points = remaining_points_distribution
         self.threshold = threshold
-        self.npp = npp
-
-    @property
-    def params(self):
-        return self.jumps_size_distribution.params + self.counting_process_distribution.params
-
-    @property
-    def optimisation_params(self):
-        return self.jumps_size_distribution.optimisation_params + self.counting_process_distribution.optimisation_params
 
     @property
     def params_names(self):
-        return self.jumps_size_distribution.params_names + self.counting_process_distribution.params_names
+        IAT_names = [f"IAT_{p}" for p in self.iat.params_names]
+        JS_names = [f"JS_{p}" for p in self.jumps_size.params_names]
+        RemainingPoints_names = [f"RP_{p}" for p in self.remaining_points.params_names]
+        return tuple(IAT_names) + tuple(JS_names) + tuple(RemainingPoints_names)
+
+    def _process_fit_params(self, **kwds):
+        IAT_kwds = {k.replace("IAT_", ""): v for (k,v) in kwds.items() if k.startswith("IAT_")}
+        JS_kwds = {k.replace("JS_", ""): v for (k,v) in kwds.items() if k.startswith("JS_")}
+        RP_kwds = {k.replace("RP_", ""): v for (k,v) in kwds.items() if k.startswith("RP_")}
+        IAT_params = self.iat._process_fit_params(**IAT_kwds)
+        JS_params = self.jumps_size._process_fit_params(**JS_kwds)
+        RP_params = self.remaining_points._process_fit_params(**RP_kwds)
+        if len(kwds) > len(IAT_kwds) + len(JS_kwds) + len(RP_kwds):
+            raise ValueError(f"Unexpected parameters encountered in keywords: {kwds}")
+        return IAT_params, JS_params, RP_params
+
+    def profile_likelihood(self, data,
+                           conditioning_method: Callable = ConditioningMethod.no_conditioning,
+                           fixed_params=None,
+                           **kwds):
+        kwds.update(**(fixed_params or {}))
+        return self.fit(data, conditioning_method=conditioning_method,
+                        **kwds)
 
     def fit(self, data: pd.Series,
-            conditioning_method=ConditioningMethod.no_conditioning, *args, **kwds):
-        """
-        :param data:
-        :param args: model: gpd or pp representation;
-         threshold very useful for POT;
-         npp is the number of obs per period (ex: daily observations that we want to
-         put in yearly units -> 365.25 obs/period (default)
-        :param kwds:
-        :return:
-        """
-        pot = data[data >= self.threshold]
-        pot_dist = self.jumps_size_distribution.fit(pot, conditioning_method=conditioning_method, *args, **kwds)
-        if isinstance(list(data.index.values)[0], datetime.date):
-            tau = pd.Series(pot.index)
-            tau = (tau - tau.iloc[0]).apply(lambda x: x.days)
-        else:
-            tau = np.where(data >= self.threshold)[0]
-        counting_process_dist = self.counting_process_distribution.fit(tau)
-        ut_dist = self.under_threshold_distribution.fit(data[data < self.threshold])
-        return PointProcess(self.threshold, pot_dist, counting_process_dist, ut_dist)
+            conditioning_method=ConditioningMethod.no_conditioning,
+            x0=None, opt_method="Nelder-Mead",
+            *args, **kwds):
+        params_iat, params_js, params_rp = self._process_fit_params(**kwds)
+        obj = type(self)(type(self.iat)(**params_iat),
+                         type(self.jumps_size)(**params_js),
+                         type(self.remaining_points)(**params_rp))
+        x0 = obj.optimisation_params if x0 is None else x0
+
+        def to_minimize(var_params):
+            return obj.with_params(var_params).opposite_log_likelihood(data, conditioning_method)
+
+        result = minimize(to_minimize,
+                          method=opt_method,
+                          options={"adaptive": True, 'maxfev': 1000},
+                          x0=x0)
+        res = list(result.x)
+        return obj.with_params(res)
 
     def rvs(self, size):
         freq = 1 / self.counting_process_distribution.scale
@@ -611,14 +633,6 @@ class CompositionDistribution(Distribution, Parametrized):
         d1_names = [f"d1_{p}" for p in self.d1.params_names]
         d2_names = [f"d2_{p}" for p in self.d2.params_names]
         return tuple(d1_names) + tuple(d2_names)
-
-    @property
-    def params(self):
-        return self.d1.params + self.d2.params
-
-    @property
-    def optimisation_params(self):
-        return self.d1.optimisation_params + self.d2.optimisation_params
 
     def with_params(self, new_params):
         new_params = iter(new_params)
