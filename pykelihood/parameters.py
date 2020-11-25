@@ -115,6 +115,7 @@ class ConstantParameter(Parameter):
 
 class ParametrizedFunction(Parametrized):
     def __init__(self, f: Callable, *args, **params: Parametrized):
+        self._init_args = args
         self.f = partial(f, *args)
         self.original_f = f
         super(ParametrizedFunction, self).__init__(*params.values())
@@ -141,4 +142,4 @@ class ParametrizedFunction(Parametrized):
         new_params = []
         for param in self._params:
             new_params.append(param.with_params(params))
-        return type(self)(self.f, **dict(zip(self.params_names, new_params)))
+        return type(self)(self.original_f, *self._init_args, **dict(zip(self.params_names, new_params)))
