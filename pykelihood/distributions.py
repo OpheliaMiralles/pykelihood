@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import scipy.special
 from rpy2 import robjects
+from rpy2.rinterface._rinterface import RRuntimeError
 from rpy2.robjects import conversion, pandas2ri
 from rpy2.robjects.packages import importr
 from scipy.optimize import minimize
@@ -54,20 +55,10 @@ def ifnone(x, default):
     return x
 
 
-class Distribution:
-    params: Tuple[Parameter]
-    params_names: Tuple[str]
-    flattened_params: Tuple[Parametrized]
-    optimisation_params: Tuple[Parametrized]
-    optimisation_param_dict: Dict[str, Parametrized]
-    param_dict: Dict[str, Parametrized]
+class Distribution(Parametrized):
 
     def __hash__(self):
         return (self.__class__.__name__,) + self.params
-
-    @abstractmethod
-    def with_params(self, params: Iterable):
-        return NotImplemented
 
     @abstractmethod
     def rvs(self, size: int):
@@ -151,7 +142,7 @@ class AvoidAbstractMixin(object):
         return x
 
 
-class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
+class ScipyDistribution(Distribution, AvoidAbstractMixin):
     base_module: Any
 
     def _correct_trends(self, f):
@@ -206,7 +197,7 @@ class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
         return init.with_params(res.x)
 
 
-class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
+class RDistribution(Distribution, AvoidAbstractMixin):
     def log_likelihood(self, data: Union[np.array, pd.Series, robjects.FloatVector],
                        conditioning_method: Callable = ConditioningMethod.no_conditioning,
                        *args, **kwds):
@@ -252,7 +243,7 @@ class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
             data = conversion.py2ri(data)
             results = list(nm_get(fminsearch(to_minimize,
                                              x0=np.array(x0)), "xopt"))
-        except:
+        except RRuntimeError:
             data = conversion.ri2py(data)
             results = minimize(to_minimize, np.array(x0),
                                bounds=[(None, None), (0, None), (None, None)],
@@ -527,7 +518,7 @@ class RGPD(RDistribution):
         result = dgpd(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()), ifnone(shape, self.shape()), log=True)
         return result
 
-class PointProcess(Distribution, Parametrized):
+class PointProcess(Distribution):
     def __init__(self, threshold: int,
                  intensity,
                  jumps_size_distribution: Distribution = GPD(),
@@ -784,7 +775,7 @@ class PointProcess(Distribution, Parametrized):
         return res
 
 
-class CompositionDistribution(Distribution, Parametrized):
+class CompositionDistribution(Distribution):
     def __init__(self, d1: Distribution, d2: Distribution):
         """
         Distribution of cdf GoF
