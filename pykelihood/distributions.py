@@ -17,6 +17,7 @@ from rpy2.robjects.packages import importr
 from scipy.optimize import minimize
 from scipy.stats import beta, expon, genextreme, genpareto, norm, pareto, uniform, gamma
 
+from pykelihood import kernels
 from pykelihood.parameters import ConstantParameter, Parameter, Parametrized, ParametrizedFunction
 from pykelihood.stats_utils import ConditioningMethod
 
@@ -187,7 +188,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
         init = cls(**init_parms)
         x0 = x0 if x0 is not None else init.optimisation_params
         if len(x0) != len(init.optimisation_params):
-            raise ValueError(f"Expected {len(init.params)} values in x0, got {len(x0)}")
+            raise ValueError(f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}")
 
         def to_minimize(x):
             o = init.with_params(x)

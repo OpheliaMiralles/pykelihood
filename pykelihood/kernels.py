@@ -17,6 +17,12 @@ def linear(X, a, b):
     return a+b*X
 
 @parametrized_function(a=0., b=0., c=0.)
+def three_categories_qualitative(X, a, b, c):
+    mapping_cats = {cat : factor for cat, factor in zip(list(sorted(X.unique())), [a, b, c])}
+    return X.apply(lambda x: mapping_cats[x])
+
+
+@parametrized_function(a=0., b=0., c=0.)
 def polynomial(X, a, b, c):
     return a+b*X+c*X**2
 
