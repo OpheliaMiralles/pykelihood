@@ -268,7 +268,7 @@ def K_gaps_estimate_of_inter_exceedances(X: Union[pd.Series, pd.DataFrame],
         normalising_factor =  len(iet_normalised_to_cluster_distance)/len(X)
         positive_spacings = normalising_factor*iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance>0.]
         zero_mass = n0*np.log(1-theta)
-        exponential_mass = n_positive*np.log(theta)-theta*np.sum(positive_spacings)
+        exponential_mass = 2*n_positive*np.log(theta)-theta*np.sum(positive_spacings)
         return -(zero_mass + exponential_mass)
     estimate_theta = minimize(opposite_log_likelihood, x0 = np.array(0.99), method="Nelder-Mead").x
     return estimate_theta
