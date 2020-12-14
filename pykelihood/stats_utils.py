@@ -230,32 +230,47 @@ def pettitt(signal):
     p = np.exp(-3 * K ** 2 / (T ** 3 + T ** 2))
     return (loc, p)
 
-def K_gaps_estimate_of_inter_exceedances(X: pd.Series,
-                                         threshold:Union[float, int],
-                                         K:Union[float, int]=None):
+def K_gaps_estimate_of_inter_exceedances(X: Union[pd.Series, pd.DataFrame],
+                                         threshold:Union[float, int, str],
+                                         K:Union[float, int]=None,
+                                         data_column_name : str = None):
     """
     Warning: estimate based on exponential inter-exceedance times, meaning that exceedances are arriving at times
     independant from history (memoryless property of the exponential). 
     :param X: dataset with index the a time info of any sort (can also be a standard index if all observations
     are observed in a stationary way, eg with constant spacing)
     :param K: min spacing of exceedances from separate clusters (space between clusters)
-    :param threshold: threshold delimiting exceedances
+    :param threshold: threshold delimiting exceedances. If a string is passed, name of the column of X where the thresholds are.
+    :param data_column_name: if X is a dataframe, column with data
     :return: K-gaps estimate for theta, the extremal index
     """
-    exceedances = X[X>=threshold]
-    indices_exceedances = exceedances.index
-    inter_exceedance_times = indices_exceedances.diff().fillna(0.)
+    data = X.copy()
+    if isinstance(X, pd.DataFrame):
+        if len(X.columns)>1 and (data_column_name is None or data_column_name not in X.columns):
+            raise TypeError("X is a dataframe of more than one columns, yet no column name has been specified for the variable of interest.")
+        elif len(X.columns)>1:
+            data = X[data_column_name]
+        elif len(X.columns) == 1:
+            data = X[X.columns[0]]
+        if isinstance(threshold, str):
+            if not threshold in X.columns:
+                raise NameError(f"{threshold} has been passed as value for the threshold column of X, yet X does not contain a column with that name.")
+            threshold = X[threshold]
+    exceedances = data[data>=threshold]
+    indices_exceedances = np.array(exceedances.index)
+    inter_exceedance_times = np.diff(indices_exceedances)
     if K is None:
-        K = np.min(inter_exceedance_times)
-    iet_normalised_to_cluster_distance = np.max(inter_exceedance_times-K, 0.)
-    n0 = len(iet_normalised_to_cluster_distance[~iet_normalised_to_cluster_distance>0.])
+        K = np.mean(inter_exceedance_times)
+    iet_normalised_to_cluster_distance = np.clip(inter_exceedance_times-K, 0., a_max=None)
     n_positive = len(iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance>0.])
-    def log_likelihood(theta: float):
-        x = iet_normalised_to_cluster_distance
+    n0 = len(iet_normalised_to_cluster_distance)-n_positive
+    def opposite_log_likelihood(theta: float):
+        normalising_factor =  len(iet_normalised_to_cluster_distance)/len(X)
+        positive_spacings = normalising_factor*iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance>0.]
         zero_mass = n0*np.log(1-theta)
-        exponential_mass = n_positive*np.log(theta)-theta*np.sum(x)
-        return zero_mass + exponential_mass
-    estimate_theta = minimize(log_likelihood, x0 = np.array(1.), method="Nelder-Mead").x
+        exponential_mass = n_positive*np.log(theta)-theta*np.sum(positive_spacings)
+        return -(zero_mass + exponential_mass)
+    estimate_theta = minimize(opposite_log_likelihood, x0 = np.array(0.99), method="Nelder-Mead").x
     return estimate_theta
 
 
