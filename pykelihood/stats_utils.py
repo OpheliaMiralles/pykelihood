@@ -3,11 +3,12 @@ from __future__ import annotations
 import math
 import warnings
 from itertools import count
-from typing import Callable, Sequence, TYPE_CHECKING
+from typing import Callable, Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 import pandas as pd
 from rpy2.robjects import FloatVector
+from scipy.optimize import minimize
 from scipy.stats import chi2
 
 from pykelihood.cached_property import cached_property
@@ -207,8 +208,8 @@ class Likelihood(object):
 
 def pettitt(signal):
     """
-    Pure-Python implementation of Pettitt's non-parametric test for change-point detection.
-    Given an input signal, it reports the likely position of a single changepoint along with
+    Pettitt's non-parametric test for change-point detection.
+    Given an input signal, it reports the likely position of a single switch point along with
     the significance probability for location K, approximated for p <= 0.05.
     """
     T = len(signal)
@@ -228,3 +229,33 @@ def pettitt(signal):
     K = np.max(np.abs(U))
     p = np.exp(-3 * K ** 2 / (T ** 3 + T ** 2))
     return (loc, p)
+
+def K_gaps_estimate_of_inter_exceedances(X: pd.Series,
+                                         threshold:Union[float, int],
+                                         K:Union[float, int]=None):
+    """
+    Warning: estimate based on exponential inter-exceedance times, meaning that exceedances are arriving at times
+    independant from history (memoryless property of the exponential). 
+    :param X: dataset with index the a time info of any sort (can also be a standard index if all observations
+    are observed in a stationary way, eg with constant spacing)
+    :param K: min spacing of exceedances from separate clusters (space between clusters)
+    :param threshold: threshold delimiting exceedances
+    :return: K-gaps estimate for theta, the extremal index
+    """
+    exceedances = X[X>=threshold]
+    indices_exceedances = exceedances.index
+    inter_exceedance_times = indices_exceedances.diff().fillna(0.)
+    if K is None:
+        K = np.min(inter_exceedance_times)
+    iet_normalised_to_cluster_distance = np.max(inter_exceedance_times-K, 0.)
+    n0 = len(iet_normalised_to_cluster_distance[~iet_normalised_to_cluster_distance>0.])
+    n_positive = len(iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance>0.])
+    def log_likelihood(theta: float):
+        x = iet_normalised_to_cluster_distance
+        zero_mass = n0*np.log(1-theta)
+        exponential_mass = n_positive*np.log(theta)-theta*np.sum(x)
+        return zero_mass + exponential_mass
+    estimate_theta = minimize(log_likelihood, x0 = np.array(1.), method="Nelder-Mead").x
+    return estimate_theta
+
+
