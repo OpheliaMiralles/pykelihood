@@ -1,4 +1,3 @@
-import datetime
 import io
 import math
 import sys
@@ -12,12 +11,13 @@ import numpy as np
 import pandas as pd
 import scipy.special
 from rpy2 import robjects
+from rpy2.rinterface._rinterface import RRuntimeError
 from rpy2.robjects import conversion, pandas2ri
 from rpy2.robjects.packages import importr
 from scipy.optimize import minimize
-from scipy.stats import beta, expon, genextreme, genpareto, norm, pareto, uniform
+from scipy.stats import beta, expon, genextreme, genpareto, norm, pareto, uniform, gamma
 
-from pykelihood.parameters import ConstantParameter, Parameter, Parametrized
+from pykelihood.parameters import ConstantParameter, Parameter, Parametrized, ParametrizedFunction
 from pykelihood.stats_utils import ConditioningMethod
 
 evd = importr('evd')
@@ -55,20 +55,10 @@ def ifnone(x, default):
     return x
 
 
-class Distribution:
-    params: Tuple[Parameter]
-    params_names: Tuple[str]
-    flattened_params: Tuple[Parametrized]
-    optimisation_params: Tuple[Parametrized]
-    optimisation_param_dict: Dict[str, Parametrized]
-    param_dict: Dict[str, Parametrized]
+class Distribution(Parametrized):
 
     def __hash__(self):
         return (self.__class__.__name__,) + self.params
-
-    @abstractmethod
-    def with_params(self, params: Iterable):
-        return NotImplemented
 
     @abstractmethod
     def rvs(self, size: int):
@@ -76,7 +66,7 @@ class Distribution:
 
     @classmethod
     @abstractmethod
-    def fit(cls, data: pd.Series, *args, **kwds):
+    def fit(cls, data: Union[pd.Series, np.array], *args, **kwds):
         return NotImplemented
 
     @abstractmethod
@@ -152,7 +142,7 @@ class AvoidAbstractMixin(object):
         return x
 
 
-class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
+class ScipyDistribution(Distribution, AvoidAbstractMixin):
     base_module: Any
 
     def _correct_trends(self, f):
@@ -207,7 +197,7 @@ class ScipyDistribution(Parametrized, Distribution, AvoidAbstractMixin):
         return init.with_params(res.x)
 
 
-class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
+class RDistribution(Distribution, AvoidAbstractMixin):
     def log_likelihood(self, data: Union[np.array, pd.Series, robjects.FloatVector],
                        conditioning_method: Callable = ConditioningMethod.no_conditioning,
                        *args, **kwds):
@@ -253,7 +243,7 @@ class RDistribution(Parametrized, Distribution, AvoidAbstractMixin):
             data = conversion.py2ri(data)
             results = list(nm_get(fminsearch(to_minimize,
                                              x0=np.array(x0)), "xopt"))
-        except:
+        except RRuntimeError:
             data = conversion.ri2py(data)
             results = minimize(to_minimize, np.array(x0),
                                bounds=[(None, None), (0, None), (None, None)],
@@ -292,6 +282,22 @@ class Exponential(ScipyDistribution):
     def rvs(self, size, loc=None, rate=None):
         return self.base_module.rvs(ifnone(loc, self.loc()), ifnone(rate, 1 / self.rate()), size)
 
+
+class Gamma(ScipyDistribution):
+    params_names = ("loc", "scale", "shape")
+    base_module = gamma
+
+    def __init__(self, loc=0., scale=1., shape=0.):
+        super(Gamma, self).__init__(loc, scale, shape)
+        self._cache = {}
+
+    def _wrapper(self, f, x, loc=None, scale=None, shape=None):
+        return f(x, ifnone(shape, self.shape()), ifnone(loc, self.loc()), ifnone(scale, self.scale()))
+
+    def rvs(self, size, loc=None, scale=None, shape=None):
+        return self.base_module.rvs(ifnone(shape, self.shape()),
+                                    ifnone(loc, self.loc()),
+                                    ifnone(scale, self.scale()), size)
 
 class Pareto(ScipyDistribution):
     params_names = ("loc", "scale", "alpha")
@@ -512,40 +518,52 @@ class RGPD(RDistribution):
         result = dgpd(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()), ifnone(shape, self.shape()), log=True)
         return result
 
-
-class PointProcess(Distribution, Parametrized):
+class PointProcess(Distribution):
     def __init__(self, threshold: int,
+                 intensity,
                  jumps_size_distribution: Distribution = GPD(),
-                 iat_distribution: Distribution = Exponential(),
-                 remaining_points_distribution: Distribution = Uniform(ConstantParameter(0.), ConstantParameter(1.))):
+                 remaining_points_distribution: Distribution = Uniform(ConstantParameter(0.), ConstantParameter(1.)),
+                 npp = 365.25):
         """
 
         :param threshold: defines what is a jump in term of exceeding of a certain threshold
         :param jumps_size_distribution: the jump size distribution
-        :param iat_distribution: the inter-arrival times distribution with intensity lambda which can depend on time
-        (non homogeneous Poisson Process) or history (Hawkes Process)
+        :param intensity: the inter-arrival intensity lambda which can depend on time
+        (non homogeneous Poisson Process) or history (Hawkes Process).
+         If not provided, Time is automatically set to indices and renormalized between 0 and 1.
         :param remaining_points_distribution: optional, handles the points that are not jumps (appearing with frequency
         1-lambda on average)
+        :param npp: number of observations per period, used to compute return level estimates over k years
         """
-        super(PointProcess, self).__init__(*(iat_distribution.params +
+        self.iat = Exponential(loc=ConstantParameter(0.), rate=intensity)
+        super(PointProcess, self).__init__(*(self.iat.params +
                                              jumps_size_distribution.params +
                                              remaining_points_distribution.params))
         self.jumps_size = jumps_size_distribution
-        self.iat = iat_distribution
         self.remaining_points = remaining_points_distribution
         self.threshold = threshold
+        self.intensity = intensity
+        self.frequency_exceedances = 1/intensity()
+        self.npp = npp
 
     @property
     def params_names(self):
-        IAT_names = [f"IAT_{p}" for p in self.iat.params_names]
-        JS_names = [f"JS_{p}" for p in self.jumps_size.params_names]
-        RemainingPoints_names = [f"RP_{p}" for p in self.remaining_points.params_names]
+        IAT_names = [f"iat_{p}" for p in self.iat.params_names]
+        JS_names = [f"js_{p}" for p in self.jumps_size.params_names]
+        RemainingPoints_names = [f"rp_{p}" for p in self.remaining_points.params_names]
         return tuple(IAT_names) + tuple(JS_names) + tuple(RemainingPoints_names)
 
+    def with_params(self, new_params):
+        new_params = iter(new_params)
+        iat = self.iat.with_params(new_params)
+        js = self.jumps_size.with_params(new_params)
+        rp = self.remaining_points.with_params(new_params)
+        return type(self)(self.threshold, iat.rate, js, rp, self.npp)
+
     def _process_fit_params(self, **kwds):
-        IAT_kwds = {k.replace("IAT_", ""): v for (k,v) in kwds.items() if k.startswith("IAT_")}
-        JS_kwds = {k.replace("JS_", ""): v for (k,v) in kwds.items() if k.startswith("JS_")}
-        RP_kwds = {k.replace("RP_", ""): v for (k,v) in kwds.items() if k.startswith("RP_")}
+        IAT_kwds = {k.replace("iat_", ""): v for (k,v) in kwds.items() if k.startswith("iat_")}
+        JS_kwds = {k.replace("js_", ""): v for (k,v) in kwds.items() if k.startswith("js_")}
+        RP_kwds = {k.replace("rp_", ""): v for (k,v) in kwds.items() if k.startswith("rp_")}
         IAT_params = self.iat._process_fit_params(**IAT_kwds)
         JS_params = self.jumps_size._process_fit_params(**JS_kwds)
         RP_params = self.remaining_points._process_fit_params(**RP_kwds)
@@ -561,62 +579,203 @@ class PointProcess(Distribution, Parametrized):
         return self.fit(data, conditioning_method=conditioning_method,
                         **kwds)
 
-    def fit(self, data: pd.Series,
-            conditioning_method=ConditioningMethod.no_conditioning,
-            x0=None, opt_method="Nelder-Mead",
+    def fit(self, data, conditioning_method=ConditioningMethod.no_conditioning,
+            x0=None, opt_method="Nelder-Mead", plot=False,
             *args, **kwds):
         params_iat, params_js, params_rp = self._process_fit_params(**kwds)
-        obj = type(self)(type(self.iat)(**params_iat),
+        obj = type(self)(self.threshold,
+                         type(self.iat)(**params_iat).rate,
                          type(self.jumps_size)(**params_js),
                          type(self.remaining_points)(**params_rp))
-        x0 = obj.optimisation_params if x0 is None else x0
+        # Three different fittings to avoid numerical instability
+        inter_arrival_times = np.diff(np.asarray(data>=self.threshold).nonzero()[0]/len(data))
+        inter_arrival_times = np.insert(inter_arrival_times, 0, 0)
+        distribution_iat = obj.iat.fit(inter_arrival_times, **obj.iat.param_dict)
+        pot = data[data>=self.threshold]
+        distribution_jump_size = obj.jumps_size.fit(pot, **obj.jumps_size.param_dict)
+        remaining_points = data[(~data.isin(pot)) & data > 0]
+        distribution_remaining_points = obj.remaining_points.fit(remaining_points, **obj.remaining_points.param_dict)
+        res = list(tuple(distribution_iat.optimisation_params)\
+              + tuple(distribution_jump_size.optimisation_params) \
+              + tuple(distribution_remaining_points.optimisation_params))
+        fitted_distribution = obj.with_params(res)
+        fitted_distribution.frequency_exceedances = fitted_distribution.intensity()/len(data)
+        return fitted_distribution
 
-        def to_minimize(var_params):
-            return obj.with_params(var_params).opposite_log_likelihood(data, conditioning_method)
+    def show_diagnostic_plot(self, data, time_scale=('d', pd.to_datetime("1961-01-01"))):
+        """
 
-        result = minimize(to_minimize,
-                          method=opt_method,
-                          options={"adaptive": True, 'maxfev': 1000},
-                          x0=x0)
-        res = list(result.x)
-        return obj.with_params(res)
+        :param data: empirical observations used for the fit
+        :param time_scale: tuple (a,b) with a being the frequency of observations per period (ie daily data over a year:
+        a="d") and b the first period (for data starting in year 1961, b=pd.to_datetime("1961-01-01"))
+        :return: plots
+        """
+        import matplotlib.pyplot as plt
+        n_simul = 500
+        simul, exceedances = self.rvs(n_simul,
+                                      fixed_number_of_exceedances=len(data[data>=self.threshold]))
+        fig = plt.figure(figsize=(10, 10))
+        gs = fig.add_gridspec(2, 2)
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[1, 0])
+        ax3 = fig.add_subplot(gs[0, 1])
+        ax4 = fig.add_subplot(gs[1, 1])
 
-    def rvs(self, size):
-        freq = 1 / self.counting_process_distribution.scale
-        threshold = self.threshold
-        nb_exceedances = int(freq * size)
-        expo = np.cumsum(self.counting_process_distribution.rvs(size=nb_exceedances))
-        exceedances = np.array(self.jumps_size_distribution.rvs(nb_exceedances))
-        non_exceedances = size - nb_exceedances
-        others = threshold * self.under_threshold_distribution.rvs(size=non_exceedances)
-        sizes = np.insert(others, [math.ceil(e) for e in expo], exceedances)
-        return np.array(list(enumerate(sizes)))
+        # Cumulative Number of Exceedances
+        simu = pd.concat([pd.Series(d.index) for d in exceedances], axis=1)
+        pot = data[data>=self.threshold]
+        realized = (pot>=self.threshold).cumsum()
+        simu.index = simu.index + 1
+        mean = simu.mean(axis=1)
+        std = simu.std(axis=1)
+        def swap_axes(s):
+            return pd.Series(s.index.values, index=s)
+        mean_ = swap_axes(mean)
+        x = pd.to_datetime(len(data) * realized.index, unit=time_scale[0], origin=time_scale[1])
+        x1 = pd.to_datetime(len(data) * mean_.index, unit=time_scale[0], origin=time_scale[1])
+        x2 = pd.to_datetime(len(data) * (mean + 2*std), unit=time_scale[0], origin=time_scale[1])
+        x3 =  pd.to_datetime(len(data) * (mean - 2*std), unit=time_scale[0], origin=time_scale[1])
+        realized.index = x
+        mean_.index = x1
+        ax1.plot(realized, label="Realized", color="black")
+        ax1.plot(mean_, label=f"Simulated ({n_simul} points)", color="r")
+        ax1.fill_betweenx(y=mean_, x1=x2, x2=x3, color="r", alpha=0.2)
+        ax1.set_title("Cumulative Exceedances over Threshold")
+        ax1.set_ylabel("Number of Exceedances")
+        ax1.set_xlabel("Time")
+        ax1.legend()
+
+        # Peaks Over Threshold
+        realized_cdf = pot.value_counts(normalize = True).sort_index().cumsum()
+        if len(self.jumps_size.params)==len(self.jumps_size.flattened_params):
+            theoretical = self.jumps_size.cdf(realized_cdf.index)
+            ax2.plot(realized_cdf, theoretical)
+            ax2.plot(realized_cdf, realized_cdf)
+            ax2.set_title("Quantile Plot Peaks Over Threshold")
+            ax2.set_xlabel("Empirical")
+            ax2.set_ylabel("Theoretical")
+        else:
+            simulated = pd.concat([e.transform(lambda x: round(x, 1), axis=0) \
+                                  .value_counts(normalize=True).sort_index().cumsum() for e in exceedances], axis=1)
+            mean = \
+            pd.concat([simulated.mean(axis=1), realized_cdf], axis=1).sort_index().ffill().loc[realized_cdf.index][0]
+            ax2.plot(realized_cdf, mean)
+            ax2.plot(realized_cdf, realized_cdf)
+            ax2.set_title("Quantile Plot Peaks Over Threshold")
+            ax2.set_xlabel("Empirical")
+            ax2.set_ylabel(f"Simulated ({n_simul} points)")
+
+        # Points Under Threshold
+        ut = data[data<self.threshold]
+        realized_cdf = ut.value_counts(normalize = True).sort_index().cumsum()
+        theoretical = self.remaining_points.cdf(realized_cdf.index)
+        ax3.plot(realized_cdf, theoretical)
+        ax3.plot(realized_cdf, realized_cdf)
+        ax3.set_title("Quantile Plot Points Under Threshold")
+        ax3.set_xlabel("Empirical")
+        ax3.set_ylabel("Theoretical")
+
+        # Return-level graph
+        nb_period = int(round(len(data)/self.npp, 0))
+        simulated_points = pd.concat(simul, axis=1)
+        simulated_points.index = nb_period * simulated_points.index
+        data_rescaled = data.copy()
+        data_rescaled.index = nb_period * data_rescaled.index
+        if not isinstance(self.intensity(), float):
+            freq_series = pd.Series(self.frequency_exceedances, index=self.intensity.f.args[0], name='intensity')
+            freq_series.index = nb_period * freq_series.index
+        else:
+            freq_series = pd.Series([self.frequency_exceedances]*len(pot), index = nb_period*pot.index, name="intensity")
+        true_vs_realized = []
+        rle = self.isf(1.)
+        for i, return_level_estimate in zip(freq_series.index, rle):
+            true_return_level = data_rescaled.loc[i-1:i].max()
+            simulated_mean = simulated_points.loc[i-1:i].max().mean()
+            simulated_std = simulated_points.loc[i-1:i].std().mean()
+            true_vs_realized.append(pd.DataFrame([[true_return_level, return_level_estimate,
+                                                   simulated_mean, simulated_mean-2*simulated_std,
+                                                   simulated_mean+2*simulated_std]],
+                                                 columns = ["Realized", "Estimated",
+                                                            f"Simulated ({n_simul} Points)", "SimulBInf", "SimulBSup"],
+                                                 index = [time_scale[1]+pd.to_timedelta(f"{self.npp*i} {time_scale[0]}")]))
+        true_vs_realized = pd.concat(true_vs_realized)
+        def moving_average(x):
+            ret = np.cumsum(x)
+            bool = (x>0).cumsum()
+            return ret/bool
+        for col, color in zip(true_vs_realized.columns, ["black", "g", "r", "", ""]):
+            true_vs_realized[col] = moving_average(true_vs_realized[col])
+            if col not in ["SimulBInf", "SimulBSup"]:
+                ax4.plot(true_vs_realized[col], label=col, color=color)
+        inf_bound, sup_bound = true_vs_realized["SimulBInf"], true_vs_realized["SimulBSup"]
+        ax4.fill_between(x=true_vs_realized.index, y1=inf_bound, y2=sup_bound, color="r", alpha=0.2)
+        ax4.set_title("1 year Return level Moving Average")
+        ax4.set_xlabel("Time")
+        ax4.set_ylabel("Return level")
+        ax4.legend()
+        return fig
+
+    def rvs(self, size, fixed_number_of_exceedances = None, show_diagnostic_plots = True):
+        from pykelihood.samplers import HawkesByThinningModified, PoissonByThinning
+        simul = []
+        exceedances_raw = []
+        for _ in range(size):
+            if fixed_number_of_exceedances:
+                nb_exceedances = fixed_number_of_exceedances
+                expo = np.cumsum(self.iat.rvs(size=nb_exceedances))
+            else:
+                if self.intensity.original_f.func.__name__ == kernels.hawkes_with_exp_kernel.__name__:
+                    mu, alpha, theta = self.intensity.params
+                    expo = HawkesByThinningModified(1., mu, alpha, theta)
+                else:
+                    expo = PoissonByThinning(1., self.intensity, np.max(self.intensity()))
+                nb_exceedances = len(expo)
+            exceedances = np.array(self.jumps_size.rvs(nb_exceedances))
+            exceedances_raw.append(pd.Series(exceedances, index=expo, name=f"{_}"))
+            total_number_of_points = int(np.mean(self.intensity())/np.mean(self.frequency_exceedances))
+            non_exceedances = total_number_of_points - nb_exceedances
+            under_threshold_points = self.remaining_points.rvs(size=non_exceedances)
+            indices_utp = np.random.choice(list(set(np.linspace(0, 1, total_number_of_points)) \
+                               .difference(expo)), non_exceedances, replace=False)
+            points_over_threshold = pd.Series(exceedances, index=expo, name=f"{_}")
+            points_under_threshold = pd.Series(under_threshold_points, index=indices_utp, name=f"{_}")
+            simul.append(pd.concat([points_under_threshold, points_over_threshold]).sort_index())
+        return simul, exceedances_raw
 
     def cdf(self, x):
-        freq = 1 / self.counting_process_distribution.scale
+        freq = self.frequency_exceedances
+        if not isinstance(x, pd.Series) and not isinstance(freq, float):
+            raise TypeError("The information of the covariate value is missing, please input a pandas Series" \
+                            "with index corresponding to this information.")
+        if isinstance(x, pd.Series) and not isinstance(freq, float):
+            freq_series = pd.Series(freq/len(x), index = self.intensity.f.args[0], name='intensity')
+            freq = pd.concat([freq_series, x], axis=1).sort_index().bfill().ffill()["intensity"]
         res = np.where(x < self.threshold,
-                       self.under_threshold_distribution.cdf(x) * (1 - freq),
-                       freq * self.jumps_size_distribution.cdf(x))
-        if isinstance(x, float):
-            return res[0]
-        else:
-            return res
+                       self.remaining_points.cdf(x) * (1-freq),
+                       freq * self.jumps_size.cdf(x))
+        return res
 
     def isf(self, q):
-        freq = self.counting_process_distribution.scale
-        res = np.where(q > freq,
-                       self.under_threshold_distribution.isf(q * (1 - freq)),
-                       self.jumps_size_distribution.isf(q * freq))
+        freq = self.frequency_exceedances
+        return_level_proba = q/self.npp
+        res = np.where(return_level_proba > freq,
+                       self.remaining_points.isf(return_level_proba / (1 - freq)),
+                       self.jumps_size.isf(return_level_proba / freq))
         return res
 
     def pdf(self, x):
-        freq = self.counting_process_distribution.scale
-        res = np.where(x < self.threshold, (1 - freq) * self.under_threshold_distribution.pdf(x),
-                       self.jumps_size_distribution.pdf(x) * freq)
+        freq = self.frequency_exceedances
+        if not isinstance(x, pd.Series) and not isinstance(freq, float):
+            raise TypeError("The information of the covariate value is missing, please input a pandas Series""with index corresponding to this information.")
+        if isinstance(x, pd.Series) and not isinstance(freq, float):
+            freq_series = pd.Series(freq, index=self.intensity.f.args[0], name='intensity')
+            freq = pd.concat([freq_series, x], axis=1).sort_index().bfill().ffill()["intensity"]
+        res = np.where(x < self.threshold, (1 - freq) * self.remaining_points.pdf(x),
+                       self.jumps_size.pdf(x) * freq)
         return res
 
 
-class CompositionDistribution(Distribution, Parametrized):
+class CompositionDistribution(Distribution):
     def __init__(self, d1: Distribution, d2: Distribution):
         """
         Distribution of cdf GoF
