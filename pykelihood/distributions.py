@@ -1,10 +1,9 @@
 import io
-import math
 import sys
 from abc import abstractmethod
 from collections.abc import MutableSequence
 from functools import partial, wraps
-from typing import Any, Callable, Dict, Iterable, Sequence, Tuple, Union
+from typing import Any, Callable, Iterable, Sequence, Union
 
 import cachetools
 import numpy as np
@@ -15,10 +14,10 @@ from rpy2.rinterface._rinterface import RRuntimeError
 from rpy2.robjects import conversion, pandas2ri
 from rpy2.robjects.packages import importr
 from scipy.optimize import minimize
-from scipy.stats import beta, expon, genextreme, genpareto, norm, pareto, uniform, gamma
+from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto, uniform
 
 from pykelihood import kernels
-from pykelihood.parameters import ConstantParameter, Parameter, Parametrized, ParametrizedFunction
+from pykelihood.parameters import ConstantParameter, Parametrized
 from pykelihood.stats_utils import ConditioningMethod
 
 evd = importr('evd')
@@ -63,11 +62,6 @@ class Distribution(Parametrized):
 
     @abstractmethod
     def rvs(self, size: int):
-        return NotImplemented
-
-    @classmethod
-    @abstractmethod
-    def fit(cls, data: Union[pd.Series, np.array], *args, **kwds):
         return NotImplemented
 
     @abstractmethod
@@ -125,6 +119,28 @@ class Distribution(Parametrized):
                     param_dict[name] = param_dict[name].with_params(subdic.values())
         return param_dict
 
+    @classmethod
+    def fit(cls, data, x0=None, conditioning_method=ConditioningMethod.no_conditioning, **fixed_values):
+        init_parms = {}
+        for k in cls.params_names:
+            if k in fixed_values:
+                v = fixed_values[k]
+                if isinstance(v, Parametrized):
+                    init_parms[k] = v
+                else:
+                    init_parms[k] = ConstantParameter(v)
+        init = cls(**init_parms)
+        x0 = x0 if x0 is not None else init.optimisation_params
+        if len(x0) != len(init.optimisation_params):
+            raise ValueError(f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}")
+
+        def to_minimize(x):
+            o = init.with_params(x)
+            return o.opposite_log_likelihood(data, conditioning_method=conditioning_method)
+
+        res = minimize(to_minimize, x0, method="Nelder-Mead")
+        return init.with_params(res.x)
+
     def profile_likelihood(self, data,
                            conditioning_method: Callable = ConditioningMethod.no_conditioning,
                            fixed_params=None,
@@ -174,28 +190,6 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
         g = cachetools.cached(self._cache, key=hash_with_series)(g)
         self.__dict__[item] = g
         return g
-
-    @classmethod
-    def fit(cls, data, x0=None, conditioning_method=ConditioningMethod.no_conditioning, **fixed_values):
-        init_parms = {}
-        for k in cls.params_names:
-            if k in fixed_values:
-                v = fixed_values[k]
-                if isinstance(v, Parametrized):
-                    init_parms[k] = v
-                else:
-                    init_parms[k] = ConstantParameter(v)
-        init = cls(**init_parms)
-        x0 = x0 if x0 is not None else init.optimisation_params
-        if len(x0) != len(init.optimisation_params):
-            raise ValueError(f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}")
-
-        def to_minimize(x):
-            o = init.with_params(x)
-            return o.opposite_log_likelihood(data, conditioning_method=conditioning_method)
-
-        res = minimize(to_minimize, x0, method="Nelder-Mead")
-        return init.with_params(res.x)
 
 
 class RDistribution(Distribution, AvoidAbstractMixin):
@@ -346,7 +340,6 @@ class Normal(ScipyDistribution):
     def rvs(self, size, loc=None, scale=None):
         return self.base_module.rvs(ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
-
 class GEV(ScipyDistribution):
     params_names = ("loc", "scale", "shape")
     base_module = genextreme
@@ -383,6 +376,34 @@ class GEV(ScipyDistribution):
     def rvs(self, size, c=None, loc=None, scale=None):
         return self.base_module.rvs(ifnone(c, self.c), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
+class MixtureExponentialModel(Distribution):
+    params_names = ("theta",)
+    def __init__(self, theta=0.99):
+        super(MixtureExponentialModel, self).__init__(theta)
+        self._cache = {}
+
+    def rvs(self, size):
+        theta = self.theta()
+        uniforms = Uniform().rvs(size)
+        realisations = []
+        for uniform in uniforms:
+            if uniform <= 1-theta:
+                realisations.append(0.)
+            else:
+                realisations.append(Exponential(rate = theta).rvs(1))
+        return realisations
+
+    def pdf(self, x):
+        theta = self.theta()
+        return np.where(x > 0., theta*Exponential(rate = theta).pdf(x), 1 - theta)
+
+    def cdf(self, x):
+        theta = self.theta()
+        return np.where(x > 0., theta*Exponential(rate = theta).cdf(x), 1 - theta)
+
+    def isf(self, q):
+        theta = self.theta()
+        return np.where(q != 1 - theta, Exponential(rate = theta).isf(q/theta), 0.)
 
 class GPD(ScipyDistribution):
     params_names = ("loc", "scale", "shape")
@@ -398,6 +419,28 @@ class GPD(ScipyDistribution):
     def rvs(self, size, loc=None, scale=None, shape=None):
         return self.base_module.rvs(ifnone(shape, self.shape()), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
+class ExtendedGPD(Distribution):
+    params_names = ("loc", "scale", "shape")
+
+    def __init__(self, loc=0., scale=1., shape=0.):
+        super(ExtendedGPD, self).__init__(loc, scale, shape)
+        if shape == 0.:
+            raise ValueError("For this distribution, the shape parameter must not be zero.")
+
+    def rvs(self, size:int):
+        return self.inverse_cdf(Uniform().rvs(size))
+
+    def cdf(self, x: Union[np.array, float]):
+        return 1-np.clip(1 + self.shape * ((x - self.loc) / self.scale), 0, a_max=None) ** (-1 / self.shape)
+
+    def inverse_cdf(self, q: float):
+        return self.loc + self.scale*((1-q)**(-self.shape)-1)/self.shape
+
+    def pdf(self, x: Union[np.array, float]):
+        return (1 / self.scale) * np.clip(1 + self.shape * ((x - self.loc) / self.scale), 0, a_max=None) ** (-1 / self.shape - 1)
+
+    def isf(self, q: float):
+        return self.loc + self.scale * (q ** (-self.shape) - 1) / self.shape
 
 class RGEV(RDistribution):
     params_names = ("loc", "scale", "shape")
