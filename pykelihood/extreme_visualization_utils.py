@@ -13,9 +13,63 @@ from pykelihood import kernels
 from pykelihood.distributions import Exponential, MixtureExponentialModel
 from pykelihood.stats_utils import Likelihood
 from hawkeslib import PoissonProcess as PP, UnivariateExpHawkesProcess as UEHP
-
+from pykelihood.distributions import Distribution
+from pykelihood.parameters import Parameter
 warnings.filterwarnings('ignore')
 import matplotlib.pyplot as plt
+
+def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
+    empirical_cdf = pd.Series(data).quantile(np.linspace(0., 0.99, len(data)))
+    quantiles_exp = gev_fit.inverse_cdf(empirical_cdf.index)
+    text_title = ''
+    if type(gev_fit.loc()) is not Parameter:
+        loc = {r'$\mu_{}$'.format(a): round(gev_fit.loc.param_dict[a],2) for a in gev_fit.loc.param_dict}
+        depending_on = list([g.name for g in gev_fit.loc.f.args])
+        for k in loc:
+            text_title+= f'{k} = {loc[k]}, '
+        text_title += f'depending on variables(s) '
+        for l in depending_on:
+            l = l.replace('_', ' ')
+            text_title += r'\it{'+l+r'}' + ', '
+    else:
+        loc = round(gev_fit.loc(),2)
+        text_title+= r'$\mu$=' + str(loc) + ', '
+    text_title+='\n'
+    if type(gev_fit.scale()) is not Parameter:
+        scale = {r'$\sigma_{}$'.format(a): round(gev_fit.scale.param_dict[a], 2) for a in gev_fit.scale.param_dict}
+        depending_on = list([g.name for g in gev_fit.scale.f.args])
+        for k in scale:
+            text_title += f'{k} = {scale[k]}, '
+        text_title += f'depending on variable(s) '
+        for l in depending_on:
+            l = l.replace('_', ' ')
+            text_title+= r'\it{'+l+r'}' + ', '
+    else:
+        scale = round(gev_fit.scale(), 2)
+        text_title+= r'$\sigma$=' + str(scale) + ', '
+    text_title += '\n'
+    if type(gev_fit.shape()) is not Parameter:
+        shape = {r'$\xi_{}$'.format(a): round(gev_fit.shape.param_dict[a], 2) for a in gev_fit.shape.param_dict}
+        depending_on = list([g.name for g in gev_fit.shape.f.args])
+        for k in shape:
+            text_title += f'{k} = {shape[k]}, '
+        text_title += f'depending on variable(s) '
+        for l in depending_on:
+            l = l.replace('_', ' ')
+            text_title += r'\it{'+l+r'}' + ', '
+    else:
+        shape = round(gev_fit.shape(), 2)
+        text_title+= r'$\xi$=' + str(shape)
+    if text_title.endswith(', '):
+        text_title = text_title[:-2]
+    plt.scatter(empirical_cdf, quantiles_exp, s=5, color="navy")
+    plt.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
+    plt.legend()
+    plt.title("QQ Plot of Maxima vs GEV distribution with parameters:\n"+text_title)
+    plt.xlabel("Empirical")
+    plt.ylabel("GEV distribution")
+    plt.tight_layout()
+    plt.savefig(f"{path_to_figure}/GEV_fit_maxima.png")
 
 def ExceedancesOverThresholdPerPeriodPlot(data:pd.DataFrame, path_to_figure: str):
     for p, c in zip(data["period"].unique(), ["salmon", "royalblue", "navy"]):
