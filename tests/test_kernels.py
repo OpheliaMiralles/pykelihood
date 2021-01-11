@@ -1,3 +1,5 @@
+from itertools import count
+
 from pykelihood import kernels
 
 
@@ -49,3 +51,23 @@ def test_linear_regression_with_name_constraint(matrix_data):
     regression = kernels.linear_regression(matrix_data, first=5, beta_third=2)
     assert len(regression.optimisation_params) == 1
     assert (regression.with_params([3])() == [5, 3, 2] * matrix_data).all().all()
+
+
+def test_categorical(categorical_data):
+    cat_kernel = kernels.categories_qualitative(categorical_data)
+    assert len(cat_kernel.optimisation_params) == categorical_data.unique().size
+    mapping = {k: v for k, v in zip(cat_kernel.params_names, count(1))}
+    # the values are "item1", "item2" or "item3"
+    assert (
+        cat_kernel.with_params(mapping.values())()
+        == categorical_data.apply(lambda x: mapping[x])
+    ).all()
+
+
+def test_categorical_with_constraint(categorical_data):
+    cat_kernel = kernels.categories_qualitative(categorical_data, item1=1, item2=8)
+    assert len(cat_kernel.optimisation_params) == categorical_data.unique().size - 2
+    mapping = {"item1": 1, "item2": 8, "item3": 12}
+    assert (
+        cat_kernel.with_params([12])() == categorical_data.apply(mapping.__getitem__)
+    ).all()
