@@ -1,4 +1,5 @@
-from typing import Union
+from itertools import count
+from typing import Collection, Union
 
 import numpy as np
 import pandas as pd
@@ -21,7 +22,7 @@ def linear(X, a, b):
 
 
 def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, **constraints) -> ParametrizedFunction:
-    """ Computes a trend as a linear sum of the columns.
+    """ Computes a trend as a linear sum of the columns in the data.
 
     :param x: the number of dimensions or the data the kernel will be computed on. There will be one parameter for each column.
     :param constraints: fixed values for the parameters of the regression. The following constraints are equivalent:
@@ -30,7 +31,7 @@ def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, **constraints
     """
     args = ()
     if isinstance(x, int):
-        assert x > 1, "Unexpected number of parameters for linear regression"
+        assert x > 0, "Unexpected number of parameters for linear regression"
         ndim = x
     else:
         args = x,
@@ -58,10 +59,20 @@ def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, **constraints
     return ParametrizedFunction(_compute, *args, **params)
 
 
-@parametrized_function(a=0., b=0., c=0.)
-def three_categories_qualitative(X, a, b, c):
-    mapping_cats = {cat : factor for cat, factor in zip(list(sorted(X.unique())), [a, b, c])}
-    return X.apply(lambda x: mapping_cats[x])
+def categories_qualitative(x: Collection, **fixed_values) -> ParametrizedFunction:
+    unique_values = set(x)
+    parameter = (Parameter() for _ in count())  # generate parameters on demand
+    params = {
+        value: next(parameter)
+        if value not in fixed_values
+        else ConstantParameter(fixed_values[value])
+        for value in unique_values
+    }
+
+    def _compute(data, **params_from_wrapper):
+        return type(data)(list(map(params_from_wrapper.__getitem__, data)))
+
+    return ParametrizedFunction(_compute, x, **params)
 
 
 @parametrized_function(a=0., b=0., c=0.)

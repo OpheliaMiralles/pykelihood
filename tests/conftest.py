@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -19,4 +21,9 @@ def dataset():
 
 @pytest.fixture(scope="session")
 def matrix_data():
-    return pd.DataFrame(np.random.randn(2, 3), columns=("first", "second", "third"))
+    return pd.DataFrame(np.random.randn(100, 3), columns=("first", "second", "third"))
+
+
+@pytest.fixture(scope="session")
+def categorical_data():
+    return pd.Series(random.choices(["item1", "item2", "item3"], k=100))
