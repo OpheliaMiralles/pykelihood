@@ -54,7 +54,7 @@ def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, **constraints
 
     def _compute(data, **params_from_wrapper):
         sorted_params = [params_from_wrapper[k] for k in params]
-        return sorted_params * data
+        return (sorted_params * data).sum(axis=1)
 
     return ParametrizedFunction(_compute, *args, **params)
 

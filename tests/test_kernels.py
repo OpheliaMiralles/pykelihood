@@ -29,28 +29,33 @@ def test_linear_regression(matrix_data):
     regression = kernels.linear_regression(3)
     assert len(regression.optimisation_params) == 3
     assert (
-        (regression.with_params([1, 2, 3])(matrix_data) == [1, 2, 3] * matrix_data)
-        .all()
-        .all()
-    )
+        regression.with_params([1, 2, 3])(matrix_data)
+        == ([1, 2, 3] * matrix_data).sum(axis=1)
+    ).all()
 
 
 def test_linear_regression_with_data(matrix_data):
     regression = kernels.linear_regression(matrix_data)
     assert len(regression.params) == len(matrix_data.columns)
-    assert (regression.with_params([1, 2, 3])() == [1, 2, 3] * matrix_data).all().all()
+    assert (
+        regression.with_params([1, 2, 3])() == ([1, 2, 3] * matrix_data).sum(axis=1)
+    ).all()
 
 
 def test_linear_regression_with_constraint(matrix_data):
     regression = kernels.linear_regression(matrix_data, beta_1=5, _0=6)
     assert len(regression.optimisation_params) == 1
-    assert (regression.with_params([1])() == [6, 5, 1] * matrix_data).all().all()
+    assert (
+        regression.with_params([1])() == ([6, 5, 1] * matrix_data).sum(axis=1)
+    ).all()
 
 
 def test_linear_regression_with_name_constraint(matrix_data):
     regression = kernels.linear_regression(matrix_data, first=5, beta_third=2)
     assert len(regression.optimisation_params) == 1
-    assert (regression.with_params([3])() == [5, 3, 2] * matrix_data).all().all()
+    assert (
+        regression.with_params([3])() == ([5, 3, 2] * matrix_data).sum(axis=1)
+    ).all()
 
 
 def test_categorical(categorical_data):
