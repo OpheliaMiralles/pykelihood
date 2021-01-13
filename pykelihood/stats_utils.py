@@ -7,12 +7,8 @@ from typing import Callable, Sequence, TYPE_CHECKING
 
 import matplotlib
 import matplotlib.pyplot as plt
-
-matplotlib.rcParams['text.usetex'] = True
-
 import numpy as np
 import pandas as pd
-from rpy2.robjects import FloatVector
 from scipy.stats import chi2
 
 from pykelihood.cached_property import cached_property
@@ -21,24 +17,19 @@ if TYPE_CHECKING:
     from pykelihood.distributions import Distribution
 
 warnings.filterwarnings('ignore')
+matplotlib.rcParams['text.usetex'] = True
 
 
 class ConditioningMethod(object):
     @staticmethod
     def no_conditioning(data: pd.Series,
                         distribution: Distribution):
-        if hasattr(data, "rclass"):
-            return FloatVector([0.])
-        else:
-            return 0.
+        return 0.
 
     @staticmethod
     def excluding_last_obs_rule(data: pd.Series,
                                 distribution: Distribution):
-        if hasattr(data, "rclass"):
-            return FloatVector(data[-1])
-        else:
-            return distribution.logpdf(data.iloc[-1])
+        return distribution.logpdf(data.iloc[-1])
 
     @staticmethod
     def partial_conditioning_rule_stopped_obs(data: pd.Series, distribution: Distribution,
