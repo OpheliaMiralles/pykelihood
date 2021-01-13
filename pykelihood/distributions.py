@@ -1,36 +1,18 @@
-import io
-import sys
 from abc import abstractmethod
 from collections.abc import MutableSequence
 from functools import partial, wraps
-from typing import Any, Callable, Iterable, Sequence, Union
+from typing import Any, Callable, Iterable, Union
 
 import cachetools
 import numpy as np
 import pandas as pd
 import scipy.special
-from rpy2 import robjects
-from rpy2.rinterface._rinterface import RRuntimeError
-from rpy2.robjects import conversion, pandas2ri
-from rpy2.robjects.packages import importr
 from scipy.optimize import minimize
 from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto, uniform
 
 from pykelihood import kernels
 from pykelihood.parameters import ConstantParameter, Parametrized
 from pykelihood.stats_utils import ConditioningMethod
-
-evd = importr('evd')
-evmix = importr('evmix')
-nm = importr("neldermead")
-base = importr("base")
-# Import Functions
-fgev, qgev, pgev, dgev, rgev, profile_evd, clusters = evd.fgev, evd.qgev, evd.pgev, evd.dgev, evd.rgev, evd.profile_evd, evd.clusters
-fpot = evd.fpot
-qgpd, pgpd, dgpd, rgpd, fgpd = evd.qgpd, evd.pgpd, evd.dgpd, evd.rgpd, evmix.fgpd
-fminsearch, nm_get, optimset = nm.fminsearch, nm.neldermead_get, nm.optimset
-sum = base.sum
-pandas2ri.activate()
 
 EULER = -scipy.special.psi(1)
 
@@ -190,60 +172,6 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
         g = cachetools.cached(self._cache, key=hash_with_series)(g)
         self.__dict__[item] = g
         return g
-
-
-class RDistribution(Distribution, AvoidAbstractMixin):
-    def log_likelihood(self, data: Union[np.array, pd.Series, robjects.FloatVector],
-                       conditioning_method: Callable = ConditioningMethod.no_conditioning,
-                       *args, **kwds):
-        res = self.logpdf(data, *args, **kwds)
-        if hasattr(data, "rclass"):
-            result = sum(res.ro - conditioning_method(data, self))
-        else:
-            result = sum(res.ro - conditioning_method(conversion.py2ri(data), self))
-        return result
-
-    def opposite_log_likelihood(self, data: Union[np.array, pd.Series],
-                                conditioning_method: Callable = ConditioningMethod.no_conditioning,
-                                *args, **kwds):
-        return -self.log_likelihood(data, conditioning_method, *args, **kwds).ro
-
-    @classmethod
-    def shuffle(cls, fixed_param_name: Union[str, Sequence[str]]):
-        if isinstance(fixed_param_name, str):
-            fixed_param_name = fixed_param_name,
-        return [x for x in cls.params_names if x in fixed_param_name] \
-               + [x for x in cls.params_names if x not in fixed_param_name]
-
-    @classmethod
-    def fit(cls, data, x0=None, conditioning_method=ConditioningMethod.no_conditioning, **fixed_values):
-        init_parms = {}
-        for k in cls.params_names:
-            if k in fixed_values:
-                v = fixed_values[k]
-                if isinstance(v, Parametrized):
-                    init_parms[k] = v
-                else:
-                    init_parms[k] = ConstantParameter(v)
-        init = cls(**init_parms)
-        x0 = x0 if x0 is not None else init.optimisation_params
-        if len(x0) != len(init.optimisation_params):
-            raise ValueError(f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}")
-
-        def to_minimize(x):
-            o = init.with_params(x)
-            return o.opposite_log_likelihood(data, conditioning_method=conditioning_method)
-
-        try:
-            data = conversion.py2ri(data)
-            results = list(nm_get(fminsearch(to_minimize,
-                                             x0=np.array(x0)), "xopt"))
-        except RRuntimeError:
-            data = conversion.ri2py(data)
-            results = minimize(to_minimize, np.array(x0),
-                               bounds=[(None, None), (0, None), (None, None)],
-                               method="Nelder-Mead").x
-        return init.with_params(results)
 
 
 class Uniform(ScipyDistribution):
@@ -442,125 +370,6 @@ class ExtendedGPD(Distribution):
     def isf(self, q: float):
         return self.loc + self.scale * (q ** (-self.shape) - 1) / self.shape
 
-class RGEV(RDistribution):
-    params_names = ("loc", "scale", "shape")
-
-    def __init__(self, loc=0., scale=1., shape=0.):
-        super(RGEV, self).__init__(loc, scale, shape)
-
-    @classmethod
-    def fast_profile_likelihood(cls, data, name_of_fixed_parameter=None, conf=0.95):
-        fitted = fgev(data.values, std_err=True)
-        oldstdout = sys.stdout
-        sys.stdout = io.StringIO()
-        if name_of_fixed_parameter is not None:
-            profile = pd.DataFrame(np.array(profile_evd(fitted, which=name_of_fixed_parameter, conf=conf))[0])[
-                [0, 2, 3]] \
-                .rename(columns={k: v for (k, v) in zip([0, 2, 3], cls.shuffle(name_of_fixed_parameter))})
-            sys.stdout = oldstdout
-            return profile
-        else:
-            profile = dict(profile_evd(fitted, conf=conf).items())
-            profiles = {k: pd.DataFrame(np.array(profile[k]))[[0, 2, 3]] \
-                .rename(columns={k: v for (k, v) in zip([0, 2, 3], cls.shuffle(k))}) for k in profile}
-            sys.stdout = oldstdout
-            return profiles
-
-    def rvs(self, size: int,
-            loc=None, scale=None, shape=None):
-        return np.array(list(rgev(size, ifnone(loc, self.loc()),
-                                  ifnone(scale, self.scale()),
-                                  ifnone(shape, self.shape()))))
-
-    def cdf(self, x: float,
-            loc=None, scale=None, shape=None):
-        if isinstance(x, Iterable):
-            x = np.array(x)
-        elif type(x) is int:
-            x = float(x)
-        result = pgev(x, ifnone(loc, self.loc()),
-                      ifnone(scale, self.scale()),
-                      ifnone(shape, self.shape()))
-        return result
-
-    def isf(self, q: float,
-            loc=None, scale=None, shape=None):
-        if isinstance(q, Iterable):
-            q = np.array(q)
-        elif type(q) is int:
-            q = float(q)
-        result = qgev(1 - q, ifnone(loc, self.loc()),
-                      ifnone(scale, self.scale()),
-                      ifnone(shape, self.shape()))
-        return result
-
-    def pdf(self, x: float,
-            loc=None, scale=None, shape=None):
-        if isinstance(x, Iterable):
-            x = np.array(x)
-        elif type(x) is int:
-            x = float(x)
-        result = dgev(x, ifnone(loc, self.loc()),
-                      ifnone(scale, self.scale()),
-                      ifnone(shape, self.shape()))
-        return result
-
-    def logpdf(self, x: float,
-               loc=None, scale=None, shape=None):
-        if isinstance(x, Iterable):
-            x = np.array(x)
-        elif type(x) is int:
-            x = float(x)
-        result = dgev(x, ifnone(loc, self.loc()),
-                      ifnone(scale, self.scale()),
-                      ifnone(shape, self.shape()), log=True)
-        return result
-
-
-class RGPD(RDistribution):
-    params_names = ("loc", "scale", "shape")
-
-    def __init__(self, loc=0.,
-                 scale=1.,
-                 shape=0.):
-        super(RGPD, self).__init__(loc, scale, shape)
-
-    def rvs(self, size: int, loc=None, scale=None, shape=None):
-        return np.array(list(rgpd(size, ifnone(loc, self.loc()),
-                                  ifnone(scale, self.scale()), ifnone(shape, self.shape()))))
-
-    def cdf(self, x: float, loc=None, scale=None, shape=None):
-        if isinstance(x, Iterable):
-            x = np.array(x)
-        elif type(x) == int:
-            x = float(x)
-        result = pgpd(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()), ifnone(shape, self.shape()))
-        return result
-
-    def isf(self, q: float, loc=None, scale=None, shape=None):
-        if isinstance(q, Iterable):
-            q = np.array(q)
-        elif type(q) == int:
-            q = float(q)
-        result = qgpd(1 - q, ifnone(loc, self.loc()),
-                      ifnone(scale, self.scale()), ifnone(shape, self.shape()))
-        return result
-
-    def pdf(self, x: float, loc=None, scale=None, shape=None):
-        if isinstance(x, Iterable):
-            x = np.array(x)
-        elif type(x) == int:
-            x = float(x)
-        result = dgpd(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()), ifnone(shape, self.shape()))
-        return result
-
-    def logpdf(self, x: float, loc=None, scale=None, shape=None):
-        if isinstance(x, Iterable):
-            x = np.array(x)
-        elif type(x) == int:
-            x = float(x)
-        result = dgpd(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()), ifnone(shape, self.shape()), log=True)
-        return result
 
 class PointProcess(Distribution):
     def __init__(self, threshold: int,
