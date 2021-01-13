@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 def GPDQQPlot(data: pd.DataFrame, gpd_fit: Distribution, path_to_figure: str,
               threshold: Union[List, float, int, str] = ''):
     empirical_cdf = pd.Series(data).quantile(np.linspace(0.01, 0.99, len(data)))
+    n = len(data)
     quantiles_exp = gpd_fit.inverse_cdf(empirical_cdf.index)
     text_title = ''
     if type(gpd_fit.loc()) is not Parameter:
@@ -71,7 +72,7 @@ def GPDQQPlot(data: pd.DataFrame, gpd_fit: Distribution, path_to_figure: str,
     plt.legend()
     plt.title(
         "QQ Plot of Exceedances over threshold " + threshold_text + " vs GPD distribution with parameters:\n" + text_title)
-    plt.xlabel("Empirical")
+    plt.xlabel(f"Empirical ({n} observations)")
     plt.ylabel("GPD distribution")
     plt.tight_layout()
     plt.savefig(f"{path_to_figure}/GPD_fit_exceedances.png")
@@ -79,6 +80,7 @@ def GPDQQPlot(data: pd.DataFrame, gpd_fit: Distribution, path_to_figure: str,
 
 def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
     empirical_cdf = pd.Series(data).quantile(np.linspace(0.01, 0.99, len(data)))
+    n = len(data)
     quantiles_exp = gev_fit.inverse_cdf(empirical_cdf.index)
     text_title = ''
     if type(gev_fit.loc()) is not Parameter:
@@ -125,7 +127,7 @@ def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
     plt.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
     plt.legend()
     plt.title("QQ Plot of Maxima vs GEV distribution with parameters:\n" + text_title)
-    plt.xlabel("Empirical")
+    plt.xlabel(f"Empirical ({n} observations)")
     plt.ylabel("GEV distribution")
     plt.tight_layout()
     plt.savefig(f"{path_to_figure}/GEV_fit_maxima.png")
