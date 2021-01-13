@@ -63,14 +63,14 @@ def categories_qualitative(x: Collection, **fixed_values) -> ParametrizedFunctio
     unique_values = set(x)
     parameter = (Parameter() for _ in count())  # generate parameters on demand
     params = {
-        value: next(parameter)
+        str(value): next(parameter)
         if value not in fixed_values
         else ConstantParameter(fixed_values[value])
         for value in unique_values
     }
 
     def _compute(data, **params_from_wrapper):
-        return type(data)(list(map(params_from_wrapper.__getitem__, data)))
+        return type(data)(list(map(lambda v: params_from_wrapper[str(v)], data)))
 
     return ParametrizedFunction(_compute, x, **params)
 

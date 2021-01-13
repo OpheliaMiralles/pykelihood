@@ -27,3 +27,7 @@ def matrix_data():
 @pytest.fixture(scope="session")
 def categorical_data():
     return pd.Series(random.choices(["item1", "item2", "item3"], k=100))
+
+@pytest.fixture(scope="session")
+def categorical_data_boolean():
+    return pd.Series(random.choices([True, False], k=100))

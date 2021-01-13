@@ -76,3 +76,14 @@ def test_categorical_with_constraint(categorical_data):
     assert (
         cat_kernel.with_params([12])() == categorical_data.apply(mapping.__getitem__)
     ).all()
+
+def test_categorical_with_bool(categorical_data_boolean):
+    cat_kernel = kernels.categories_qualitative(categorical_data_boolean)
+    assert len(cat_kernel.optimisation_params) == 2
+    mapping = {True: 1, False: 8}
+    values = [next(v for k, v in mapping.items() if str(k) == p_name)
+              for p_name in cat_kernel.params_names]
+    assert len(values) == 2
+    assert (
+            cat_kernel.with_params(values)() == categorical_data_boolean.apply(mapping.__getitem__)
+    ).all()
