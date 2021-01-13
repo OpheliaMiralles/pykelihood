@@ -15,26 +15,85 @@ from pykelihood.stats_utils import Likelihood
 from hawkeslib import PoissonProcess as PP, UnivariateExpHawkesProcess as UEHP
 from pykelihood.distributions import Distribution
 from pykelihood.parameters import Parameter
+
 warnings.filterwarnings('ignore')
 import matplotlib.pyplot as plt
 
-def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
-    empirical_cdf = pd.Series(data).quantile(np.linspace(0., 0.99, len(data)))
-    quantiles_exp = gev_fit.inverse_cdf(empirical_cdf.index)
+
+def GPDQQPlot(data: pd.DataFrame, gpd_fit: Distribution, path_to_figure: str,
+              threshold: Union[List, float, int, str] = ''):
+    empirical_cdf = pd.Series(data).quantile(np.linspace(0.01, 0.99, len(data)))
+    quantiles_exp = gpd_fit.inverse_cdf(empirical_cdf.index)
     text_title = ''
-    if type(gev_fit.loc()) is not Parameter:
-        loc = {r'$\mu_{}$'.format(a): round(gev_fit.loc.param_dict[a],2) for a in gev_fit.loc.param_dict}
-        depending_on = list([g.name for g in gev_fit.loc.f.args])
+    if type(gpd_fit.loc()) is not Parameter:
+        loc = {r'$\mu_{}$'.format(a): round(gpd_fit.loc.param_dict[a], 2) for a in gpd_fit.loc.param_dict}
+        depending_on = list([g.name for g in gpd_fit.loc.f.args])
         for k in loc:
-            text_title+= f'{k} = {loc[k]}, '
+            text_title += f'{k} = {loc[k]}, '
         text_title += f'depending on variables(s) '
         for l in depending_on:
             l = l.replace('_', ' ')
-            text_title += r'\it{'+l+r'}' + ', '
+            text_title += r'\it{' + l + r'}' + ', '
     else:
-        loc = round(gev_fit.loc(),2)
-        text_title+= r'$\mu$=' + str(loc) + ', '
-    text_title+='\n'
+        loc = round(gpd_fit.loc(), 2)
+        text_title += r'$\mu$=' + str(loc) + ', '
+    text_title += '\n'
+    if type(gpd_fit.scale()) is not Parameter:
+        scale = {r'$\sigma_{}$'.format(a): round(gpd_fit.scale.param_dict[a], 2) for a in gpd_fit.scale.param_dict}
+        depending_on = list([g.name for g in gpd_fit.scale.f.args])
+        for k in scale:
+            text_title += f'{k} = {scale[k]}, '
+        text_title += f'depending on variable(s) '
+        for l in depending_on:
+            l = l.replace('_', ' ')
+            text_title += r'\it{' + l + r'}' + ', '
+    else:
+        scale = round(gpd_fit.scale(), 2)
+        text_title += r'$\sigma$=' + str(scale) + ', '
+    text_title += '\n'
+    if type(gpd_fit.shape()) is not Parameter:
+        shape = {r'$\xi_{}$'.format(a): round(gpd_fit.shape.param_dict[a], 2) for a in gpd_fit.shape.param_dict}
+        depending_on = list([g.name for g in gpd_fit.shape.f.args])
+        for k in shape:
+            text_title += f'{k} = {shape[k]}, '
+        text_title += f'depending on variable(s) '
+        for l in depending_on:
+            l = l.replace('_', ' ')
+            text_title += r'\it{' + l + r'}' + ', '
+    else:
+        shape = round(gpd_fit.shape(), 2)
+        text_title += r'$\xi$=' + str(shape)
+    if text_title.endswith(', '):
+        text_title = text_title[:-2]
+    threshold_text = str(tuple(threshold)) if hasattr(threshold, '__len__') else str(threshold)
+    plt.scatter(empirical_cdf, quantiles_exp, s=5, color="navy")
+    plt.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
+    plt.legend()
+    plt.title(
+        "QQ Plot of Exceedances over threshold " + threshold_text + " vs GPD distribution with parameters:\n" + text_title)
+    plt.xlabel("Empirical")
+    plt.ylabel("GPD distribution")
+    plt.tight_layout()
+    plt.savefig(f"{path_to_figure}/GPD_fit_exceedances.png")
+
+
+def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
+    empirical_cdf = pd.Series(data).quantile(np.linspace(0.01, 0.99, len(data)))
+    quantiles_exp = gev_fit.inverse_cdf(empirical_cdf.index)
+    text_title = ''
+    if type(gev_fit.loc()) is not Parameter:
+        loc = {r'$\mu_{}$'.format(a): round(gev_fit.loc.param_dict[a], 2) for a in gev_fit.loc.param_dict}
+        depending_on = list([g.name for g in gev_fit.loc.f.args])
+        for k in loc:
+            text_title += f'{k} = {loc[k]}, '
+        text_title += f'depending on variables(s) '
+        for l in depending_on:
+            l = l.replace('_', ' ')
+            text_title += r'\it{' + l + r'}' + ', '
+    else:
+        loc = round(gev_fit.loc(), 2)
+        text_title += r'$\mu$=' + str(loc) + ', '
+    text_title += '\n'
     if type(gev_fit.scale()) is not Parameter:
         scale = {r'$\sigma_{}$'.format(a): round(gev_fit.scale.param_dict[a], 2) for a in gev_fit.scale.param_dict}
         depending_on = list([g.name for g in gev_fit.scale.f.args])
@@ -43,10 +102,10 @@ def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
         text_title += f'depending on variable(s) '
         for l in depending_on:
             l = l.replace('_', ' ')
-            text_title+= r'\it{'+l+r'}' + ', '
+            text_title += r'\it{' + l + r'}' + ', '
     else:
         scale = round(gev_fit.scale(), 2)
-        text_title+= r'$\sigma$=' + str(scale) + ', '
+        text_title += r'$\sigma$=' + str(scale) + ', '
     text_title += '\n'
     if type(gev_fit.shape()) is not Parameter:
         shape = {r'$\xi_{}$'.format(a): round(gev_fit.shape.param_dict[a], 2) for a in gev_fit.shape.param_dict}
@@ -56,47 +115,55 @@ def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
         text_title += f'depending on variable(s) '
         for l in depending_on:
             l = l.replace('_', ' ')
-            text_title += r'\it{'+l+r'}' + ', '
+            text_title += r'\it{' + l + r'}' + ', '
     else:
         shape = round(gev_fit.shape(), 2)
-        text_title+= r'$\xi$=' + str(shape)
+        text_title += r'$\xi$=' + str(shape)
     if text_title.endswith(', '):
         text_title = text_title[:-2]
     plt.scatter(empirical_cdf, quantiles_exp, s=5, color="navy")
     plt.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
     plt.legend()
-    plt.title("QQ Plot of Maxima vs GEV distribution with parameters:\n"+text_title)
+    plt.title("QQ Plot of Maxima vs GEV distribution with parameters:\n" + text_title)
     plt.xlabel("Empirical")
     plt.ylabel("GEV distribution")
     plt.tight_layout()
     plt.savefig(f"{path_to_figure}/GEV_fit_maxima.png")
 
-def ExceedancesOverThresholdPerPeriodPlot(data:pd.DataFrame, path_to_figure: str):
+
+def ExceedancesOverThresholdPerPeriodPlot(data: pd.DataFrame, path_to_figure: str):
     for p, c in zip(data["period"].unique(), ["salmon", "royalblue", "navy"]):
         above_t = data[(data["period"] == p) & (data["data"] >= data["threshold"])]
         plt.scatter(x=above_t["year"].astype(int), y=above_t["data"], c=c, s=15, label=p)
     plt.legend()
     plt.savefig(f"{path_to_figure}/exceedances_per_period.png")
 
-def ConsecutiveDaysAboveValuePerYearPlot(data:pd.DataFrame, value:float, path_to_figure:str):
-    above_value =  data[data["data"]>= value].assign(timedelta= lambda x : x["days_since_start"].diff())
-    consecutive = above_value[above_value["timedelta"] == 1].assign(timedelta=lambda x: x["days_since_start"].diff()).fillna(0.)\
-        .assign(subgroup= lambda x : (x["timedelta"]!=x["timedelta"].shift(1)).cumsum()).groupby(["year", "subgroup"]).agg({"data":"count"})
-    consecutive = consecutive+1
+
+def ConsecutiveDaysAboveValuePerYearPlot(data: pd.DataFrame, value: float, path_to_figure: str):
+    above_value = data[data["data"] >= value].assign(timedelta=lambda x: x["days_since_start"].diff())
+    consecutive = above_value[above_value["timedelta"] == 1].assign(
+        timedelta=lambda x: x["days_since_start"].diff()).fillna(0.) \
+        .assign(subgroup=lambda x: (x["timedelta"] != x["timedelta"].shift(1)).cumsum()).groupby(
+        ["year", "subgroup"]).agg({"data": "count"})
+    consecutive = consecutive + 1
     consecutive_mean_per_year = consecutive.groupby(level="year").agg("mean")
     quantile_inf = consecutive.groupby(level="year").agg(lambda x: np.quantile(x, 0.05))
     quantile_sup = consecutive.groupby(level="year").agg(lambda x: np.quantile(x, 0.95))
     plt.scatter(consecutive_mean_per_year.index, consecutive_mean_per_year, label="Mean", color="salmon", s=7)
-    plt.vlines(consecutive_mean_per_year.index, quantile_inf, quantile_sup, label=r'5\% Quantiles', alpha=0.6, color="salmon")
+    plt.vlines(consecutive_mean_per_year.index, quantile_inf, quantile_sup, label=r'5\% Quantiles', alpha=0.6,
+               color="salmon")
     plt.legend()
     plt.title(f"Mean Number of Consecutive Days Above {value} per Year.")
     plt.savefig(f"{path_to_figure}/mean_nb_days_cons_above_{value}_year.png")
 
-def ConsecutiveDaysUnderValuePerYearPlot(data:pd.DataFrame, value:float, path_to_figure:str):
-    under_value =  data[data["data"]<= value].assign(timedelta= lambda x : x["days_since_start"].diff())
-    consecutive = under_value[under_value["timedelta"] == 1].assign(timedelta=lambda x: x["days_since_start"].diff()).fillna(0.)\
-        .assign(subgroup= lambda x : (x["timedelta"]!=x["timedelta"].shift(1)).cumsum()).groupby(["year", "subgroup"]).agg({"data":"count"})
-    consecutive = consecutive+1
+
+def ConsecutiveDaysUnderValuePerYearPlot(data: pd.DataFrame, value: float, path_to_figure: str):
+    under_value = data[data["data"] <= value].assign(timedelta=lambda x: x["days_since_start"].diff())
+    consecutive = under_value[under_value["timedelta"] == 1].assign(
+        timedelta=lambda x: x["days_since_start"].diff()).fillna(0.) \
+        .assign(subgroup=lambda x: (x["timedelta"] != x["timedelta"].shift(1)).cumsum()).groupby(
+        ["year", "subgroup"]).agg({"data": "count"})
+    consecutive = consecutive + 1
     consecutive_mean_per_year = consecutive.groupby(level="year").agg("mean")
     quantile_inf = consecutive.groupby(level="year").agg(lambda x: np.quantile(x, 0.05))
     quantile_sup = consecutive.groupby(level="year").agg(lambda x: np.quantile(x, 0.95))
@@ -109,7 +176,7 @@ def ConsecutiveDaysUnderValuePerYearPlot(data:pd.DataFrame, value:float, path_to
 
 
 ### INTER EXCEEDANCES DIAGNOSTIC PLOTS, CLUSTERING ###
-def MeanInterExceedancePerYear(data: pd.DataFrame, path_to_figure:str):
+def MeanInterExceedancePerYear(data: pd.DataFrame, path_to_figure: str):
     """
     Plots the observed inter-exceedance times per year, useful to visualize an increase or decrease in the distance between two extreme events.
     :param data: Dataframe pandas with columns "data", "threshold" (possibly seasonal or periodical), "days_since_start" (of the full period) and "year".
@@ -137,7 +204,8 @@ def MeanInterExceedancePerYear(data: pd.DataFrame, path_to_figure:str):
     plt.legend()
     plt.savefig(f"{path_to_figure}/inter_exceedances_per_year.png")
 
-def QQPlotExponentialforInterExceedanceTimes(data: Union[pd.Series, np.array], path_to_figure:str):
+
+def QQPlotExponentialforInterExceedanceTimes(data: Union[pd.Series, np.array], path_to_figure: str):
     empirical_cdf = pd.Series(data).quantile(np.arange(0., 1., 0.02))
     exp = Exponential.fit(data)
     quantiles_exp = exp.inverse_cdf(empirical_cdf.index)
@@ -149,11 +217,13 @@ def QQPlotExponentialforInterExceedanceTimes(data: Union[pd.Series, np.array], p
     plt.ylabel(r"Exponential with parameter $\lambda$" + f"= {round(exp.rate(), 2)}")
     plt.savefig(f"{path_to_figure}/Exponential fit for IAT.png")
 
+
 def extremogram_loop(h_range, indices_exceedances):
     counts = []
     for h in h_range:
         counts.append(len(np.intersect1d(indices_exceedances + h, indices_exceedances)) / len(indices_exceedances))
     return counts
+
 
 def ExtremogramPlotHomoPoissonVsHawkes(data: pd.DataFrame, h_range: Union[List, np.array], path_to_figure: str):
     """
@@ -222,6 +292,7 @@ def ExtremogramPlotHomoPoissonVsHawkes(data: pd.DataFrame, h_range: Union[List, 
     plt.savefig(f"{path_to_figure}/extremogram.png")
     plt.clf()
 
+
 def loop_mean_cluster_size(indices_exceedances, length_observation_period, block_sizes):
     local_count = []
     for bs in block_sizes:
@@ -232,7 +303,8 @@ def loop_mean_cluster_size(indices_exceedances, length_observation_period, block
     local_count = pd.Series(local_count, index=block_sizes)
     return local_count
 
-def MeanClusterSizeHomoPoissonVsHawkes(data:pd.DataFrame, block_sizes: Union[List, np.array], path_to_figure:str):
+
+def MeanClusterSizeHomoPoissonVsHawkes(data: pd.DataFrame, block_sizes: Union[List, np.array], path_to_figure: str):
     """
     Estimates the extremal intex by computing the mean cluster size considering blocks of sizes pre-defined in the parameter block_sizes, given that
     the block contains an exceedance (ie the mean of pi, the distribution of the extremal index).
@@ -250,8 +322,9 @@ def MeanClusterSizeHomoPoissonVsHawkes(data:pd.DataFrame, block_sizes: Union[Lis
     empirical_mean_cluster_size = []
     for bs in block_sizes:
         exceedances_clusters = np.histogram(data_extremal_index["days_since_start"],
-                                            bins=[bs*i for i in range(math.ceil(len(data)/bs))])[0]
-        exceedances_clusters = exceedances_clusters[exceedances_clusters>0] #given that the block contains an exceedance
+                                            bins=[bs * i for i in range(math.ceil(len(data) / bs))])[0]
+        exceedances_clusters = exceedances_clusters[
+            exceedances_clusters > 0]  # given that the block contains an exceedance
         empirical_mean_cluster_size.append(np.mean(exceedances_clusters))
     empirical_mean_cluster_size = pd.Series(empirical_mean_cluster_size, index=block_sizes)
 
@@ -307,9 +380,9 @@ def MeanClusterSizeHomoPoissonVsHawkes(data:pd.DataFrame, block_sizes: Union[Lis
 
 
 def CumNumberOfExceedancesHomoPoissonVsHawkes(data: pd.DataFrame,
-                                              length_total_period: Union[int,float],
-                                              origin : pd.Datetime,
-                                              path_to_figure:str):
+                                              length_total_period: Union[int, float],
+                                              origin: pd.Datetime,
+                                              path_to_figure: str):
     """
     Computes the observed and simulated cumulative number of exceedances and compares a homogeneous poisson process estimate with the one obtained
     using a Hawkes process for modeling inter-exceedance times.
@@ -322,7 +395,8 @@ def CumNumberOfExceedancesHomoPoissonVsHawkes(data: pd.DataFrame,
     :return: Plots diagnostic graphs.
     """
     data_gpd = data.set_index("time")[["data", "threshold"]]
-    data_gpd = data_gpd[data_gpd["data"] >= data_gpd["threshold"]].reset_index().assign(iat=lambda x: x["time"].diff()).fillna(0.)
+    data_gpd = data_gpd[data_gpd["data"] >= data_gpd["threshold"]].reset_index().assign(
+        iat=lambda x: x["time"].diff()).fillna(0.)
     uv = UEHP()
     uv.fit(np.array(data_gpd["time"]))
     mu, alpha, theta = uv.get_params()
@@ -381,9 +455,10 @@ def CumNumberOfExceedancesHomoPoissonVsHawkes(data: pd.DataFrame,
     plt.legend()
     plt.savefig(f"{path_to_figure}/cumulative_nb_exceedances.png")
 
+
 def KgapsMethodDiagnosticPlots(range_K: Union[List, np.array],
-                               inter_exceedance_times:pd.Series,
-                               proba_of_exceedance:float,
+                               inter_exceedance_times: pd.Series,
+                               proba_of_exceedance: float,
                                path_to_figure: str):
     """
 
@@ -397,16 +472,16 @@ def KgapsMethodDiagnosticPlots(range_K: Union[List, np.array],
     thetas = []
     CIs = []
     for K in Ks:
-        iet_normalised_to_cluster_distance = np.clip(inter_exceedance_times - K, 0., a_max=None)*proba_of_exceedance
-        mem =  MixtureExponentialModel.fit(iet_normalised_to_cluster_distance)
+        iet_normalised_to_cluster_distance = np.clip(inter_exceedance_times - K, 0., a_max=None) * proba_of_exceedance
+        mem = MixtureExponentialModel.fit(iet_normalised_to_cluster_distance)
         theta = mem.theta()
         ll = Likelihood(mem, iet_normalised_to_cluster_distance)
         CI = [ll.profiles["theta"]["theta"].min(), ll.profiles["theta"]["theta"].max()]
         thetas.append(theta)
         CIs.append(CI)
         freq, bins = np.histogram(iet_normalised_to_cluster_distance, bins="auto")
-        freq = freq/len(iet_normalised_to_cluster_distance)
-        x = (bins[:-1]+bins[1:])/2
+        freq = freq / len(iet_normalised_to_cluster_distance)
+        x = (bins[:-1] + bins[1:]) / 2
         empirical_cdf = pd.Series(
             iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance > 0]).value_counts(
             normalize=True).sort_index().cumsum()
@@ -425,16 +500,16 @@ def KgapsMethodDiagnosticPlots(range_K: Union[List, np.array],
         ax0.set_xlabel("Interval")
         ax0.set_ylabel("Frequency")
         ax1.scatter(empirical_cdf, quantiles_exp, s=5, color="navy")
-        ax1.plot(empirical_cdf, empirical_cdf, label = f"$x=y$", color="navy")
+        ax1.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
         ax1.legend()
         ax1.set_title("QQ Plot of positive spacing vs Exponential distribution")
         ax1.set_xlabel("Empirical")
-        ax1.set_ylabel(r"Exponential with $\theta$"+ f"= {round(theta, 2)}")
+        ax1.set_ylabel(r"Exponential with $\theta$" + f"= {round(theta, 2)}")
         fig.savefig(f"{path_to_figure}/spacings_summary_{round(K, 1)}.png")
-    serie = pd.Series([float(t) for t in thetas], index = Ks)
+    serie = pd.Series([float(t) for t in thetas], index=Ks)
     CI = pd.DataFrame(CIs)
     plt.clf()
-    plt.scatter(serie.index, serie, marker = 'x', color="navy")
+    plt.scatter(serie.index, serie, marker='x', color="navy")
     plt.vlines(serie.index, CI[0], CI[1], color="navy")
     plt.xlabel("Inter-cluster interval $K$ (days)")
     plt.ylabel(r"$\hat{\theta}$")
@@ -442,10 +517,11 @@ def KgapsMethodDiagnosticPlots(range_K: Union[List, np.array],
     plt.savefig(f"{path_to_figure}/K-gaps_extremal_index_estimate.png")
     plt.clf()
 
+
 def K_gaps_estimate_of_inter_exceedances(X: Union[pd.Series, pd.DataFrame],
-                                         threshold:Union[float, int, str],
-                                         K:Union[float, int]=None,
-                                         data_column_name : str = None):
+                                         threshold: Union[float, int, str],
+                                         K: Union[float, int] = None,
+                                         data_column_name: str = None):
     """
     Warning: estimate based on exponential inter-exceedance times, meaning that exceedances are arriving at times
     independant from history (memoryless property of the exponential).
@@ -458,30 +534,34 @@ def K_gaps_estimate_of_inter_exceedances(X: Union[pd.Series, pd.DataFrame],
     """
     data = X.copy()
     if isinstance(X, pd.DataFrame):
-        if len(X.columns)>1 and (data_column_name is None or data_column_name not in X.columns):
-            raise TypeError("X is a dataframe of more than one columns, yet no column name has been specified for the variable of interest.")
-        elif len(X.columns)>1:
+        if len(X.columns) > 1 and (data_column_name is None or data_column_name not in X.columns):
+            raise TypeError(
+                "X is a dataframe of more than one columns, yet no column name has been specified for the variable of interest.")
+        elif len(X.columns) > 1:
             data = X[data_column_name]
         elif len(X.columns) == 1:
             data = X[X.columns[0]]
         if isinstance(threshold, str):
             if not threshold in X.columns:
-                raise NameError(f"{threshold} has been passed as value for the threshold column of X, yet X does not contain a column with that name.")
+                raise NameError(
+                    f"{threshold} has been passed as value for the threshold column of X, yet X does not contain a column with that name.")
             threshold = X[threshold]
-    exceedances = data[data>=threshold]
+    exceedances = data[data >= threshold]
     indices_exceedances = np.array(exceedances.index)
     inter_exceedance_times = np.diff(indices_exceedances)
     if K is None:
         K = np.mean(inter_exceedance_times)
-    iet_normalised_to_cluster_distance = np.clip(inter_exceedance_times-K, 0., a_max=None)
-    n_positive = len(iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance>0.])
-    n0 = len(iet_normalised_to_cluster_distance)-n_positive
-    def opposite_log_likelihood(theta: float):
-        normalising_factor =  len(exceedances)/len(X)
-        positive_spacings = normalising_factor*iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance>0.]
-        zero_mass = n0*np.log(1-theta)
-        exponential_mass = 2*n_positive*np.log(theta)-theta*np.sum(positive_spacings)
-        return -(zero_mass + exponential_mass)
-    estimate_theta = minimize(opposite_log_likelihood, x0 = np.array(0.99), method="Nelder-Mead").x
-    return estimate_theta
+    iet_normalised_to_cluster_distance = np.clip(inter_exceedance_times - K, 0., a_max=None)
+    n_positive = len(iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance > 0.])
+    n0 = len(iet_normalised_to_cluster_distance) - n_positive
 
+    def opposite_log_likelihood(theta: float):
+        normalising_factor = len(exceedances) / len(X)
+        positive_spacings = normalising_factor * iet_normalised_to_cluster_distance[
+            iet_normalised_to_cluster_distance > 0.]
+        zero_mass = n0 * np.log(1 - theta)
+        exponential_mass = 2 * n_positive * np.log(theta) - theta * np.sum(positive_spacings)
+        return -(zero_mass + exponential_mass)
+
+    estimate_theta = minimize(opposite_log_likelihood, x0=np.array(0.99), method="Nelder-Mead").x
+    return estimate_theta

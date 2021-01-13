@@ -5,6 +5,11 @@ import warnings
 from itertools import count
 from typing import Callable, Sequence, TYPE_CHECKING
 
+import matplotlib
+import matplotlib.pyplot as plt
+
+matplotlib.rcParams['text.usetex'] = True
+
 import numpy as np
 import pandas as pd
 from rpy2.robjects import FloatVector
@@ -16,6 +21,7 @@ if TYPE_CHECKING:
     from pykelihood.distributions import Distribution
 
 warnings.filterwarnings('ignore')
+
 
 class ConditioningMethod(object):
     @staticmethod
@@ -52,7 +58,7 @@ class Likelihood(object):
                  name: str = "Standard",
                  inference_confidence: float = 0.99,
                  fit_chi2: bool = False,
-                 single_profiling_param = None
+                 single_profiling_param=None
                  ):
         """
 
@@ -84,22 +90,22 @@ class Likelihood(object):
     def mle(self):
         x0 = self.distribution.optimisation_params
         estimate = self.distribution.profile_likelihood(self.data,
-                                         conditioning_method=self.conditioning_method,
-                                         x0=x0)
+                                                        conditioning_method=self.conditioning_method,
+                                                        x0=x0)
         ll_xi0 = estimate.log_likelihood(self.data,
-                                                  conditioning_method=self.conditioning_method)
+                                         conditioning_method=self.conditioning_method)
         ll_xi0 = ll_xi0 if isinstance(ll_xi0, float) else ll_xi0[0]
         return (estimate, ll_xi0)
 
     @cached_property
     def AIC(self):
-        mle_aic = -2*self.mle[1]+2*len(self.mle[0].optimisation_params)
-        std_mle_aic = -2*self.standard_mle[1]+2*len(self.standard_mle[0].optimisation_params)
+        mle_aic = -2 * self.mle[1] + 2 * len(self.mle[0].optimisation_params)
+        std_mle_aic = -2 * self.standard_mle[1] + 2 * len(self.standard_mle[0].optimisation_params)
         return {"AIC MLE": mle_aic, "AIC Standard MLE Fit": std_mle_aic}
 
     def Deviance(self):
-        mle_deviance = -2*self.mle[1]
-        std_mle_deviance = -2*self.standard_mle[1]
+        mle_deviance = -2 * self.mle[1]
+        std_mle_deviance = -2 * self.standard_mle[1]
         return {"Deviance MLE": mle_deviance, "AIC Standard MLE Deviance": std_mle_deviance}
 
     @cached_property
@@ -110,21 +116,23 @@ class Likelihood(object):
             params = [self.single_profiling_param]
         else:
             params = mle.optimisation_param_dict.keys()
-        if hasattr(self.distribution, "fast_profile_likelihood")\
+        if hasattr(self.distribution, "fast_profile_likelihood") \
                 and len(mle.optimisation_params) == len(mle.params):
             # we cannot use the profiling from R with a distribution whose parameters
             # are fitted to regression kernels, as they implemented a standard fit with constant
             # parameters.
             try:
-                pre_profiled_params = self.distribution.fast_profile_likelihood(self.data, conf=self.inference_confidence)
+                pre_profiled_params = self.distribution.fast_profile_likelihood(self.data,
+                                                                                conf=self.inference_confidence)
                 if self.conditioning_method == ConditioningMethod.excluding_last_obs_rule:
-                    pre_profiled_params = self.distribution.fast_profile_likelihood(self.data.iloc[:-1], conf=self.inference_confidence)
+                    pre_profiled_params = self.distribution.fast_profile_likelihood(self.data.iloc[:-1],
+                                                                                    conf=self.inference_confidence)
                 if self.conditioning_method in [ConditioningMethod.no_conditioning,
                                                 ConditioningMethod.excluding_last_obs_rule]:
                     for name in params:
                         columns = list(pre_profiled_params[name].columns)
                         likelihoods = pre_profiled_params[name] \
-                            .apply(lambda row: self.distribution.with_params([row[k] for k in columns])\
+                            .apply(lambda row: self.distribution.with_params([row[k] for k in columns]) \
                                    .log_likelihood(self.data.iloc[:-1]), axis=1)
                         pre_profiled_params[name] = pre_profiled_params[name].assign(likelihood=likelihoods)
 
@@ -203,6 +211,117 @@ class Likelihood(object):
                 return [np.min(rle), np.max(rle)]
             else:
                 return [None, None]
+
+
+class DetrentedFluctuationAnalysis(object):
+    def __init__(self, data: pd.DataFrame, scale_lim: Sequence[int] = None, scale_step: float = None):
+        """
+
+        :param data: pandas Dataframe, if it contains a column for the day and month, the profiles are normalized
+        according to the mean for each calendar day averaged over years.
+        :param scale_lim: limits for window sizes
+        :param scale_step: steps for window sizes
+        """
+        if not ("month" in data.columns and "day" in data.columns):
+            print("Will use the total average to normalize the data...")
+            mean = data["data"].mean()
+            std = data["data"].std()
+            data = data.assign(mean=mean).assign(std=std)
+        else:
+            mean = data.groupby(["month", "day"]).agg({"data": "mean"})["data"].rename('mean').reset_index()
+            std = data.groupby(["month", "day"]).agg({"data": "std"})["data"].rename('std').reset_index()
+            data = data.merge(mean, on=["month", "day"], how="left").merge(std, on=["month", "day"], how="left")
+        phi = (data["data"] - data["mean"]) / data["std"]
+        phi = phi.dropna()  # cases where there is only one value for a given day / irrelevant for DFA
+        self.y = np.cumsum(np.array(phi))
+        if scale_lim == None:
+            lim_inf = 10 ** (math.floor(np.log10(len(data))) - 1)
+            lim_sup = min(10 ** (math.ceil(np.log10(len(data)))),
+                          len(phi))  # assuming all observations are equally splitted
+            scale_lim = [lim_inf, lim_sup]
+        if scale_step == None:
+            scale_step = 10 ** (math.floor(np.log10(len(data)))) / 2
+        self.scale_lim = scale_lim
+        self.scale_step = scale_step
+
+    @staticmethod
+    def calc_rms(x: np.array, scale: int, polynomial_order: int):
+        """
+        windowed Root Mean Square (RMS) with polynomial detrending.
+        Args:
+        -----
+          *x* : numpy.array
+            one dimensional data vector
+          *scale* : int
+            length of the window in which RMS will be calculaed
+        Returns:
+        --------
+          *rms* : numpy.array
+            RMS data in each window with length len(x)//scale
+        """
+        # making an array with data divided in windows
+        shape = (x.shape[0] // scale, scale)
+        X = np.lib.stride_tricks.as_strided(x, shape=shape)
+        # vector of x-axis points to regression
+        scale_ax = np.arange(scale)
+        rms = np.zeros(X.shape[0])
+        for e, xcut in enumerate(X):
+            coeff = np.polyfit(scale_ax, xcut, deg=polynomial_order)
+            xfit = np.polyval(coeff, scale_ax)
+            # detrending and computing RMS of each window
+            rms[e] = np.mean((xcut - xfit) ** 2)
+        return rms
+
+    @staticmethod
+    def trend_type(alpha: float):
+        if round(alpha, 1) < 1:
+            if round(alpha, 1) < 0.5:
+                return "Anti-correlated"
+            elif round(alpha, 1) == 0.5:
+                return "Uncorrelated, white noise"
+            elif round(alpha, 1) > 0.5:
+                return "Correlated"
+        elif round(alpha, 1) == 1:
+            return "Noise, pink noise"
+        elif round(alpha, 1) > 1:
+            if round(alpha, 1) < 1.5:
+                return "Non-stationary, unbounded"
+            else:
+                return "Brownian Noise"
+
+    def __call__(self, polynomial_order: int,
+                 show=False, ax=plt.gca(),
+                 supplement_title="", color="r"):
+        """
+        Detrended Fluctuation Analysis - measures power law scaling coefficient
+        of the given signal *x*.
+        More details about the algorithm you can find e.g. here:
+        Kropp, Jürgen, & Schellnhuber, Hans-Joachim. 2010. Case Studies. Chap. 8-11, pages 167–244 of : In extremis :
+        disruptive events and trends in climate and hydrology. Springer Science & Business Media.
+        """
+
+        y = self.y
+        scales = (np.arange(self.scale_lim[0], self.scale_lim[1], self.scale_step)).astype(np.int)
+        fluct = np.zeros(len(scales))
+        # computing RMS for each window
+        for e, sc in enumerate(scales):
+            fluct[e] = np.sqrt(np.mean(self.calc_rms(y, sc, polynomial_order=polynomial_order)))
+        # as this stage, F^2(s) should be something of the form s^h(2); taking the log should give a linear form of coefficient h(2)
+        coeff = np.polyfit(np.log(scales), np.log(fluct), 1)
+        # numpy polyfit returns the highest power first
+        if show:
+            default_title = "Detrended Fluctuation Analysis"
+            title = default_title if supplement_title == "" else f"{default_title} {supplement_title}"
+            fluctfit = np.exp(np.polyval(coeff, np.log(scales)))
+            ax.loglog(scales, fluct, 'o', color=color, alpha=0.6)
+            ax.loglog(scales, fluctfit, color=color, alpha=0.6,
+                      label=r"DFA-{}, {}: $\alpha$={}".format(polynomial_order,
+                                                              self.trend_type(coeff[0]), round(coeff[0], 2)))
+            ax.set_title(title)
+            ax.set_xlabel(r'$\log_{10}$(time window)')
+            ax.set_ylabel(r'$\log_{10}$F(t)')
+            ax.legend(loc="lower right", fontsize="small")
+        return scales, fluct, coeff[0]
 
 
 def pettitt(signal):
