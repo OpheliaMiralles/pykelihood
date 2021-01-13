@@ -201,7 +201,7 @@ class Likelihood(object):
         else:
             params = profiles.keys()
         for param in params:
-            columns = list(profiles.keys())
+            columns = list(self.mle[0].optimisation_param_dict.keys())
             return_levels = profiles[param] \
                 .apply(
                 lambda row: self.distribution.with_params({k: row[k] for k in columns}.values()).isf(1 / return_period),
