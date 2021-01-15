@@ -74,13 +74,13 @@ class StoppingRule(object):
         j = historical_sample_size
         fit = distribution.fit(data.iloc[:j])
         return_level_estimate = fit.isf(1 / k)
-        return_level_estimates = [return_level_estimate]
+        return_level_estimates = [float(return_level_estimate)]
         data_stopped = data.iloc[:j + 1]
         j += 1
         while data_stopped.iloc[-1] < return_level_estimate and len(data_stopped) < len(data):
             fit = distribution.fit(data_stopped)
             return_level_estimate = fit.isf(1 / k)
-            return_level_estimates.append(return_level_estimate)
+            return_level_estimates.append(float(return_level_estimate))
             data_stopped = data.iloc[:j + 1]
             j += 1
         N = j

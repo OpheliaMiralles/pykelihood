@@ -81,7 +81,7 @@ class Distribution(Parametrized):
                        conditioning_method: Callable = ConditioningMethod.no_conditioning,
                        *args, **kwds):
         res = self.logpdf(data, *args, **kwds)
-        return np.sum(res - conditioning_method(data, self))
+        return np.sum(res) - conditioning_method(data, self)
 
     def opposite_log_likelihood(self, data: Union[np.array, pd.Series],
                                 conditioning_method: Callable = ConditioningMethod.no_conditioning,
