@@ -286,14 +286,14 @@ def ExtremogramPlotHomoPoissonVsHawkes(data: pd.DataFrame, h_range: Union[List, 
     plt.fill_between(x=h_range, y1=quantile_inf_pp, y2=quantile_sup_pp, alpha=0.2, color="salmon")
     plt.plot(h_range, mean_hp, label="Hawkes Process Simulated", color="royalblue")
     plt.fill_between(x=h_range, y1=quantile_inf_hp, y2=quantile_sup_hp, alpha=0.3, color="royalblue")
-    plt.bar(x=h_range, height=extremogram_realized, label="Empirical", width=1.5, color="slategrey", alpha=0.6)
+    plt.bar(x=h_range, height=extremogram_realized, label="Empirical", width=0.8, color="slategrey", alpha=0.6)
     plt.title(f"Extremogram")
     plt.xlabel(r"$h$")
     plt.ylabel(r"$\pi_h(u)$")
     plt.legend()
     plt.savefig(f"{path_to_figure}/extremogram.png")
     plt.clf()
-
+    return e, e2
 
 def loop_mean_cluster_size(indices_exceedances, length_observation_period, block_sizes):
     local_count = []
@@ -379,11 +379,12 @@ def MeanClusterSizeHomoPoissonVsHawkes(data: pd.DataFrame, block_sizes: Union[Li
     plt.legend(loc="upper left")
     plt.savefig(f"{path_to_figure}/mean_cluster_size.png")
     plt.clf()
+    return e, e2
 
 
 def CumNumberOfExceedancesHomoPoissonVsHawkes(data: pd.DataFrame,
                                               length_total_period: Union[int, float],
-                                              origin: pd.Datetime,
+                                              origin: pd.datetime,
                                               path_to_figure: str):
     """
     Computes the observed and simulated cumulative number of exceedances and compares a homogeneous poisson process estimate with the one obtained
@@ -446,16 +447,17 @@ def CumNumberOfExceedancesHomoPoissonVsHawkes(data: pd.DataFrame,
     mean_pp_.index = pd.to_datetime(length_total_period * mean_pp,
                                     unit="d", origin=origin)
     r_.index = x
-    plt.plot(r_, label="Realized", color="black")
-    plt.plot(mean_, label="HP Simulated (1000 points)", color="r")
-    plt.fill_betweenx(y=mean_, x1=x1, x2=x2, color="r", alpha=0.2)
-    plt.plot(mean_pp_, label="PP Simulated (1000 points)", color="b")
-    plt.fill_betweenx(y=mean_pp_, x1=x1_pp, x2=x2_pp, color="b", alpha=0.2)
+    plt.plot(mean_pp_, label="Poisson Process Simulated", color="salmon")
+    plt.fill_betweenx(y=mean_pp_, x1=x1_pp, x2=x2_pp, color="salmon", alpha=0.2)
+    plt.plot(mean_, label="Hawkes Process Simulated", color="royalblue")
+    plt.fill_betweenx(y=mean_, x1=x1, x2=x2, color="royalblue", alpha=0.2)
+    plt.plot(r_, label="Empirical", color="slategrey")
     plt.title("Cumulative Exceedances over Threshold")
     plt.ylabel("Number of Exceedances")
     plt.xlabel("Time")
     plt.legend()
     plt.savefig(f"{path_to_figure}/cumulative_nb_exceedances.png")
+    return e, e2
 
 
 def KgapsMethodDiagnosticPlots(range_K: Union[List, np.array],
