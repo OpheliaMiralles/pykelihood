@@ -70,7 +70,7 @@ def test_categorical(categorical_data):
 
 
 def test_categorical_with_constraint(categorical_data):
-    cat_kernel = kernels.categories_qualitative(categorical_data, item1=1, item2=8)
+    cat_kernel = kernels.categories_qualitative(categorical_data, dict(item1=1, item2=8))
     assert len(cat_kernel.optimisation_params) == categorical_data.unique().size - 2
     mapping = {"item1": 1, "item2": 8, "item3": 12}
     assert (
