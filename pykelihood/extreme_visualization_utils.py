@@ -12,7 +12,10 @@ matplotlib.rcParams['text.usetex'] = True
 from pykelihood import kernels
 from pykelihood.distributions import Exponential, MixtureExponentialModel
 from pykelihood.stats_utils import Likelihood
-from hawkeslib import PoissonProcess as PP, UnivariateExpHawkesProcess as UEHP
+try:
+    from hawkeslib import PoissonProcess as PP, UnivariateExpHawkesProcess as UEHP
+except ImportError:
+    PP = UEHP = None
 from pykelihood.distributions import Distribution
 from pykelihood.parameters import Parameter
 
@@ -76,7 +79,7 @@ def GPDQQPlot(data: pd.DataFrame, gpd_fit: Distribution, path_to_figure: str,
     plt.ylabel("GPD distribution")
     plt.tight_layout()
     plt.savefig(f"{path_to_figure}/GPD_fit_exceedances.png")
-
+    plt.clf()
 
 def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
     empirical_cdf = pd.Series(data).quantile(np.linspace(0.01, 0.99, len(data)))
@@ -131,7 +134,7 @@ def GEVQQPlot(data: pd.DataFrame, gev_fit: Distribution, path_to_figure: str):
     plt.ylabel("GEV distribution")
     plt.tight_layout()
     plt.savefig(f"{path_to_figure}/GEV_fit_maxima.png")
-
+    plt.clf()
 
 def ExceedancesOverThresholdPerPeriodPlot(data: pd.DataFrame, path_to_figure: str):
     for p, c in zip(data["period"].unique(), ["salmon", "royalblue", "navy"]):
@@ -139,7 +142,7 @@ def ExceedancesOverThresholdPerPeriodPlot(data: pd.DataFrame, path_to_figure: st
         plt.scatter(x=above_t["year"].astype(int), y=above_t["data"], c=c, s=15, label=p)
     plt.legend()
     plt.savefig(f"{path_to_figure}/exceedances_per_period.png")
-
+    plt.clf()
 
 def ConsecutiveDaysAboveValuePerYearPlot(data: pd.DataFrame, value: float, path_to_figure: str):
     above_value = data[data["data"] >= value].assign(timedelta=lambda x: x["days_since_start"].diff())
@@ -157,7 +160,7 @@ def ConsecutiveDaysAboveValuePerYearPlot(data: pd.DataFrame, value: float, path_
     plt.legend()
     plt.title(f"Mean Number of Consecutive Days Above {value} per Year.")
     plt.savefig(f"{path_to_figure}/mean_nb_days_cons_above_{value}_year.png")
-
+    plt.clf()
 
 def ConsecutiveDaysUnderValuePerYearPlot(data: pd.DataFrame, value: float, path_to_figure: str):
     under_value = data[data["data"] <= value].assign(timedelta=lambda x: x["days_since_start"].diff())
@@ -175,7 +178,7 @@ def ConsecutiveDaysUnderValuePerYearPlot(data: pd.DataFrame, value: float, path_
     plt.legend()
     plt.title(f"Mean Number of Consecutive Days Under {value} per Year.")
     plt.savefig(f"{path_to_figure}/mean_nb_days_cons_under_{value}_year.png")
-
+    plt.clf()
 
 ### INTER EXCEEDANCES DIAGNOSTIC PLOTS, CLUSTERING ###
 def MeanInterExceedancePerYear(data: pd.DataFrame, path_to_figure: str):
@@ -205,19 +208,20 @@ def MeanInterExceedancePerYear(data: pd.DataFrame, path_to_figure: str):
     plt.title("Inter-exceedance time per year")
     plt.legend()
     plt.savefig(f"{path_to_figure}/inter_exceedances_per_year.png")
-
+    plt.clf()
 
 def QQPlotExponentialforInterExceedanceTimes(data: Union[pd.Series, np.array], path_to_figure: str):
     empirical_cdf = pd.Series(data).quantile(np.arange(0., 1., 0.02))
     exp = Exponential.fit(data)
     quantiles_exp = exp.inverse_cdf(empirical_cdf.index)
     plt.scatter(empirical_cdf, quantiles_exp, s=5, color="navy")
-    plt.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
-    plt.legend()
+    #plt.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
+    #plt.legend()
     plt.title("QQ Plot of positive spacing vs Exponential distribution")
     plt.xlabel("Empirical")
     plt.ylabel(r"Exponential with parameter $\lambda$" + f"= {round(exp.rate(), 2)}")
     plt.savefig(f"{path_to_figure}/Exponential fit for IAT.png")
+    plt.clf()
 
 
 def extremogram_loop(h_range, indices_exceedances):
@@ -240,14 +244,23 @@ def ExtremogramPlotHomoPoissonVsHawkes(data: pd.DataFrame, h_range: Union[List, 
     data_extremogram = data[["data", "days_since_start", "threshold"]]
     data_extremogram = data_extremogram[data_extremogram["data"] >= data["threshold"]].assign(
         iat=lambda x: x["days_since_start"].diff()).fillna(0.)
-    uv = UEHP()
-    uv.fit(np.array(data_extremogram["days_since_start"]))
-    mu, alpha, theta = uv.get_params()
+    if UEHP is not None:
+        uv = UEHP()
+        uv.fit(np.array(data_extremogram["days_since_start"]))
+        mu, alpha, theta = uv.get_params()
+    else:
+        mu = len(data_extremogram)/len(data)
+        alpha=0
+        theta=0
     e = Exponential.fit(data_extremogram["iat"], x0=(0., mu, alpha, theta),
                         rate=kernels.hawkes_with_exp_kernel(np.array(data_extremogram["days_since_start"])))
-    pp = PP()
-    pp.fit(np.array(data_extremogram["days_since_start"]))
-    e2 = Exponential(rate=pp.get_params())
+    if PP is not None:
+        pp = PP()
+        pp.fit(np.array(data_extremogram["days_since_start"]))
+        rate = pp.get_params()
+    else:
+       rate = len(data_extremogram)/len(data)
+    e2 = Exponential(rate=rate)
     exceedances_hp = []
     for i in range(1000):
         exceedances_hp.append(e.rvs(len(data_extremogram)).cumsum())
@@ -331,14 +344,23 @@ def MeanClusterSizeHomoPoissonVsHawkes(data: pd.DataFrame, block_sizes: Union[Li
     empirical_mean_cluster_size = pd.Series(empirical_mean_cluster_size, index=block_sizes)
 
     # Simulated
-    uv = UEHP()
-    uv.fit(np.array(data_extremal_index["days_since_start"]))
-    mu, alpha, theta = uv.get_params()
-    pp = PP()
-    pp.fit(np.array(data_extremal_index["days_since_start"]))
-    e = Exponential.fit(data_extremal_index["iat"], loc=0., x0=(mu, alpha, theta),
+    if UEHP is not None:
+        uv = UEHP()
+        uv.fit(np.array(data_extremal_index["days_since_start"]))
+        mu, alpha, theta = uv.get_params()
+    else:
+        mu = len(data_extremal_index)/len(data)
+        alpha=0
+        theta=0
+    e = Exponential.fit(data_extremal_index["iat"], x0=(0., mu, alpha, theta),
                         rate=kernels.hawkes_with_exp_kernel(np.array(data_extremal_index["days_since_start"])))
-    e2 = Exponential(rate=pp.get_params())
+    if PP is not None:
+        pp = PP()
+        pp.fit(np.array(data_extremal_index["days_since_start"]))
+        rate = pp.get_params()
+    else:
+       rate = len(data_extremal_index)/len(data)
+    e2 = Exponential(rate=rate)
     exceedances_hp = []
     for i in range(1000):
         exceedances_hp.append(e.rvs(len(data_extremal_index)).cumsum())
@@ -381,7 +403,6 @@ def MeanClusterSizeHomoPoissonVsHawkes(data: pd.DataFrame, block_sizes: Union[Li
     plt.clf()
     return e, e2
 
-
 def CumNumberOfExceedancesHomoPoissonVsHawkes(data: pd.DataFrame,
                                               length_total_period: Union[int, float],
                                               origin: pd.datetime,
@@ -400,14 +421,23 @@ def CumNumberOfExceedancesHomoPoissonVsHawkes(data: pd.DataFrame,
     data_gpd = data.set_index("time")[["data", "threshold"]]
     data_gpd = data_gpd[data_gpd["data"] >= data_gpd["threshold"]].reset_index().assign(
         iat=lambda x: x["time"].diff()).fillna(0.)
-    uv = UEHP()
-    uv.fit(np.array(data_gpd["time"]))
-    mu, alpha, theta = uv.get_params()
-    e = Exponential.fit(data_gpd["iat"], loc=0., x0=(mu, alpha, theta),
+    if UEHP is not None:
+        uv = UEHP()
+        uv.fit(np.array(data_gpd["time"]))
+        mu, alpha, theta = uv.get_params()
+    else:
+        mu = 1/(len(data_gpd)/len(data))
+        alpha=0
+        theta=0
+    e = Exponential.fit(data_gpd["iat"], x0=(0., mu, alpha, theta),
                         rate=kernels.hawkes_with_exp_kernel(np.array(data_gpd["time"])))
-    pp = PP()
-    pp.fit(np.array(data_gpd["time"]))
-    e2 = Exponential(rate=pp.get_params())
+    if PP is not None:
+        pp = PP()
+        pp.fit(np.array(data_gpd["time"]))
+        rate = pp.get_params()
+    else:
+       rate = 1/(len(data_gpd)/len(data))
+    e2 = Exponential(rate=rate)
     simulations = []
     for _ in range(1000):
         simulations.append(pd.DataFrame(np.cumsum(e.rvs(len(data_gpd))), columns=[_]))
@@ -457,6 +487,7 @@ def CumNumberOfExceedancesHomoPoissonVsHawkes(data: pd.DataFrame,
     plt.xlabel("Time")
     plt.legend()
     plt.savefig(f"{path_to_figure}/cumulative_nb_exceedances.png")
+    plt.clf()
     return e, e2
 
 
@@ -487,9 +518,8 @@ def KgapsMethodDiagnosticPlots(range_K: Union[List, np.array],
         freq = freq / len(iet_normalised_to_cluster_distance)
         x = (bins[:-1] + bins[1:]) / 2
         empirical_cdf = pd.Series(
-            iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance > 0]).value_counts(
-            normalize=True).sort_index().cumsum()
-        quantiles_exp = Exponential(rate=theta).cdf(sorted(empirical_cdf.index))
+            iet_normalised_to_cluster_distance[iet_normalised_to_cluster_distance > 0]).quantile(np.arange(0.01, 0.99, 0.01))
+        quantiles_exp = Exponential(rate=theta).inverse_cdf(empirical_cdf.index)
         fig = plt.figure(figsize=(10, 5))
         gs = fig.add_gridspec(1, 2)
         ax = []
@@ -504,8 +534,8 @@ def KgapsMethodDiagnosticPlots(range_K: Union[List, np.array],
         ax0.set_xlabel("Interval")
         ax0.set_ylabel("Frequency")
         ax1.scatter(empirical_cdf, quantiles_exp, s=5, color="navy")
-        ax1.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
-        ax1.legend()
+        #ax1.plot(empirical_cdf, empirical_cdf, label=f"$x=y$", color="navy")
+        #ax1.legend()
         ax1.set_title("QQ Plot of positive spacing vs Exponential distribution")
         ax1.set_xlabel("Empirical")
         ax1.set_ylabel(r"Exponential with $\theta$" + f"= {round(theta, 2)}")

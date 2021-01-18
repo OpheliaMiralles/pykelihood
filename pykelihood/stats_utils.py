@@ -198,10 +198,10 @@ class Likelihood(object):
                 lambda row: self.distribution.with_params({k: row[k] for k in columns}.values()).isf(1 / return_period),
                 axis=1)
             rle.extend(list(return_levels.values))
-            if len(rle):
-                return [np.min(rle), np.max(rle)]
-            else:
-                return [None, None]
+        if len(rle):
+            return [np.min(rle), np.max(rle)]
+        else:
+            return [None, None]
 
 
 class DetrentedFluctuationAnalysis(object):

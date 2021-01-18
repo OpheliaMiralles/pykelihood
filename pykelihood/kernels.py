@@ -59,11 +59,12 @@ def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, **constraints
     return ParametrizedFunction(_compute, *args, **params)
 
 
-def categories_qualitative(x: Collection, **fixed_values) -> ParametrizedFunction:
-    unique_values = set(x)
+def categories_qualitative(x: Collection, fixed_values: dict = None) -> ParametrizedFunction:
+    unique_values = sorted(set(map(str, x)))
+    fixed_values = {str(k): v for k, v in (fixed_values or {}).items()}
     parameter = (Parameter() for _ in count())  # generate parameters on demand
     params = {
-        str(value): next(parameter)
+        value: next(parameter)
         if value not in fixed_values
         else ConstantParameter(fixed_values[value])
         for value in unique_values
