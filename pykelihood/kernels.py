@@ -21,13 +21,16 @@ def linear(X, a, b):
     return a+b*X
 
 
-def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, **constraints) -> ParametrizedFunction:
+def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, add_intercept=False, **constraints) -> ParametrizedFunction:
     """ Computes a trend as a linear sum of the columns in the data.
 
     :param x: the number of dimensions or the data the kernel will be computed on. There will be one parameter for each column.
-    :param constraints: fixed values for the parameters of the regression. The following constraints are equivalent:
-                        'beta_1=2', '_1=2', 'beta_cname=2', 'cname=2'
-                        The last two are valid only if data is given as a dataframe with the second column named 'cname'.
+    :param add_intercept: if True, an intercept is added to the result
+    :param constraints: fixed values for the parameters of the regression. The constraints are given as `beta_i=value`,
+                        where i is the index of the column starting with 1.
+                        If data is given as a dataframe with the second column named 'cname', the following constraints are equivalent:
+                        'beta_2=2', 'beta_cname=2', 'cname=2'.
+                        'beta_0' constrains the value of the intercept if add_intercept is True.
     """
     args = ()
     if isinstance(x, int):
@@ -44,17 +47,21 @@ def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, **constraints
         if p_name.startswith("beta_"):
             p_name = p_name[len("beta_"):]
         if isinstance(x, pd.DataFrame) and p_name in x.columns:
-            index = list(x.columns).index(p_name)
+            index = tuple(x.columns).index(p_name) + 1
         else:
-            if p_name.startswith("_"):
-                p_name = p_name[1:]
             index = int(p_name)
         fixed[index] = ConstantParameter(p_value)
-    params = {f"beta_{i}": Parameter() if i not in fixed else fixed[i] for i in range(ndim)}
+
+    if 0 in fixed and not add_intercept:
+        raise ValueError("A fixed value is given for the intercept, but `add_intercept` is not True.")
+
+    param_indices = range(0 if add_intercept else 1, ndim+1)
+    params = {f"beta_{i}": Parameter() if i not in fixed else fixed[i] for i in param_indices}
 
     def _compute(data, **params_from_wrapper):
-        sorted_params = [params_from_wrapper[k] for k in params]
-        return (sorted_params * data).sum(axis=1)
+        intercept = params_from_wrapper.pop("beta_0", 0)
+        sorted_params = [params_from_wrapper[k] for k in params if k != "beta_0"]
+        return intercept + (sorted_params * data).sum(axis=1)
 
     return ParametrizedFunction(_compute, *args, **params)
 

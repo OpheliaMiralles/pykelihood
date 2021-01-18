@@ -43,7 +43,7 @@ def test_linear_regression_with_data(matrix_data):
 
 
 def test_linear_regression_with_constraint(matrix_data):
-    regression = kernels.linear_regression(matrix_data, beta_1=5, _0=6)
+    regression = kernels.linear_regression(matrix_data, beta_2=5, beta_1=6)
     assert len(regression.optimisation_params) == 1
     assert (
         regression.with_params([1])() == ([6, 5, 1] * matrix_data).sum(axis=1)
@@ -55,6 +55,16 @@ def test_linear_regression_with_name_constraint(matrix_data):
     assert len(regression.optimisation_params) == 1
     assert (
         regression.with_params([3])() == ([5, 3, 2] * matrix_data).sum(axis=1)
+    ).all()
+
+
+def test_linear_regression_with_intercept(matrix_data):
+    regression = kernels.linear_regression(
+        matrix_data, first=5, beta_third=2, add_intercept=True
+    )
+    assert len(regression.optimisation_params) == 2
+    assert (
+        regression.with_params([10, 3])() == 10 + ([5, 3, 2] * matrix_data).sum(axis=1)
     ).all()
 
 
