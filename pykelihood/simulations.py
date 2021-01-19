@@ -237,8 +237,8 @@ def to_run_in_parallel(data: pd.Series,
     likelihood = Likelihood(data=data,
                             distribution=distribution,
                             name=name,
-                            conditioning_method=cr)
+                            conditioning_method=cr,
+                            inference_confidence=0.95)
     rle = likelihood.return_level(return_period)
-    rci = likelihood.return_level_confidence_interval(return_period,
-                                                      conf=0.99, fit_chi2=False)
+    rci = likelihood.return_level_confidence_interval(return_period)
     return rle, rci

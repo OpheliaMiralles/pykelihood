@@ -49,7 +49,8 @@ class Likelihood(object):
                  name: str = "Standard",
                  inference_confidence: float = 0.99,
                  fit_chi2: bool = False,
-                 single_profiling_param=None
+                 single_profiling_param=None,
+                 compute_mle = True
                  ):
         """
 
@@ -69,6 +70,7 @@ class Likelihood(object):
         self.inference_confidence = inference_confidence
         self.fit_chi2 = fit_chi2
         self.single_profiling_param = single_profiling_param
+        self.compute_mle = compute_mle
 
     @cached_property
     def standard_mle(self):
@@ -79,10 +81,13 @@ class Likelihood(object):
 
     @cached_property
     def mle(self):
-        x0 = self.distribution.optimisation_params
-        estimate = self.distribution.profile_likelihood(self.data,
-                                                        conditioning_method=self.conditioning_method,
-                                                        x0=x0)
+        if self.compute_mle:
+            x0 = self.distribution.optimisation_params
+            estimate = self.distribution.profile_likelihood(self.data,
+                                                            conditioning_method=self.conditioning_method,
+                                                            x0=x0)
+        else:
+            estimate = self.distribution
         ll_xi0 = estimate.log_likelihood(self.data,
                                          conditioning_method=self.conditioning_method)
         ll_xi0 = ll_xi0 if isinstance(ll_xi0, float) else ll_xi0[0]
