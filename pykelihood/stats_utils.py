@@ -5,8 +5,6 @@ import warnings
 from itertools import count
 from typing import Callable, Sequence, TYPE_CHECKING
 
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import chi2
@@ -17,7 +15,6 @@ if TYPE_CHECKING:
     from pykelihood.distributions import Distribution
 
 warnings.filterwarnings('ignore')
-matplotlib.rcParams['text.usetex'] = True
 
 
 class ConditioningMethod(object):
@@ -50,7 +47,7 @@ class Likelihood(object):
                  inference_confidence: float = 0.99,
                  fit_chi2: bool = False,
                  single_profiling_param=None,
-                 compute_mle = True
+                 compute_mle=True
                  ):
         """
 
@@ -286,7 +283,7 @@ class DetrentedFluctuationAnalysis(object):
                 return "Brownian Noise"
 
     def __call__(self, polynomial_order: int,
-                 show=False, ax=plt.gca(),
+                 show=False, ax=None,
                  supplement_title="", color="r"):
         """
         Detrended Fluctuation Analysis - measures power law scaling coefficient
@@ -306,6 +303,9 @@ class DetrentedFluctuationAnalysis(object):
         coeff = np.polyfit(np.log(scales), np.log(fluct), 1)
         # numpy polyfit returns the highest power first
         if show:
+            import matplotlib
+            matplotlib.rcParams['text.usetex'] = True
+            ax = ax or matplotlib.pyplot.gca()
             default_title = "Detrended Fluctuation Analysis"
             title = default_title if supplement_title == "" else f"{default_title} {supplement_title}"
             fluctfit = np.exp(np.polyval(coeff, np.log(scales)))
