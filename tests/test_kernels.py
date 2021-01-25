@@ -58,6 +58,47 @@ def test_linear_regression_with_name_constraint(matrix_data):
     ).all()
 
 
+def test_exponential_linear_regression_with_name_constraint(matrix_data):
+    import numpy as np
+    regression = kernels.exponential_linear_regression(matrix_data, beta_1=5, _0=6)
+    assert len(regression.optimisation_params) == 1
+    assert (
+            regression.with_params([1])() == np.exp(([6, 5, 1] * matrix_data).sum(axis=1))
+    ).all()
+
+
+def test_polynomial_regression_with_uniform_degree_across_columns(matrix_data):
+    import numpy as np
+    regression = kernels.polynomial_regression(matrix_data, degree=2)
+    nparams =  2*len(matrix_data.columns)
+    assert len(regression.optimisation_params) == nparams
+    np.testing.assert_allclose(
+            regression.with_params([1]*nparams)(),
+        (matrix_data).sum(axis=1) + (matrix_data**2).sum(axis=1))
+
+
+def test_polynomial_regression_with_different_degrees(matrix_data):
+    import numpy as np
+    matrix_data = matrix_data.drop(columns = "third")
+    degrees = [2, 1]
+    regression = kernels.polynomial_regression(matrix_data, degree=degrees)
+    nparams =  np.sum(degrees)
+    assert len(regression.optimisation_params) == nparams
+    np.testing.assert_allclose(
+            regression.with_params([1]*nparams)(),
+        (matrix_data).sum(axis=1) + matrix_data["first"]**2)
+
+
+def test_linear_regression_with_intercept(matrix_data):
+    regression = kernels.linear_regression(
+        matrix_data, first=5, beta_third=2, add_intercept=True
+    )
+    assert len(regression.optimisation_params) == 2
+    assert (
+        regression.with_params([10, 3])() == 10 + ([5, 3, 2] * matrix_data).sum(axis=1)
+    ).all()
+
+
 def test_linear_regression_with_intercept(matrix_data):
     regression = kernels.linear_regression(
         matrix_data, first=5, beta_third=2, add_intercept=True
