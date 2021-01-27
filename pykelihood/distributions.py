@@ -169,7 +169,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
         f = getattr(self.base_module, item)
         g = partial(self._wrapper, f)
         g = self._correct_trends(g)
-        g = cachetools.cached(self._cache, key=hash_with_series)(g)
+        g = cachetools.cached(self._cache, key=lambda x: hash((item, hash_with_series(x))))(g)
         self.__dict__[item] = g
         return g
 
