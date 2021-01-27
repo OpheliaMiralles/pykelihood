@@ -1,3 +1,4 @@
+import re
 from itertools import count
 from typing import Collection, Sequence, Union
 
@@ -174,17 +175,19 @@ def polynomial_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, degree: U
     for p_name, p_value in constraints.items():
         if p_name.startswith("beta_"):
             p_name = p_name[len("beta_"):]
-        if isinstance(x, pd.DataFrame) and p_name in x.columns:
-            index = list(x.columns).index(p_name)
+        match = re.match(r"^(.+)_(\d+)$", p_name)
+        if match:
+            column, deg = match.groups()
         else:
-            if p_name.startswith("_"):
-                p_name = p_name[1:]
-            index = int(p_name)
-        fixed[index] = ConstantParameter(p_value)
+            raise ValueError(f"Unable to parse parameter constraint: {p_name}")
+        if isinstance(x, pd.DataFrame) and column in x.columns:
+            column = list(x.columns).index(column) + 1
+        fixed[(int(column), int(deg))] = ConstantParameter(p_value)
     params = {}
     for col_idx, max_degree in enumerate(degree):
         for d in range(1, max_degree+1):
-            params[f"beta_{col_idx}{d}"]= Parameter()
+            name = f"beta_{col_idx+1}_{d}"
+            params[name] = fixed.get((col_idx+1, d), Parameter())
 
     def _compute(data, **params_from_wrapper):
         data = np.array(data)

@@ -1,7 +1,8 @@
 from itertools import count
 
-from pykelihood import kernels
 import numpy as np
+
+from pykelihood import kernels
 
 
 def test_linear_trend(dataset):
@@ -95,6 +96,30 @@ def test_polynomial_regression_with_different_degrees(matrix_data):
     np.testing.assert_allclose(
             regression.with_params([1]*nparams)(),
         (matrix_data).sum(axis=1) + matrix_data["first"]**2)
+
+
+def test_polynomial_regression_with_constraint(matrix_data):
+    matrix_data = matrix_data.drop(columns="third")
+    degrees = [2, 1]
+    regression = kernels.polynomial_regression(matrix_data, degree=degrees, beta_1_1=2)
+    nparams = sum(degrees) - 1
+    assert len(regression.optimisation_params) == nparams
+    np.testing.assert_allclose(
+        regression.with_params([1] * nparams)(),
+        2*matrix_data["first"] + matrix_data["first"]**2 + matrix_data["second"]
+    )
+
+
+def test_polynomial_regression_with_name_constraint(matrix_data):
+    matrix_data = matrix_data.drop(columns="third")
+    degrees = [2, 1]
+    regression = kernels.polynomial_regression(matrix_data, degree=degrees, first_1=2)
+    nparams = sum(degrees) - 1
+    assert len(regression.optimisation_params) == nparams
+    np.testing.assert_allclose(
+        regression.with_params([1] * nparams)(),
+        2*matrix_data["first"] + matrix_data["first"]**2 + matrix_data["second"]
+    )
 
 
 def test_categorical(categorical_data):
