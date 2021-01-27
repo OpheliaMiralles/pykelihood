@@ -70,7 +70,7 @@ def test_linear_regression_with_intercept(matrix_data):
 
 
 def test_exponential_linear_regression_with_name_constraint(matrix_data):
-    regression = kernels.exponential_linear_regression(matrix_data, beta_1=5, _0=6)
+    regression = kernels.exponential_linear_regression(matrix_data, beta_2=5, beta_1=6)
     assert len(regression.optimisation_params) == 1
     assert (
             regression.with_params([1])() == np.exp(([6, 5, 1] * matrix_data).sum(axis=1))
