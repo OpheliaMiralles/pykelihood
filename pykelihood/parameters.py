@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import ChainMap
 from functools import partial
 from typing import Any, Callable, Dict, Iterable, Tuple, TypeVar, Union
 
@@ -13,6 +14,10 @@ class Parametrized(object):
 
     def __init__(self, *params: Union[Parametrized, Any]):
         self._params = tuple(Parameter(p) if not isinstance(p, Parametrized) else p for p in params)
+
+    def _build_instance(self, **new_params):
+        sorted_params = [new_params[p_name] for p_name in self.params_names]
+        return type(self)(*sorted_params)
 
     @property
     def params(self) -> Tuple[Parametrized]:
@@ -53,12 +58,33 @@ class Parametrized(object):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
         return f"{type(self).__name__}({', '.join(args)})"
 
-    def with_params(self: _T, params: Iterable[Union[Parametrized, Any]]) -> _T:
-        params = iter(params)
-        new_params = []
-        for param in self._params:
-            new_params.append(param.with_params(params))
-        return type(self)(*new_params)
+    def with_params(self, params: Iterable = None, **named_params):
+        if params is not None and named_params:
+            raise ValueError("Please only use one way to provide values to parameters.")
+        if params is not None:
+            params = iter(params)
+            new_params = {}
+            for p_name, param in self.param_dict.items():
+                new_params[p_name] = param.with_params(params)
+        else:
+            new_params = {}
+            for p_name, param in self.param_dict.items():
+                this_param_values = {}
+                for name, value in named_params.items():
+                    # check if this value is for this parameter
+                    if name == p_name:
+                        new_params[name] = value
+                        # no need to look further
+                        break
+                    elif name.startswith(p_name+'_'):
+                        remaining = name[len(p_name+'_'):]
+                        this_param_values[remaining] = value
+                else:  # nobreak
+                    if this_param_values:
+                        new_params[p_name] = param.with_params(**this_param_values)
+            # use current values if none were given
+            new_params = ChainMap(new_params, self.param_dict)
+        return self._build_instance(**new_params)
 
     def __getattr__(self, param: str) -> Parametrized:
         try:
@@ -137,9 +163,5 @@ class ParametrizedFunction(Parametrized):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
         return f"{self.f.func.__qualname__}({', '.join(args)})"
 
-    def with_params(self, params):
-        params = iter(params)
-        new_params = []
-        for param in self._params:
-            new_params.append(param.with_params(params))
-        return type(self)(self.original_f, *self._init_args, **dict(zip(self.params_names, new_params)))
+    def _build_instance(self, **new_params):
+        return type(self)(self.original_f, *self._init_args, **new_params)
