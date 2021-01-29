@@ -14,7 +14,7 @@ from pykelihood.stopping_times import StoppingRule
 
 warnings.filterwarnings('ignore')
 
-USE_POOL = True
+USE_POOL = False
 
 
 class SimulationEVD(object):
@@ -24,7 +24,6 @@ class SimulationEVD(object):
                  return_period: int = 200,
                  sample_size: int = 790):
         self.ref_distri = reference
-        self.ref_params = reference.params
         self.n_iter = n_iter
         self.return_period = return_period
         self.true_return_level = self.ref_distri.isf(1 / return_period)
@@ -64,7 +63,7 @@ class SimulationEVD(object):
         for name in self.CI.keys():
             CIC[name] = {}
             for k in self.CI[name].keys():
-                non_null = [(ub, lb) for (lb, ub) in self.CI[name][k] if
+                non_null = [(lb, ub) for (lb, ub) in self.CI[name][k] if
                             lb is not None and ub is not None and ub - lb < 1000]
                 bools = [lb <= self.true_return_level <= ub
                          for lb, ub in non_null]
@@ -228,6 +227,69 @@ class SimulationWithStoppingRuleAndConditioning(SimulationEVD):
         print("%5.1f secs %5.1f MByte" % (time_elapsed, memMb))
         return res
 
+class SimulationWithStoppingRuleAndConditioningForConditionedObservations(SimulationEVD):
+    def __init__(self, reference: Distribution,
+                 historical_sample: np.array,
+                 n_iter: int,
+                 conditioning_rules: Sequence[Tuple[str, Callable]],
+                 return_periods_for_threshold: Sequence[int],
+                 return_period: int = 200,
+                 sample_size: int = 790):
+        self.stopping_rule_func = StoppingRule.fixed_to_k
+        self.conditioning_rules = conditioning_rules
+        self.return_periods_for_threshold = return_periods_for_threshold
+        super(SimulationWithStoppingRuleAndConditioningForConditionedObservations, self).__init__(reference,
+                                                                        historical_sample,
+                                                                        n_iter,
+                                                                        return_period,
+                                                                        sample_size)
+        rl_estimates = {name: {x: [] for x in return_periods_for_threshold} for name, v in conditioning_rules}
+        CI = {name: {x: [] for x in return_periods_for_threshold} for name, v in conditioning_rules}
+        if USE_POOL:
+            pool = Pool(cpu_count())
+            results = pool.map(self.__call__, self.return_periods_for_threshold)
+            pool.close()
+        else:
+            results = [self(x) for x in self.return_periods_for_threshold]
+        for res in results:
+            for name, v in res.items():
+                for k, value in v.items():
+                    rl_estimates[name][k] = list([p[0] for p in value])
+                    CI[name][k] = list([p[1] for p in value])
+        self.rl_estimates = rl_estimates
+        self.CI = CI
+
+    def __call__(self, x):
+        time_start = time.time()
+        res = {name: {x: []} for name, _ in self.conditioning_rules}
+        for _ in range(self.n_iter):
+            data = []
+            while len(data) < self.sample_size-1:
+                d = self.ref_distri.rvs(1)
+                if d < x:
+                    data.append(d[0])
+            while len(data)< self.sample_size:
+                g=self.ref_distri.rvs(np.min([int(1/self.ref_distri.sf(x)), int(1e6)]))
+                if len(g[g>= x]):
+                    data.append(g[g>= x][0])
+            data = pd.Series(np.concatenate([self.historical_sample, data]))
+            stopping_rule = StoppingRule(data, self.ref_distri,
+                                         k=x, historical_sample_size=10,
+                                         func=self.stopping_rule_func)
+            data_stopped = stopping_rule.stopped_data()
+            std_conditioning = ["Standard", "Excluding Last Obs"]
+            crules = [(name, partial(crule, threshold=stopping_rule.threshold())) \
+                      for (name, crule) in self.conditioning_rules if name
+                      not in std_conditioning] \
+                     + [(name, crule) for (name, crule) in self.conditioning_rules if name in std_conditioning]
+            f = partial(to_run_in_parallel,
+                        *[data_stopped, self.ref_distri, self.return_period])
+            for name, c in crules:
+                res[name][x].append(f((name, c)))
+        time_elapsed = time.time() - time_start
+        memMb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0 / 1024.0
+        print("%5.1f secs %5.1f MByte" % (time_elapsed, memMb))
+        return res
 
 def to_run_in_parallel(data: pd.Series,
                        distribution: Distribution,

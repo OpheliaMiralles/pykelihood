@@ -301,8 +301,10 @@ class GEV(ScipyDistribution):
             shape = -shape
         return f(x, ifnone(shape, -self.shape()), ifnone(loc, self.loc()), ifnone(scale, self.scale()))
 
-    def rvs(self, size, c=None, loc=None, scale=None):
-        return self.base_module.rvs(ifnone(c, self.c), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
+    def rvs(self, size, shape=None, loc=None, scale=None):
+        if shape is not None:
+            shape = -shape
+        return self.base_module.rvs(ifnone(shape, -self.shape()), ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
 
 class MixtureExponentialModel(Distribution):
     params_names = ("theta",)
