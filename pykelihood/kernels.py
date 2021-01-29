@@ -97,7 +97,7 @@ def linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, add_intercept
         sorted_params = [params_from_wrapper[k] for k in params if k != "beta_0"]
         return intercept + (sorted_params * data).sum(axis=1)
 
-    return ParametrizedFunction(_compute, *args, **params)
+    return ParametrizedFunction(_compute, *args, **params, fname=linear_regression.__qualname__)
 
 
 def exponential_linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, add_intercept=False, **constraints) -> ParametrizedFunction:
@@ -141,7 +141,7 @@ def exponential_linear_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, a
         sorted_params = [params_from_wrapper[k] for k in params]
         return np.exp((sorted_params * data).sum(axis=1))
 
-    return ParametrizedFunction(_compute, *args, **params)
+    return ParametrizedFunction(_compute, *args, **params, fname=exponential_linear_regression.__qualname__)
 
 
 def polynomial_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, degree: Union[int, Sequence] = 2,
@@ -200,7 +200,7 @@ def polynomial_regression(x: Union[int, pd.DataFrame, np.ndarray] = 2, degree: U
         sorted_params = [params_from_wrapper[k] for k in params]
         return (sorted_params * data_with_extra_cols).sum(axis=1)
 
-    return ParametrizedFunction(_compute, *args, **params)
+    return ParametrizedFunction(_compute, *args, **params, fname=polynomial_regression.__qualname__)
 
 
 def categories_qualitative(x: Collection, fixed_values: dict = None) -> ParametrizedFunction:
@@ -217,4 +217,4 @@ def categories_qualitative(x: Collection, fixed_values: dict = None) -> Parametr
     def _compute(data, **params_from_wrapper):
         return type(data)(list(map(lambda v: params_from_wrapper[str(v)], data)))
 
-    return ParametrizedFunction(_compute, x, **params)
+    return ParametrizedFunction(_compute, x, **params, fname=categories_qualitative.__qualname__)

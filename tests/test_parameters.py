@@ -41,6 +41,11 @@ class TestParametrizedFunction:
         modf = f.with_params(p=2)
         assert modf(2) == 4
 
+    def test_func_name(self, func):
+        p = parameters.Parameter(1.0)
+        f = parameters.ParametrizedFunction(func, fname='myfunc', p=p)
+        assert repr(f) == "myfunc(p=1.0)"
+
 
 class TestInnerParameters:
     def test_function_parameters(self, func):

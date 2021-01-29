@@ -140,12 +140,13 @@ class ConstantParameter(Parameter):
 
 
 class ParametrizedFunction(Parametrized):
-    def __init__(self, f: Callable, *args, **params: Parametrized):
+    def __init__(self, f: Callable, *args, fname=None, **params: Parametrized):
         self._init_args = args
         self.f = partial(f, *args)
         self.original_f = f
         super(ParametrizedFunction, self).__init__(*params.values())
         self.params_names = tuple(params.keys())
+        self.fname = fname or f.__qualname__
         self._mul = 1
 
     def __call__(self, *args, **kwargs):
@@ -161,7 +162,7 @@ class ParametrizedFunction(Parametrized):
 
     def __repr__(self):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
-        return f"{self.f.func.__qualname__}({', '.join(args)})"
+        return f"{self.fname}({', '.join(args)})"
 
     def _build_instance(self, **new_params):
         return type(self)(self.original_f, *self._init_args, **new_params)
