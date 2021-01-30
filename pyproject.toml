@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "pykelihood"
+version = "0.1.0"
+description = "Intuitive syntax for complex statistical model fitting and parameter sensitivity analysis."
+authors = ["Ophélia Miralles <ophelia.miralles@epfl.ch>"]
+license = "MIT"
+readme = "README.rst"
+repository = "https://github.com/OpheliaMiralles/pykelihood"
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Development Status :: 3 - Alpha",
+]
+
+[tool.poetry.dependencies]
+python = "^3.7.1"
+cachetools = "^4.2.1"
+numpy = "^1.16.5"
+scipy = "^1.5.3"
+pandas = "^1.2.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
