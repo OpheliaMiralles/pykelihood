@@ -128,10 +128,10 @@ Let's fit a ``Normal`` distribution with a trend in the loc parameter:
 >>> n.fit(data, loc=kernels.linear(np.arange(365)))
 Normal(loc=linear(a=-1.0000458359290572, b=0.005494714384381866), scale=0.0010055323717468906)
 
-``kernels.linear(X)`` builds a linear model in the form :math:`a + b X` where :math:`a` and :math:`b` are parameters to
+``kernels.linear(X)`` builds a linear model in the form :math:`a + bX` where :math:`a` and :math:`b` are parameters to
 be optimised for, and :math:`X` is some covariate used to fit the data. If we assume the data were daily observations,
 then we find all the values we expected: :math:`-1` was the value on the first day, :math:`0.05` was the daily increment
-(:math:`2 / 365 \simeq 0.05`), and there was a noise with std deviation :math:`0.001`.
+(:math:`2 / 365 = 0.05`), and there was a noise with std deviation :math:`0.001`.
 
 
 Why do I have to create an instance to be able to fit my data?
@@ -144,7 +144,7 @@ parameter. Hence using an instance to fit the data avoids having to give a value
 In some cases, it can become tedious to write everything out in one statement:
 
 >>> from pykelihood.distributions import Beta
->>> covariate = np.arange(365)
+>>> X = np.arange(365)
 >>> b = Beta(loc=kernels.linear(X), scale=kernels.linear(X), alpha=kernels.linear(X), beta=kernels.linear(X))
 
 To avoid having so many parameters to optimise, you could decide to fix some parameters:
