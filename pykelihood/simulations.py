@@ -8,7 +8,7 @@ from typing import Callable, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from pykelihood.distributions import CompositionDistribution, Distribution
+from pykelihood.distributions import CompositionDistribution, Distribution, Uniform
 from pykelihood.stats_utils import ConditioningMethod, Likelihood
 from pykelihood.stopping_times import StoppingRule
 
@@ -263,16 +263,14 @@ class SimulationWithStoppingRuleAndConditioningForConditionedObservations(Simula
         time_start = time.time()
         res = {name: {x: []} for name, _ in self.conditioning_rules}
         for _ in range(self.n_iter):
-            data = []
-            while len(data) < self.sample_size-1:
-                d = self.ref_distri.rvs(1)
-                if d < x:
-                    data.append(d[0])
-            while len(data)< self.sample_size:
-                g=self.ref_distri.rvs(np.min([int(1/self.ref_distri.sf(x)), int(1e6)]))
-                if len(g[g>= x]):
-                    data.append(g[g>= x][0])
-            data = pd.Series(np.concatenate([self.historical_sample, data]))
+            data = self.historical_sample
+            sf_quantile = self.ref_distri.sf(x)
+            f_quantile = self.ref_distri.cdf(x)
+            u=Uniform()
+            while len(data)< self.sample_size-1:
+                random_below_thresh = [d for d in self.ref_distri.inverse_cdf(f_quantile*(u.rvs(self.sample_size-1))) if d < x]
+                data = np.concatenate([data, random_below_thresh[:self.sample_size-len(data)-1]])
+            data = pd.Series(np.concatenate([data, self.ref_distri.inverse_cdf(sf_quantile*u.rvs(1)+f_quantile)]))
             stopping_rule = StoppingRule(data, self.ref_distri,
                                          k=x, historical_sample_size=10,
                                          func=self.stopping_rule_func)
@@ -296,11 +294,15 @@ def to_run_in_parallel(data: pd.Series,
                        return_period: int,
                        conditioning_rule: Tuple[str, Callable]):
     name, cr = conditioning_rule
-    likelihood = Likelihood(data=data,
-                            distribution=distribution,
-                            name=name,
-                            conditioning_method=cr,
-                            inference_confidence=0.95)
-    rle = likelihood.return_level(return_period)
-    rci = likelihood.return_level_confidence_interval(return_period)
+    try:
+        likelihood = Likelihood(data=data,
+                                distribution=distribution,
+                                name=name,
+                                conditioning_method=cr,
+                                inference_confidence=0.95)
+        rle = likelihood.return_level(return_period)
+        rci = likelihood.return_level_confidence_interval(return_period)
+    except:
+        rle = distribution.isf(1/return_period)
+        rci = [None, None]
     return rle, rci
