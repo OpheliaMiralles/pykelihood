@@ -24,7 +24,7 @@ Main features include:
 Installation
 ------------
 
-Using pip (*soon*)
+Using pip
 ------------------
 
 .. code::
@@ -128,10 +128,10 @@ Let's fit a ``Normal`` distribution with a trend in the loc parameter:
 >>> n.fit(data, loc=kernels.linear(np.arange(365)))
 Normal(loc=linear(a=-1.0000458359290572, b=0.005494714384381866), scale=0.0010055323717468906)
 
-``kernels.linear(X)`` builds a linear model in the form `a + bX` where `a` and `b` are parameters to
-be optimised for, and `X` is some covariate used to fit the data. If we assume the data were daily observations,
-then we find all the values we expected: `-1` was the value on the first day, `0.05` was the daily increment
-(`2 / 365 = 0.05`), and there was a noise with std deviation `0.001`.
+``kernels.linear(X)`` builds a linear model in the form *a + bX* where *a* and *b* are parameters to
+be optimised for, and *X* is some covariate used to fit the data. If we assume the data were daily observations,
+then we find all the values we expected: *-1* was the value on the first day, *0.05* was the daily increment
+(*2 / 365 = 0.05*), and there was a noise with std deviation *0.001*.
 
 
 Why do I have to create an instance to be able to fit my data?
@@ -178,7 +178,7 @@ To configure your environment to work on pykelihood, run:
 
     git clone https://www.github.com/OpheliaMiralles/pykelihood  # or any other clone method
     cd pykelihood
-    poetry install -D
+    poetry install
 
 This will create a virtual environment for the project and install the required dependencies. To activate the virtual
 environment, be sure to run :code:`poetry shell` prior to executing any code.
