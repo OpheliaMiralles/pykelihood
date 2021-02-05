@@ -74,4 +74,3 @@ def HawkesByThinningModified(T, mu, alpha, theta, phi=0):
         else:
             d += e
     return P
-

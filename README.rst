@@ -1,6 +1,14 @@
 pykelihood
 ==========
 
+
+.. image:: https://badge.fury.io/py/pykelihood.svg
+    :target: https://pypi.org/project/pykelihood/
+
+.. image:: https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white
+   :target: https://github.com/pre-commit/pre-commit
+   :alt: pre-commit
+
 -----
 About
 -----
@@ -138,7 +146,7 @@ Why do I have to create an instance to be able to fit my data?
 **************************************************************
 
 In the above example, we didn't specify any value or trend for the ``scale`` parameter. The reason it still worked is
-that ``pykelihood`` assumed `scale` would have the same *form* as ``n``'s scale, which in this case is a simple float
+that ``pykelihood`` assumed ``scale`` would have the same *form* as ``n``'s scale, which in this case is a simple float
 parameter. Hence using an instance to fit the data avoids having to give a value for all parameters.
 
 In some cases, it can become tedious to write everything out in one statement:
@@ -182,6 +190,12 @@ To configure your environment to work on pykelihood, run:
 
 This will create a virtual environment for the project and install the required dependencies. To activate the virtual
 environment, be sure to run :code:`poetry shell` prior to executing any code.
+
+We also use the `pre-commit <https://pre-commit.com>`_ library which adds git hooks to the repository. These must be installed with:
+
+.. code::
+
+   pre-commit install
 
 Some parts of the code base use the `matplotlib <https://matplotlib.org/>`_ and
 `hawkeslib <https://hawkeslib.readthedocs.io/en/latest/index.html>`_ package, but are for now not required to run most
