@@ -154,7 +154,7 @@ class Likelihood(object):
 
         :param metric: function depending on the distribution: it can be one of the parameter (ex: lambda x: x.shape() for a parameter called "shape"),
         or a metric relevant to the field of study (ex: the 100-years return level for extreme value analysis by setting lambda x: x.isf(1/100))...
-        :return: bounds based on parameter profiles for this metric 
+        :return: bounds based on parameter profiles for this metric
         """
         estimates = []
         profiles = self.profiles

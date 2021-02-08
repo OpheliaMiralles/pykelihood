@@ -303,7 +303,7 @@ def to_run_in_parallel(data: pd.Series,
                                 conditioning_method=cr,
                                 inference_confidence=0.95)
         rle = return_level(likelihood.mle[0])
-        rci = likelihood.confidence_interval_for_specified_metric(return_level)
+        rci = likelihood.confidence_interval(return_level)
     except:
         rle = return_level(distribution.fit(data, conditioning_method=conditioning_rule))
         rci = [None, None]

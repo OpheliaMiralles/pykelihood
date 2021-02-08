@@ -572,4 +572,3 @@ def Kgaps_diagnostic_plots(range_K: Union[List, np.array],
     plt.title("Extremal index estimate")
     plt.savefig(f"{path_to_figure}/K-gaps_extremal_index_estimate.png")
     plt.clf()
-
