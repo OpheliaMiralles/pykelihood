@@ -45,7 +45,7 @@ class StoppingRule(object):
         return N
 
     @staticmethod
-    def fixed_to_middle(data: pd.Series, historical_sample_size: int,
+    def fixed_to_sample_middle_value(data: pd.Series, historical_sample_size: int,
                         distribution: "Distribution", k: int):
         max = data.iloc[historical_sample_size:].max()
         min = data.iloc[historical_sample_size:].min()
@@ -70,7 +70,7 @@ class StoppingRule(object):
         return [c] * number_of_tests_threshold, N
 
     @staticmethod
-    def variable(data: pd.Series, historical_sample_size: int, distribution: "Distribution", k: int):
+    def variable_in_the_estimated_return_level(data: pd.Series, historical_sample_size: int, distribution: "Distribution", k: int):
         j = historical_sample_size
         fit = distribution.fit(data.iloc[:j])
         return_level_estimate = fit.isf(1 / k)
