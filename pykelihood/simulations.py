@@ -294,15 +294,17 @@ def to_run_in_parallel(data: pd.Series,
                        return_period: int,
                        conditioning_rule: Tuple[str, Callable]):
     name, cr = conditioning_rule
+    def return_level(distribution):
+        return distribution.isf(1 / return_period)
     try:
         likelihood = Likelihood(data=data,
                                 distribution=distribution,
                                 name=name,
                                 conditioning_method=cr,
                                 inference_confidence=0.95)
-        rle = likelihood.return_level(return_period)
-        rci = likelihood.return_level_confidence_interval(return_period)
+        rle = return_level(likelihood.mle[0])
+        rci = likelihood.confidence_interval_for_specified_metric(return_level)
     except:
-        rle = distribution.isf(1/return_period)
+        rle = return_level(distribution.fit(data, conditioning_method=conditioning_rule))
         rci = [None, None]
     return rle, rci

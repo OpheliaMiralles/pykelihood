@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import warnings
 from itertools import count
-from typing import Callable, Sequence, TYPE_CHECKING
+from typing import Callable, Sequence, TYPE_CHECKING, Union
 
 import numpy as np
 import pandas as pd
@@ -109,43 +109,11 @@ class Likelihood(object):
             params = [self.single_profiling_param]
         else:
             params = mle.optimisation_param_dict.keys()
-        if hasattr(self.distribution, "fast_profile_likelihood") \
-                and len(mle.optimisation_params) == len(mle.params):
-            # we cannot use the profiling from R with a distribution whose parameters
-            # are fitted to regression kernels, as they implemented a standard fit with constant
-            # parameters.
-            try:
-                pre_profiled_params = self.distribution.fast_profile_likelihood(self.data,
-                                                                                conf=self.inference_confidence)
-                if self.conditioning_method == ConditioningMethod.excluding_last_obs_rule:
-                    pre_profiled_params = self.distribution.fast_profile_likelihood(self.data.iloc[:-1],
-                                                                                    conf=self.inference_confidence)
-                if self.conditioning_method in [ConditioningMethod.no_conditioning,
-                                                ConditioningMethod.excluding_last_obs_rule]:
-                    for name in params:
-                        columns = list(pre_profiled_params[name].columns)
-                        likelihoods = pre_profiled_params[name] \
-                            .apply(lambda row: self.distribution.with_params([row[k] for k in columns]) \
-                                   .log_likelihood(self.data.iloc[:-1]), axis=1)
-                        pre_profiled_params[name] = pre_profiled_params[name].assign(likelihood=likelihoods)
-
-                    return pre_profiled_params
-                for name in params:
-                    min_std = np.min(pre_profiled_params[name][name])
-                    max_std = np.max(pre_profiled_params[name][name])
-                    lb = min_std - 5 * (10 ** math.floor(math.log10(np.abs(min_std))))
-                    ub = max_std + 5 * (10 ** math.floor(math.log10(np.abs(max_std))))
-                    range = list(np.linspace(lb, min_std, 5)) \
-                            + list(pre_profiled_params[name][name].values) \
-                            + list(np.linspace(max_std, ub, 5))
-                    profiles[name] = self.test_profile_likelihood(range, name)
-                return profiles
-            except:
-                pass
         for name, k in mle.optimisation_param_dict.items():
             if name in params:
-                lb = k - 0.1 - 5 * (10 ** math.floor(math.log10(np.abs(k))))
-                ub = k + 0.1 + 5 * (10 ** math.floor(math.log10(np.abs(k))))
+                r = k.real
+                lb = r - 5 * (10 ** math.floor(math.log10(np.abs(r))))
+                ub = r + 5 * (10 ** math.floor(math.log10(np.abs(r))))
                 range = list(np.linspace(lb, ub, 50))
                 profiles[name] = self.test_profile_likelihood(range, name)
         return profiles
@@ -181,13 +149,14 @@ class Likelihood(object):
         filtered_params = filtered_params.rename(columns=dict(zip(count(), cols)))
         return filtered_params
 
-    def return_level(self, return_period):
-        mle, ll_xi0 = self.mle
-        return_level = mle.isf(1 / return_period)
-        return return_level
+    def confidence_interval(self, metric: Callable[[Distribution], float]):
+        """
 
-    def return_level_confidence_interval(self, return_period):
-        rle = []
+        :param metric: function depending on the distribution: it can be one of the parameter (ex: lambda x: x.shape() for a parameter called "shape"),
+        or a metric relevant to the field of study (ex: the 100-years return level for extreme value analysis by setting lambda x: x.isf(1/100))...
+        :return: bounds based on parameter profiles for this metric 
+        """
+        estimates = []
         profiles = self.profiles
         if self.single_profiling_param is not None:
             params = [self.single_profiling_param]
@@ -195,13 +164,11 @@ class Likelihood(object):
             params = profiles.keys()
         for param in params:
             columns = list(self.mle[0].optimisation_param_dict.keys())
-            return_levels = profiles[param] \
-                .apply(
-                lambda row: self.distribution.with_params({k: row[k] for k in columns}.values()).isf(1 / return_period),
-                axis=1)
-            rle.extend(list(return_levels.values))
-        if len(rle):
-            return [np.min(rle), np.max(rle)]
+            result = profiles[param] \
+                .apply(lambda row: metric(self.distribution.with_params({k: row[k] for k in columns}.values())), axis=1)
+            estimates.extend(list(result.values))
+        if len(estimates):
+            return [np.min(estimates), np.max(estimates)]
         else:
             return [None, None]
 
@@ -320,14 +287,14 @@ class DetrentedFluctuationAnalysis(object):
         return scales, fluct, coeff[0]
 
 
-def pettitt(signal):
+def pettitt(data: Union[np.array, pd.DataFrame, pd.Series]):
     """
     Pettitt's non-parametric test for change-point detection.
     Given an input signal, it reports the likely position of a single switch point along with
     the significance probability for location K, approximated for p <= 0.05.
     """
-    T = len(signal)
-    X = signal.reshape((len(signal), 1))
+    T = len(data)
+    X = data.reshape((len(data), 1))
     vector_of_ones = np.ones([1, len(X)])
     matrix_col_X = np.matmul(X, vector_of_ones)
     matrix_lines_X = matrix_col_X.T
