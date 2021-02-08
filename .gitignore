@@ -2,3 +2,4 @@
 *.pyc
 dist/
 poetry.lock
+.DS_Store
