@@ -84,14 +84,12 @@ class Likelihood(object):
     def mle(self):
         if self.compute_mle:
             x0 = self.distribution.optimisation_params
-            estimate = self.distribution.profile_likelihood(
-                self.data, conditioning_method=self.conditioning_method, x0=x0
+            estimate = self.distribution.fit_instance(
+                self.data, penalty=self.conditioning_method, x0=x0
             )
         else:
             estimate = self.distribution
-        ll_xi0 = estimate.log_likelihood(
-            self.data, conditioning_method=self.conditioning_method
-        )
+        ll_xi0 = estimate.log_likelihood(self.data, penalty=self.conditioning_method)
         ll_xi0 = ll_xi0 if isinstance(ll_xi0, float) else ll_xi0[0]
         return (estimate, ll_xi0)
 
@@ -134,13 +132,13 @@ class Likelihood(object):
         params = []
         for x in range_for_param:
             try:
-                pl = mle.profile_likelihood(
+                pl = mle.fit_instance(
                     self.data,
-                    conditioning_method=self.conditioning_method,
+                    penalty=self.conditioning_method,
                     fixed_params={param: x},
                 )
                 pl_value = pl.log_likelihood(
-                    self.data, conditioning_method=self.conditioning_method
+                    self.data, penalty=self.conditioning_method
                 )
                 pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
                 if np.isfinite(pl_value):

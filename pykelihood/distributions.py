@@ -79,21 +79,21 @@ class Distribution(Parametrized):
     def log_likelihood(
         self,
         data: Union[np.array, pd.Series],
-        conditioning_method: Callable = ConditioningMethod.no_conditioning,
+        penalty: Callable = ConditioningMethod.no_conditioning,
         *args,
         **kwds,
     ):
         res = self.logpdf(data, *args, **kwds)
-        return np.sum(res) - conditioning_method(data, self)
+        return np.sum(res) - penalty(data, self)
 
     def opposite_log_likelihood(
         self,
         data: Union[np.array, pd.Series],
-        conditioning_method: Callable = ConditioningMethod.no_conditioning,
+        penalty: Callable = ConditioningMethod.no_conditioning,
         *args,
         **kwds,
     ):
-        return -self.log_likelihood(data, conditioning_method, *args, **kwds)
+        return -self.log_likelihood(data, penalty, *args, **kwds)
 
     def _process_fit_params(self, **kwds):
         param_dict = self.param_dict.copy()
@@ -113,7 +113,7 @@ class Distribution(Parametrized):
         cls,
         data,
         x0=None,
-        conditioning_method=ConditioningMethod.no_conditioning,
+        penalty=ConditioningMethod.no_conditioning,
         **fixed_values,
     ):
         init_parms = {}
@@ -133,23 +133,21 @@ class Distribution(Parametrized):
 
         def to_minimize(x):
             o = init.with_params(x)
-            return o.opposite_log_likelihood(
-                data, conditioning_method=conditioning_method
-            )
+            return o.opposite_log_likelihood(data, penalty=penalty)
 
         res = minimize(to_minimize, x0, method="Nelder-Mead")
         return init.with_params(res.x)
 
-    def profile_likelihood(
+    def fit_instance(
         self,
         data,
-        conditioning_method: Callable = ConditioningMethod.no_conditioning,
+        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
         **kwds,
     ):
         param_dict = self._process_fit_params(**(fixed_params or {}))
         kwds.update(param_dict)
-        return self.fit(data, conditioning_method=conditioning_method, **kwds)
+        return self.fit(data, penalty=penalty, **kwds)
 
 
 class AvoidAbstractMixin(object):
@@ -531,20 +529,20 @@ class PointProcess(Distribution):
             raise ValueError(f"Unexpected parameters encountered in keywords: {kwds}")
         return IAT_params, JS_params, RP_params
 
-    def profile_likelihood(
+    def fit_instance(
         self,
         data,
-        conditioning_method: Callable = ConditioningMethod.no_conditioning,
+        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
         **kwds,
     ):
         kwds.update(**(fixed_params or {}))
-        return self.fit(data, conditioning_method=conditioning_method, **kwds)
+        return self.fit(data, penalty=penalty, **kwds)
 
     def fit(
         self,
         data,
-        conditioning_method=ConditioningMethod.no_conditioning,
+        penalty=ConditioningMethod.no_conditioning,
         x0=None,
         opt_method="Nelder-Mead",
         plot=False,
@@ -902,20 +900,20 @@ class CompositionDistribution(Distribution):
             raise ValueError(f"Unexpected parameters encountered in keywords: {kwds}")
         return d1_params, d2_params
 
-    def profile_likelihood(
+    def fit_instance(
         self,
         data,
-        conditioning_method: Callable = ConditioningMethod.no_conditioning,
+        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
         **kwds,
     ):
         kwds.update(**(fixed_params or {}))
-        return self.fit(data, conditioning_method=conditioning_method, **kwds)
+        return self.fit(data, penalty=penalty, **kwds)
 
     def fit(
         self,
         data: pd.Series,
-        conditioning_method=ConditioningMethod.no_conditioning,
+        penalty=ConditioningMethod.no_conditioning,
         x0=None,
         opt_method="Nelder-Mead",
         *args,
@@ -926,9 +924,7 @@ class CompositionDistribution(Distribution):
         x0 = obj.optimisation_params if x0 is None else x0
 
         def to_minimize(var_params):
-            return obj.with_params(var_params).opposite_log_likelihood(
-                data, conditioning_method
-            )
+            return obj.with_params(var_params).opposite_log_likelihood(data, penalty)
 
         result = minimize(
             to_minimize,
