@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import warnings
 from itertools import count
-from typing import Callable, Sequence, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Callable, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -14,41 +14,45 @@ from pykelihood.cached_property import cached_property
 if TYPE_CHECKING:
     from pykelihood.distributions import Distribution
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
 
 class ConditioningMethod(object):
     @staticmethod
-    def no_conditioning(data: pd.Series,
-                        distribution: Distribution):
-        return 0.
+    def no_conditioning(data: pd.Series, distribution: Distribution):
+        return 0.0
 
     @staticmethod
-    def excluding_last_obs_rule(data: pd.Series,
-                                distribution: Distribution):
+    def excluding_last_obs_rule(data: pd.Series, distribution: Distribution):
         return distribution.logpdf(data.iloc[-1])
 
     @staticmethod
-    def partial_conditioning_rule_stopped_obs(data: pd.Series, distribution: Distribution,
-                                              threshold: Sequence = None):
+    def partial_conditioning_rule_stopped_obs(
+        data: pd.Series, distribution: Distribution, threshold: Sequence = None
+    ):
         return distribution.logsf(threshold[-1])
 
     @staticmethod
-    def full_conditioning_rule_stopped_obs(data: pd.Series, distribution: Distribution,
-                                           threshold: Sequence = None):
-        return distribution.logsf(threshold[-1]) + np.sum(distribution.logcdf(threshold[:-1]))
+    def full_conditioning_rule_stopped_obs(
+        data: pd.Series, distribution: Distribution, threshold: Sequence = None
+    ):
+        return distribution.logsf(threshold[-1]) + np.sum(
+            distribution.logcdf(threshold[:-1])
+        )
 
 
 class Likelihood(object):
-    def __init__(self, distribution: Distribution,
-                 data: pd.Series,
-                 conditioning_method: Callable = ConditioningMethod.no_conditioning,
-                 name: str = "Standard",
-                 inference_confidence: float = 0.99,
-                 fit_chi2: bool = False,
-                 single_profiling_param=None,
-                 compute_mle=True
-                 ):
+    def __init__(
+        self,
+        distribution: Distribution,
+        data: pd.Series,
+        conditioning_method: Callable = ConditioningMethod.no_conditioning,
+        name: str = "Standard",
+        inference_confidence: float = 0.99,
+        fit_chi2: bool = False,
+        single_profiling_param=None,
+        compute_mle=True,
+    ):
         """
 
         :param distribution: distribution on which the inference is based
@@ -80,26 +84,32 @@ class Likelihood(object):
     def mle(self):
         if self.compute_mle:
             x0 = self.distribution.optimisation_params
-            estimate = self.distribution.profile_likelihood(self.data,
-                                                            conditioning_method=self.conditioning_method,
-                                                            x0=x0)
+            estimate = self.distribution.profile_likelihood(
+                self.data, conditioning_method=self.conditioning_method, x0=x0
+            )
         else:
             estimate = self.distribution
-        ll_xi0 = estimate.log_likelihood(self.data,
-                                         conditioning_method=self.conditioning_method)
+        ll_xi0 = estimate.log_likelihood(
+            self.data, conditioning_method=self.conditioning_method
+        )
         ll_xi0 = ll_xi0 if isinstance(ll_xi0, float) else ll_xi0[0]
         return (estimate, ll_xi0)
 
     @cached_property
     def AIC(self):
         mle_aic = -2 * self.mle[1] + 2 * len(self.mle[0].optimisation_params)
-        std_mle_aic = -2 * self.standard_mle[1] + 2 * len(self.standard_mle[0].optimisation_params)
+        std_mle_aic = -2 * self.standard_mle[1] + 2 * len(
+            self.standard_mle[0].optimisation_params
+        )
         return {"AIC MLE": mle_aic, "AIC Standard MLE Fit": std_mle_aic}
 
     def Deviance(self):
         mle_deviance = -2 * self.mle[1]
         std_mle_deviance = -2 * self.standard_mle[1]
-        return {"Deviance MLE": mle_deviance, "AIC Standard MLE Deviance": std_mle_deviance}
+        return {
+            "Deviance MLE": mle_deviance,
+            "AIC Standard MLE Deviance": std_mle_deviance,
+        }
 
     @cached_property
     def profiles(self):
@@ -124,12 +134,14 @@ class Likelihood(object):
         params = []
         for x in range_for_param:
             try:
-                pl = mle.profile_likelihood(self.data,
-                                            conditioning_method=self.conditioning_method,
-                                            fixed_params={param: x})
-                pl_value = pl.log_likelihood(
+                pl = mle.profile_likelihood(
                     self.data,
-                    conditioning_method=self.conditioning_method)
+                    conditioning_method=self.conditioning_method,
+                    fixed_params={param: x},
+                )
+                pl_value = pl.log_likelihood(
+                    self.data, conditioning_method=self.conditioning_method
+                )
                 pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
                 if np.isfinite(pl_value):
                     profile_ll.append(pl_value)
@@ -143,8 +155,9 @@ class Likelihood(object):
         else:
             chi2_par = {"df": 1}
         lower_bound = ll_xi0 - chi2.ppf(self.inference_confidence, **chi2_par) / 2
-        filtered_params = pd.DataFrame([x + [ll] for x, ll in zip(params, profile_ll)
-                                        if ll >= lower_bound])
+        filtered_params = pd.DataFrame(
+            [x + [ll] for x, ll in zip(params, profile_ll) if ll >= lower_bound]
+        )
         cols = list(mle.flattened_param_dict.keys()) + ["likelihood"]
         filtered_params = filtered_params.rename(columns=dict(zip(count(), cols)))
         return filtered_params
@@ -164,8 +177,12 @@ class Likelihood(object):
             params = profiles.keys()
         for param in params:
             columns = list(self.mle[0].optimisation_param_dict.keys())
-            result = profiles[param] \
-                .apply(lambda row: metric(self.distribution.with_params({k: row[k] for k in columns}.values())), axis=1)
+            result = profiles[param].apply(
+                lambda row: metric(
+                    self.distribution.with_params({k: row[k] for k in columns}.values())
+                ),
+                axis=1,
+            )
             estimates.extend(list(result.values))
         if len(estimates):
             return [np.min(estimates), np.max(estimates)]
@@ -174,7 +191,12 @@ class Likelihood(object):
 
 
 class DetrentedFluctuationAnalysis(object):
-    def __init__(self, data: pd.DataFrame, scale_lim: Sequence[int] = None, scale_step: float = None):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        scale_lim: Sequence[int] = None,
+        scale_step: float = None,
+    ):
         """
 
         :param data: pandas Dataframe, if it contains a column for the day and month, the profiles are normalized
@@ -188,16 +210,31 @@ class DetrentedFluctuationAnalysis(object):
             std = data["data"].std()
             data = data.assign(mean=mean).assign(std=std)
         else:
-            mean = data.groupby(["month", "day"]).agg({"data": "mean"})["data"].rename('mean').reset_index()
-            std = data.groupby(["month", "day"]).agg({"data": "std"})["data"].rename('std').reset_index()
-            data = data.merge(mean, on=["month", "day"], how="left").merge(std, on=["month", "day"], how="left")
+            mean = (
+                data.groupby(["month", "day"])
+                .agg({"data": "mean"})["data"]
+                .rename("mean")
+                .reset_index()
+            )
+            std = (
+                data.groupby(["month", "day"])
+                .agg({"data": "std"})["data"]
+                .rename("std")
+                .reset_index()
+            )
+            data = data.merge(mean, on=["month", "day"], how="left").merge(
+                std, on=["month", "day"], how="left"
+            )
         phi = (data["data"] - data["mean"]) / data["std"]
-        phi = phi.dropna()  # cases where there is only one value for a given day / irrelevant for DFA
+        phi = (
+            phi.dropna()
+        )  # cases where there is only one value for a given day / irrelevant for DFA
         self.y = np.cumsum(np.array(phi))
         if scale_lim == None:
             lim_inf = 10 ** (math.floor(np.log10(len(data))) - 1)
-            lim_sup = min(10 ** (math.ceil(np.log10(len(data)))),
-                          len(phi))  # assuming all observations are equally splitted
+            lim_sup = min(
+                10 ** (math.ceil(np.log10(len(data)))), len(phi)
+            )  # assuming all observations are equally splitted
             scale_lim = [lim_inf, lim_sup]
         if scale_step == None:
             scale_step = 10 ** (math.floor(np.log10(len(data)))) / 2
@@ -249,9 +286,9 @@ class DetrentedFluctuationAnalysis(object):
             else:
                 return "Brownian Noise"
 
-    def __call__(self, polynomial_order: int,
-                 show=False, ax=None,
-                 supplement_title="", color="r"):
+    def __call__(
+        self, polynomial_order: int, show=False, ax=None, supplement_title="", color="r"
+    ):
         """
         Detrended Fluctuation Analysis - measures power law scaling coefficient
         of the given signal *x*.
@@ -261,28 +298,43 @@ class DetrentedFluctuationAnalysis(object):
         """
 
         y = self.y
-        scales = (np.arange(self.scale_lim[0], self.scale_lim[1], self.scale_step)).astype(np.int)
+        scales = (
+            np.arange(self.scale_lim[0], self.scale_lim[1], self.scale_step)
+        ).astype(np.int)
         fluct = np.zeros(len(scales))
         # computing RMS for each window
         for e, sc in enumerate(scales):
-            fluct[e] = np.sqrt(np.mean(self.calc_rms(y, sc, polynomial_order=polynomial_order)))
+            fluct[e] = np.sqrt(
+                np.mean(self.calc_rms(y, sc, polynomial_order=polynomial_order))
+            )
         # as this stage, F^2(s) should be something of the form s^h(2); taking the log should give a linear form of coefficient h(2)
         coeff = np.polyfit(np.log(scales), np.log(fluct), 1)
         # numpy polyfit returns the highest power first
         if show:
             import matplotlib
-            matplotlib.rcParams['text.usetex'] = True
+
+            matplotlib.rcParams["text.usetex"] = True
             ax = ax or matplotlib.pyplot.gca()
             default_title = "Detrended Fluctuation Analysis"
-            title = default_title if supplement_title == "" else f"{default_title} {supplement_title}"
+            title = (
+                default_title
+                if supplement_title == ""
+                else f"{default_title} {supplement_title}"
+            )
             fluctfit = np.exp(np.polyval(coeff, np.log(scales)))
-            ax.loglog(scales, fluct, 'o', color=color, alpha=0.6)
-            ax.loglog(scales, fluctfit, color=color, alpha=0.6,
-                      label=r"DFA-{}, {}: $\alpha$={}".format(polynomial_order,
-                                                              self.trend_type(coeff[0]), round(coeff[0], 2)))
+            ax.loglog(scales, fluct, "o", color=color, alpha=0.6)
+            ax.loglog(
+                scales,
+                fluctfit,
+                color=color,
+                alpha=0.6,
+                label=r"DFA-{}, {}: $\alpha$={}".format(
+                    polynomial_order, self.trend_type(coeff[0]), round(coeff[0], 2)
+                ),
+            )
             ax.set_title(title)
-            ax.set_xlabel(r'$\log_{10}$(time window)')
-            ax.set_ylabel(r'$\log_{10}$F(t)')
+            ax.set_xlabel(r"$\log_{10}$(time window)")
+            ax.set_ylabel(r"$\log_{10}$F(t)")
             ax.legend(loc="lower right", fontsize="small")
         return scales, fluct, coeff[0]
 

@@ -74,28 +74,30 @@ def test_exponential_linear_regression_with_name_constraint(matrix_data):
     regression = kernels.exponential_linear_regression(matrix_data, beta_2=5, beta_1=6)
     assert len(regression.optimisation_params) == 1
     assert (
-            regression.with_params([1])() == np.exp(([6, 5, 1] * matrix_data).sum(axis=1))
+        regression.with_params([1])() == np.exp(([6, 5, 1] * matrix_data).sum(axis=1))
     ).all()
 
 
 def test_polynomial_regression_with_uniform_degree_across_columns(matrix_data):
     regression = kernels.polynomial_regression(matrix_data, degree=2)
-    nparams =  2*len(matrix_data.columns)
+    nparams = 2 * len(matrix_data.columns)
     assert len(regression.optimisation_params) == nparams
     np.testing.assert_allclose(
-            regression.with_params([1]*nparams)(),
-        (matrix_data).sum(axis=1) + (matrix_data**2).sum(axis=1))
+        regression.with_params([1] * nparams)(),
+        (matrix_data).sum(axis=1) + (matrix_data ** 2).sum(axis=1),
+    )
 
 
 def test_polynomial_regression_with_different_degrees(matrix_data):
-    matrix_data = matrix_data.drop(columns = "third")
+    matrix_data = matrix_data.drop(columns="third")
     degrees = [2, 1]
     regression = kernels.polynomial_regression(matrix_data, degree=degrees)
     nparams = sum(degrees)
     assert len(regression.optimisation_params) == nparams
     np.testing.assert_allclose(
-            regression.with_params([1]*nparams)(),
-        (matrix_data).sum(axis=1) + matrix_data["first"]**2)
+        regression.with_params([1] * nparams)(),
+        (matrix_data).sum(axis=1) + matrix_data["first"] ** 2,
+    )
 
 
 def test_polynomial_regression_with_constraint(matrix_data):
@@ -106,7 +108,7 @@ def test_polynomial_regression_with_constraint(matrix_data):
     assert len(regression.optimisation_params) == nparams
     np.testing.assert_allclose(
         regression.with_params([1] * nparams)(),
-        2*matrix_data["first"] + matrix_data["first"]**2 + matrix_data["second"]
+        2 * matrix_data["first"] + matrix_data["first"] ** 2 + matrix_data["second"],
     )
 
 
@@ -118,7 +120,7 @@ def test_polynomial_regression_with_name_constraint(matrix_data):
     assert len(regression.optimisation_params) == nparams
     np.testing.assert_allclose(
         regression.with_params([1] * nparams)(),
-        2*matrix_data["first"] + matrix_data["first"]**2 + matrix_data["second"]
+        2 * matrix_data["first"] + matrix_data["first"] ** 2 + matrix_data["second"],
     )
 
 
@@ -134,20 +136,26 @@ def test_categorical(categorical_data):
 
 
 def test_categorical_with_constraint(categorical_data):
-    cat_kernel = kernels.categories_qualitative(categorical_data, dict(item1=1, item2=8))
+    cat_kernel = kernels.categories_qualitative(
+        categorical_data, dict(item1=1, item2=8)
+    )
     assert len(cat_kernel.optimisation_params) == categorical_data.unique().size - 2
     mapping = {"item1": 1, "item2": 8, "item3": 12}
     assert (
         cat_kernel.with_params([12])() == categorical_data.apply(mapping.__getitem__)
     ).all()
 
+
 def test_categorical_with_bool(categorical_data_boolean):
     cat_kernel = kernels.categories_qualitative(categorical_data_boolean)
     assert len(cat_kernel.optimisation_params) == 2
     mapping = {True: 1, False: 8}
-    values = [next(v for k, v in mapping.items() if str(k) == p_name)
-              for p_name in cat_kernel.params_names]
+    values = [
+        next(v for k, v in mapping.items() if str(k) == p_name)
+        for p_name in cat_kernel.params_names
+    ]
     assert len(values) == 2
     assert (
-            cat_kernel.with_params(values)() == categorical_data_boolean.apply(mapping.__getitem__)
+        cat_kernel.with_params(values)()
+        == categorical_data_boolean.apply(mapping.__getitem__)
     ).all()

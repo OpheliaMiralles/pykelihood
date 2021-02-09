@@ -5,12 +5,12 @@ from pykelihood import parameters
 
 class TestParameter:
     def test_parameter(self):
-        p = parameters.Parameter(3.)
-        assert p == 3.
+        p = parameters.Parameter(3.0)
+        assert p == 3.0
 
     def test_parameter_with_params(self):
         p = parameters.Parameter()
-        assert p.with_params([5.]) == 5.
+        assert p.with_params([5.0]) == 5.0
 
 
 @pytest.fixture(scope="module")
@@ -43,7 +43,7 @@ class TestParametrizedFunction:
 
     def test_func_name(self, func):
         p = parameters.Parameter(1.0)
-        f = parameters.ParametrizedFunction(func, fname='myfunc', p=p)
+        f = parameters.ParametrizedFunction(func, fname="myfunc", p=p)
         assert repr(f) == "myfunc(p=1.0)"
 
 
@@ -75,13 +75,13 @@ class TestInnerParameters:
     def test_parameter_optimisation_param_dict(self, func):
         p1 = parameters.Parameter(2)
         p2 = parameters.ParametrizedFunction(func, p=p1)
-        assert p2.optimisation_param_dict == {'p': p1}
+        assert p2.optimisation_param_dict == {"p": p1}
 
     def test_parameter_optimisation_param_dict_multi_level(self, func):
         p1 = parameters.Parameter(2)
         p2 = parameters.ParametrizedFunction(func, p=p1)
         p3 = parameters.ParametrizedFunction(func, p=p2)
-        assert p3.optimisation_param_dict == {'p_p': p1}
+        assert p3.optimisation_param_dict == {"p_p": p1}
 
     def test_parameter_optimisation_param_dict_constant(self, func):
         p1 = parameters.ConstantParameter(2)
@@ -94,7 +94,7 @@ class TestInnerParameters:
         q = parameters.Parameter(2)
         p2 = parameters.ParametrizedFunction(func, p=p1)
         p3 = parameters.ParametrizedFunction(func, p=p2)
-        assert p3.with_params(p_p=q).optimisation_param_dict == {'p_p': q}
+        assert p3.with_params(p_p=q).optimisation_param_dict == {"p_p": q}
 
     def test_named_with_params_partial_assignment(self, func):
         p = parameters.Parameter(2)
@@ -111,4 +111,4 @@ class TestInnerParameters:
         pf = parameters.ParametrizedFunction(func, p=parameters.Parameter(1))
         pf2 = parameters.ParametrizedFunction(func, p=pf)
         q = parameters.Parameter(2)
-        assert pf2.with_params(p=q).optimisation_param_dict == {'p': q}
+        assert pf2.with_params(p=q).optimisation_param_dict == {"p": q}

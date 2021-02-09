@@ -1,6 +1,9 @@
-from pykelihood.distributions import Exponential, Uniform
 from typing import Callable
+
 import numpy as np
+
+from pykelihood.distributions import Exponential, Uniform
+
 
 def PoissonByThinning(T, lambd, M):
     """
@@ -16,12 +19,13 @@ def PoissonByThinning(T, lambd, M):
     P = []
     t = 0
     while t < T:
-        e = Exponential(loc=0., rate=M).rvs(1)
+        e = Exponential(loc=0.0, rate=M).rvs(1)
         t += e
-        u = Uniform(loc=0., scale=M).rvs(1)
+        u = Uniform(loc=0.0, scale=M).rvs(1)
         if t < T and u <= functional_lambd(t):
             P.append(float(t))
     return P
+
 
 def HawkesByThinning(T, lambd, tau=None):
     """
@@ -36,7 +40,7 @@ def HawkesByThinning(T, lambd, tau=None):
     tau = P if tau is None else tau
     t = 0
     while t < T:
-        M = lambd(t+epsilon, tau)
+        M = lambd(t + epsilon, tau)
         e = Exponential(rate=M).rvs(1)
         t += e
         u = Uniform(scale=M).rvs(1)
@@ -57,8 +61,8 @@ def HawkesByThinningModified(T, mu, alpha, theta, phi=0):
     a certain time, thus making it possible to take conditional samples
     :return: 1-d numpy ndarray of samples
     """
-    t = 0.
-    d = 0.
+    t = 0.0
+    d = 0.0
     P = []
     while t < T:
         M = mu + alpha * theta * (1 + phi)
@@ -66,7 +70,7 @@ def HawkesByThinningModified(T, mu, alpha, theta, phi=0):
         t += e
         exp_decay = np.exp(-theta * (e + d))
         lambda_ = mu + alpha * theta * exp_decay * (1 + phi)
-        u = Uniform(loc=0., scale=M).rvs(1)
+        u = Uniform(loc=0.0, scale=M).rvs(1)
         if t < T and u <= lambda_:
             P.append(float(t))
             phi = exp_decay * (1 + phi)

@@ -25,18 +25,26 @@ class TestGEV:
     def test_fixed_values(self):
         data = np.random.standard_normal(1000)
         raw = Normal.fit(data)
-        assert raw.loc == approx(0.)
-        assert raw.scale == approx(1.)
-        fixed = Normal.fit(data, loc=1.)
-        assert fixed.loc == 1.
+        assert raw.loc == approx(0.0)
+        assert raw.scale == approx(1.0)
+        fixed = Normal.fit(data, loc=1.0)
+        assert fixed.loc == 1.0
 
 
 def test_cache():
     n = Normal(0, 1)
-    np.testing.assert_array_almost_equal(n.pdf([-1, 0, 1]), [0.24197072, 0.39894228, 0.24197072])
-    np.testing.assert_array_almost_equal(n.pdf([1, 2, 3]), [0.24197072, 0.05399097, 0.00443185])
-    np.testing.assert_array_almost_equal(n.cdf([-1, 0, 1]), [0.15865525, 0.5, 0.84134475])
-    np.testing.assert_array_almost_equal(n.pdf([-1, 0, 1]), [0.24197072, 0.39894228, 0.24197072])
+    np.testing.assert_array_almost_equal(
+        n.pdf([-1, 0, 1]), [0.24197072, 0.39894228, 0.24197072]
+    )
+    np.testing.assert_array_almost_equal(
+        n.pdf([1, 2, 3]), [0.24197072, 0.05399097, 0.00443185]
+    )
+    np.testing.assert_array_almost_equal(
+        n.cdf([-1, 0, 1]), [0.15865525, 0.5, 0.84134475]
+    )
+    np.testing.assert_array_almost_equal(
+        n.pdf([-1, 0, 1]), [0.24197072, 0.39894228, 0.24197072]
+    )
 
 
 def test_basic_with_params():

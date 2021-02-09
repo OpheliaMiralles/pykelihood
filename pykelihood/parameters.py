@@ -6,14 +6,16 @@ from typing import Any, Callable, Dict, Iterable, Tuple, TypeVar, Union
 
 from pykelihood.utils import flatten_dict
 
-_T = TypeVar('_T')
+_T = TypeVar("_T")
 
 
 class Parametrized(object):
     params_names: Tuple[str]
 
     def __init__(self, *params: Union[Parametrized, Any]):
-        self._params = tuple(Parameter(p) if not isinstance(p, Parametrized) else p for p in params)
+        self._params = tuple(
+            Parameter(p) if not isinstance(p, Parametrized) else p for p in params
+        )
 
     def _build_instance(self, **new_params):
         sorted_params = [new_params[p_name] for p_name in self.params_names]
@@ -34,11 +36,13 @@ class Parametrized(object):
     @property
     def flattened_param_dict(self) -> Dict[str, Parametrized]:
         p_dict = flatten_dict(self._flattened_param_dict_helper())
-        return {'_'.join(names): value for names, value in p_dict.items()}
+        return {"_".join(names): value for names, value in p_dict.items()}
 
     def _flattened_param_dict_helper(self):
-        return {name: value._optimisation_param_dict_helper()
-                for name, value in self.param_dict.items()}
+        return {
+            name: value._optimisation_param_dict_helper()
+            for name, value in self.param_dict.items()
+        }
 
     @property
     def optimisation_params(self) -> Tuple[Parametrized]:
@@ -47,12 +51,14 @@ class Parametrized(object):
     @property
     def optimisation_param_dict(self) -> Dict[str, Parametrized]:
         p_dict = flatten_dict(self._optimisation_param_dict_helper())
-        return {'_'.join(names): value for names, value in p_dict.items()}
+        return {"_".join(names): value for names, value in p_dict.items()}
 
     def _optimisation_param_dict_helper(self):
-        return {name: value._optimisation_param_dict_helper()
-                for name, value in self.param_dict.items()
-                if not isinstance(value, ConstantParameter)}
+        return {
+            name: value._optimisation_param_dict_helper()
+            for name, value in self.param_dict.items()
+            if not isinstance(value, ConstantParameter)
+        }
 
     def __repr__(self):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
@@ -76,8 +82,8 @@ class Parametrized(object):
                         new_params[name] = value
                         # no need to look further
                         break
-                    elif name.startswith(p_name+'_'):
-                        remaining = name[len(p_name+'_'):]
+                    elif name.startswith(p_name + "_"):
+                        remaining = name[len(p_name + "_") :]
                         this_param_values[remaining] = value
                 else:  # nobreak
                     if this_param_values:
@@ -95,8 +101,7 @@ class Parametrized(object):
 
 
 class Parameter(float, Parametrized):
-
-    def __new__(cls, x=0.):
+    def __new__(cls, x=0.0):
         return float.__new__(cls, x)
 
     def __init__(self, *args, **kwargs):
@@ -104,11 +109,11 @@ class Parameter(float, Parametrized):
 
     @property
     def params(self):
-        return self,
+        return (self,)
 
     @property
     def optimisation_params(self):
-        return self,
+        return (self,)
 
     def _optimisation_param_dict_helper(self, prefixes=()):
         return self
