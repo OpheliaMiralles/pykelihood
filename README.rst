@@ -142,28 +142,35 @@ then we find all the values we expected: *-1* was the value on the first day, *0
 (*2 / 365 = 0.05*), and there was a noise with std deviation *0.001*.
 
 
-Why do I have to create an instance to be able to fit my data?
-**************************************************************
+Parameter profiling
+*******************
 
-In the above example, we didn't specify any value or trend for the ``scale`` parameter. The reason it still worked is
-that ``pykelihood`` assumed ``scale`` would have the same *form* as ``n``'s scale, which in this case is a simple float
-parameter. Hence using an instance to fit the data avoids having to give a value for all parameters.
+Likelihood based inference relies on parameter estimation. This is why it's important to quantify the sensitivity of a
+chosen model to each of those parameters. The ``stats_utils`` module in ``pykelihood`` includes the ``Likelihood``
+class that allows to link a model to a set of observations by providing goodness of fit metrics and profiles for all
+parameters.
 
-In some cases, it can become tedious to write everything out in one statement:
+>>> from pykelihood.stats_utils import Likelihood
+>>> from pykelihood.distributions import GEV
+>>> fitted_gev = GEV.fit(data, loc=kernels.linear(np.linspace(-1, 1, len(data))))
+>>> ll = Likelihood(fitted_gev, data, inference_confidence=0.99) # level of confidence for tests
+>>> ll.AIC  # the standard fit is without trend
+{'AIC MLE': -359.73533182968777, 'AIC Standard MLE Fit': 623.9896838880583}
+>>> ll.profiles.keys()
+dict_keys(['loc_a', 'loc_b', 'scale', 'shape'])
+>>> ll.profiles["shape"].head(5)
+      loc_a     loc_b     scale     shape   likelihood
+0 -0.000122  1.000812  0.002495 -0.866884  1815.022132
+1 -0.000196  1.000795  0.001964 -0.662803  1882.043541
+2 -0.000283  1.000477  0.001469 -0.458721  1954.283256
+3 -0.000439  1.000012  0.000987 -0.254640  2009.740282
+4 -0.000555  1.000016  0.000948 -0.050558  1992.812843
 
->>> from pykelihood.distributions import Beta
->>> X = np.arange(365)
->>> b = Beta(loc=kernels.linear(X), scale=kernels.linear(X), alpha=kernels.linear(X), beta=kernels.linear(X))
+Confidence intervals can be computed for specified metrics:
 
-To avoid having so many parameters to optimise, you could decide to fix some parameters:
-
->>> b.fit(data, loc=0)
-...
->>> b.fit(data, loc=1)
-...
-
-This syntax allows you to keep ``scale``, ``beta`` and ``alpha`` as linear trends while varying the value for the
-``loc`` parameter.
+>>> def metric(gev): return gev.loc()
+>>> ll.confidence_interval(metric)
+[-4.160287666875364, 4.7039931595123825]
 
 
 ------------
