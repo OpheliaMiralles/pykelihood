@@ -1,7 +1,6 @@
 from abc import abstractmethod
-from collections.abc import MutableSequence
 from functools import partial, wraps
-from typing import Any, Callable, Iterable, Union
+from typing import Any, Callable, Union
 
 import cachetools
 import numpy as np
@@ -13,28 +12,9 @@ from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto,
 from pykelihood import kernels
 from pykelihood.parameters import ConstantParameter, Parametrized
 from pykelihood.stats_utils import ConditioningMethod
+from pykelihood.utils import hash_with_series, ifnone
 
 EULER = -scipy.special.psi(1)
-
-
-def hash_with_series(*args, **kwargs):
-    to_hash = []
-    for v in args:
-        if isinstance(v, pd.Series):
-            v = tuple(v.values)
-        elif isinstance(v, MutableSequence) or isinstance(v, Iterable):
-            v = tuple(v)
-        to_hash.append(v)
-    for k, v in kwargs.items():
-        v = hash_with_series(v)
-        to_hash.append((k, v))
-    return hash(tuple(to_hash))
-
-
-def ifnone(x, default):
-    if x is None:
-        return default
-    return x
 
 
 class Distribution(Parametrized):
