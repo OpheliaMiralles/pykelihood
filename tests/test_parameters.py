@@ -3,14 +3,28 @@ import pytest
 from pykelihood import parameters
 
 
-class TestParameter:
-    def test_parameter(self):
-        p = parameters.Parameter(3.0)
-        assert p == 3.0
+def test_parameter():
+    p = parameters.Parameter(3.0)
+    assert p == 3.0
 
-    def test_parameter_with_params(self):
-        p = parameters.Parameter()
-        assert p.with_params([5.0]) == 5.0
+
+def test_parameter_with_params():
+    p = parameters.Parameter()
+    assert p.with_params([5.0]) == 5.0
+
+
+def test_flattened_params():
+    p1 = parameters.Parameter()
+    p2 = parameters.ConstantParameter()
+    a = parameters.Parametrized(p1, 2)
+    a.params_names = ("x", "m")
+    repr(a)
+    b = parameters.Parametrized(a, p2)
+    b.params_names = ("y", "n")
+    assert set(a.flattened_param_dict.keys()) == {"x", "m"}
+    assert len(a.flattened_params) == 2
+    assert set(b.flattened_param_dict.keys()) == {"y_x", "y_m", "n"}
+    assert len(b.flattened_params) == 3
 
 
 @pytest.fixture(scope="module")
@@ -112,3 +126,4 @@ class TestInnerParameters:
         pf2 = parameters.ParametrizedFunction(func, p=pf)
         q = parameters.Parameter(2)
         assert pf2.with_params(p=q).optimisation_param_dict == {"p": q}
+        assert pf2.with_params(p_p=q).optimisation_param_dict == {"p_p": q}

@@ -9,13 +9,18 @@ from pykelihood.utils import flatten_dict
 _T = TypeVar("_T")
 
 
+def ensure_parametrized(x: Any, constant=False) -> Parametrized:
+    if isinstance(x, Parametrized):
+        return x
+    cls = ConstantParameter if constant else Parameter
+    return cls(x)
+
+
 class Parametrized(object):
     params_names: Tuple[str]
 
     def __init__(self, *params: Union[Parametrized, Any]):
-        self._params = tuple(
-            Parameter(p) if not isinstance(p, Parametrized) else p for p in params
-        )
+        self._params = tuple(ensure_parametrized(p) for p in params)
 
     def _build_instance(self, **new_params):
         sorted_params = [new_params[p_name] for p_name in self.params_names]
@@ -163,7 +168,7 @@ class ParametrizedFunction(Parametrized):
         try:
             return super(ParametrizedFunction, self).__getattr__(param)
         except AttributeError:
-            raise AttributeError(f"No parameter {param} in {self.f.func.__qualname__}")
+            raise AttributeError(f"No parameter {param} in {self.fname}")
 
     def __repr__(self):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]

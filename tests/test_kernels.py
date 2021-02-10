@@ -27,6 +27,12 @@ def test_linear_trend_deferred_data(dataset):
     assert (trend.with_params([3, 4])(dataset) == 3 + dataset * 4).all()
 
 
+def test_trend_in_trend(dataset):
+    inner_trend = kernels.linear(dataset)
+    outer_trend = kernels.linear(b=inner_trend)
+    assert {"a", "b_a", "b_b"} == set(outer_trend.flattened_param_dict.keys())
+
+
 def test_linear_regression(matrix_data):
     regression = kernels.linear_regression(3)
     assert len(regression.optimisation_params) == 3

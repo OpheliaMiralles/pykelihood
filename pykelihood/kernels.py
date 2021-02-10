@@ -5,18 +5,24 @@ from typing import Collection, Sequence, Union
 import numpy as np
 import pandas as pd
 
-from pykelihood.parameters import ConstantParameter, Parameter, ParametrizedFunction
+from pykelihood.parameters import (
+    ConstantParameter,
+    Parameter,
+    ParametrizedFunction,
+    ensure_parametrized,
+)
 
 
 def parametrized_function(**param_defaults):
     def wrapper(f):
-        def wrapped(*args, **param_values):
-            final_params = {
-                p_name: Parameter(v) for p_name, v in param_defaults.items()
-            }
-            final_params.update(
-                {p_name: ConstantParameter(v) for p_name, v in param_values.items()}
-            )
+        def wrapped(*args, **param_values) -> ParametrizedFunction:
+            final_params = {}
+            for p_name, default_value in param_defaults.items():
+                override = param_values.get(p_name)
+                if override is not None:
+                    final_params[p_name] = ensure_parametrized(override, constant=True)
+                else:
+                    final_params[p_name] = ensure_parametrized(default_value)
             return ParametrizedFunction(f, *args, **final_params)
 
         return wrapped
