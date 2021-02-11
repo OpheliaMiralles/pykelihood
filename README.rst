@@ -101,7 +101,7 @@ Let's generate a larger sample from our previous object:
 
 We can fit a ``Normal`` distribution to this data, which will return another ``Normal`` object:
 
->>> n.fit(data)
+>>> Normal.fit(data)
 Normal(loc=1.0250822420920338, scale=1.9376400770300832)
 
 As you can see, the values are slightly different from the moments in the data.
@@ -110,7 +110,7 @@ for the data, and is thus the result of an optimisation (using **scipy.optimize*
 
 We can also fix the value for some parameters if we know them:
 
->>> n.fit(data, loc=1)
+>>> Normal.fit(data, loc=1)
 Normal(loc=1.0, scale=1.9377929687500024)
 
 Trend fitting
@@ -127,13 +127,13 @@ array([-0.99802364, -0.99503679, -0.98900434, -0.98277981, -0.979487  ,
 
 If we try to fit this without a trend, the resulting distribution will miss out on most of the information:
 
->>> n.fit(data)
+>>> Normal.fit(data)
 Normal(loc=-3.6462053656578005e-05, scale=0.5789668679237372)
 
 Let's fit a ``Normal`` distribution with a trend in the loc parameter:
 
 >>> from pykelihood import kernels
->>> n.fit(data, loc=kernels.linear(np.arange(365)))
+>>> Normal.fit(data, loc=kernels.linear(np.arange(365)))
 Normal(loc=linear(a=-1.0000458359290572, b=0.005494714384381866), scale=0.0010055323717468906)
 
 ``kernels.linear(X)`` builds a linear model in the form *a + bX* where *a* and *b* are parameters to
