@@ -344,7 +344,10 @@ def pettitt(data: Union[np.array, pd.DataFrame, pd.Series]):
     the significance probability for location K, approximated for p <= 0.05.
     """
     T = len(data)
-    X = data.reshape((len(data), 1))
+    if isinstance(data, pd.DataFrame) or isinstance(data, pd.Series):
+        X = np.array(data).reshape((len(data), 1))
+    else:
+        X = data.reshape((len(data), 1))
     vector_of_ones = np.ones([1, len(X)])
     matrix_col_X = np.matmul(X, vector_of_ones)
     matrix_lines_X = matrix_col_X.T

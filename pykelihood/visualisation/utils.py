@@ -57,9 +57,9 @@ def get_quantiles_and_confidence_intervals(
 def qq_plot_uniform_scale(
     fit: Distribution,
     data: Union[pd.DataFrame, np.array, pd.Series],
-    path_to_figure: str,
-    ci_confidence=0.99,
+    path_to_figure: str = None,
     figure_name="qq_plot",
+    ci_confidence=0.99,
 ):
     (
         theoretical,
@@ -75,6 +75,8 @@ def qq_plot_uniform_scale(
     plt.xlabel(f"Theoretical quantiles ({n} observations)")
     plt.ylabel("Empirical quantiles")
     plt.tight_layout()
+    if path_to_figure is None:
+        path_to_figure = __file__
     plt.savefig(f"{path_to_figure}/{figure_name}.png")
     plt.clf()
 
@@ -82,9 +84,9 @@ def qq_plot_uniform_scale(
 def qq_plot(
     fit: Distribution,
     data: Union[pd.DataFrame, np.array, pd.Series],
-    path_to_figure: str,
-    ci_confidence=0.99,
+    path_to_figure: str = None,
     figure_name="qq_plot",
+    ci_confidence=0.99,
 ):
     (
         theoretical,
@@ -104,5 +106,7 @@ def qq_plot(
     plt.xlabel(f"Theoretical quantiles ({n} observations)")
     plt.ylabel("Empirical quantiles")
     plt.tight_layout()
+    if path_to_figure is None:
+        path_to_figure = __file__
     plt.savefig(f"{path_to_figure}/{figure_name}.png")
     plt.clf()
