@@ -24,7 +24,7 @@ def get_quantiles_and_confidence_intervals_uniform_scale(
     levels = np.linspace(0.01, 0.99, 100)
     for level in levels:
         metric = lambda x: pd.Series(x.cdf(data)).quantile(level)
-        CI = ll.confidence_interval_for_specified_metric(metric)
+        CI = ll.confidence_interval(metric)
         min_max.append(CI)
     min_max = pd.DataFrame(
         min_max, columns=["lower_bound", "upper_bound"], index=levels
@@ -46,7 +46,7 @@ def get_quantiles_and_confidence_intervals(
     theoretical = fit.inverse_cdf(levels)
     for level in levels:
         metric = lambda x: x.inverse_cdf(level)
-        CI = ll.confidence_interval_for_specified_metric(metric)
+        CI = ll.confidence_interval(metric)
         min_max.append(CI)
     min_max = pd.DataFrame(
         min_max, columns=["lower_bound", "upper_bound"], index=levels

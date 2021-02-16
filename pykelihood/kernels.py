@@ -147,7 +147,7 @@ def exponential_linear_regression(
             ndim = x.shape[1]
         else:
             raise ValueError(
-                "Consider using kernels.linear for a 1-dimensional data array"
+                "Consider using kernels.expo for a 1-dimensional data array"
             )
     fixed = {}
     for p_name, p_value in constraints.items():
