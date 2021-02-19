@@ -2,7 +2,7 @@ from itertools import count
 
 import numpy as np
 
-from pykelihood import kernels
+from pykelihood import kernels, parameters
 
 
 def test_linear_trend(dataset):
@@ -64,6 +64,13 @@ def test_linear_regression_with_name_constraint(matrix_data):
     assert (
         regression.with_params([3])() == ([5, 3, 2] * matrix_data).sum(axis=1)
     ).all()
+
+
+def test_linear_regression_with_name_constraint_parameter(matrix_data):
+    p = parameters.Parameter(5)
+    regression = kernels.linear_regression(matrix_data, first=p, beta_third=2)
+    assert len(regression.optimisation_params) == 2
+    assert len(regression.flattened_params) == 3
 
 
 def test_linear_regression_with_intercept(matrix_data):

@@ -5,12 +5,7 @@ from typing import Collection, Sequence, Union
 import numpy as np
 import pandas as pd
 
-from pykelihood.parameters import (
-    ConstantParameter,
-    Parameter,
-    ParametrizedFunction,
-    ensure_parametrized,
-)
+from pykelihood.parameters import Parameter, ParametrizedFunction, ensure_parametrized
 
 
 def parametrized_function(**param_defaults):
@@ -102,7 +97,7 @@ def linear_regression(
             index = tuple(x.columns).index(p_name) + 1
         else:
             index = int(p_name)
-        fixed[index] = ConstantParameter(p_value)
+        fixed[index] = ensure_parametrized(p_value, constant=True)
 
     if 0 in fixed and not add_intercept:
         raise ValueError(
@@ -157,7 +152,7 @@ def exponential_linear_regression(
             index = tuple(x.columns).index(p_name) + 1
         else:
             index = int(p_name)
-        fixed[index] = ConstantParameter(p_value)
+        fixed[index] = ensure_parametrized(p_value, constant=True)
 
     if 0 in fixed and not add_intercept:
         raise ValueError(
@@ -223,7 +218,7 @@ def polynomial_regression(
             raise ValueError(f"Unable to parse parameter constraint: {p_name}")
         if isinstance(x, pd.DataFrame) and column in x.columns:
             column = list(x.columns).index(column) + 1
-        fixed[(int(column), int(deg))] = ConstantParameter(p_value)
+        fixed[(int(column), int(deg))] = ensure_parametrized(p_value, constant=True)
     params = {}
     for col_idx, max_degree in enumerate(degree):
         for d in range(1, max_degree + 1):
@@ -255,7 +250,7 @@ def categories_qualitative(
     params = {
         value: next(parameter)
         if value not in fixed_values
-        else ConstantParameter(fixed_values[value])
+        else ensure_parametrized(fixed_values[value], constant=True)
         for value in unique_values
     }
 
