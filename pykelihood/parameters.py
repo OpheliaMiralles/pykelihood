@@ -45,7 +45,7 @@ class Parametrized(object):
 
     def _flattened_param_dict_helper(self):
         return {
-            name: value._optimisation_param_dict_helper()
+            name: value._flattened_param_dict_helper()
             for name, value in self.param_dict.items()
         }
 
@@ -116,11 +116,14 @@ class Parameter(float, Parametrized):
     def params(self):
         return (self,)
 
+    def _flattened_param_dict_helper(self):
+        return self
+
     @property
     def optimisation_params(self):
         return (self,)
 
-    def _optimisation_param_dict_helper(self, prefixes=()):
+    def _optimisation_param_dict_helper(self):
         return self
 
     def with_params(self, params):

@@ -27,6 +27,21 @@ def test_flattened_params():
     assert len(b.flattened_params) == 3
 
 
+def test_flattened_params_with_embedded_constant():
+    p1 = parameters.Parameter()
+    p2 = parameters.ConstantParameter()
+    a = parameters.Parametrized(p1, p2)
+    a.params_names = ("x", "m")
+    b = parameters.Parametrized(a)
+    b.params_names = "y"
+    assert set(a.flattened_param_dict.keys()) == {"x", "m"}
+    assert len(a.flattened_params) == 2
+    assert set(b.flattened_param_dict.keys()) == {"y_x", "y_m"}
+    assert len(b.flattened_params) == 2
+    assert set(b.optimisation_param_dict.keys()) == {"y_x"}
+    assert len(b.optimisation_params) == 1
+
+
 @pytest.fixture(scope="module")
 def func():
     def f(x, p):
