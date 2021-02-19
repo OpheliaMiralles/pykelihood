@@ -54,7 +54,7 @@ class Distribution(Parametrized):
         return np.log(self.pdf(x, *args, **kwds))
 
     def inverse_cdf(self, q: float):
-        return self.isf(1 - q)
+        return self.ppf(q)
 
     def log_likelihood(
         self,
