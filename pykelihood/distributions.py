@@ -34,6 +34,10 @@ class Distribution(Parametrized):
         return NotImplemented
 
     @abstractmethod
+    def ppf(self, q: float):
+        return NotImplemented
+
+    @abstractmethod
     def pdf(self, x: Union[np.array, float]):
         return NotImplemented
 
@@ -54,7 +58,10 @@ class Distribution(Parametrized):
         return np.log(self.pdf(x, *args, **kwds))
 
     def inverse_cdf(self, q: float):
-        return self.ppf(q)
+        if hasattr(self, "ppf"):
+            return self.ppf(q)
+        else:
+            return self.isf(1 - q)
 
     def log_likelihood(
         self,
@@ -702,7 +709,8 @@ class PointProcess(Distribution):
                         "SimulBSup",
                     ],
                     index=[
-                        time_scale[1] + pd.to_timedelta(f"{self.npp*i} {time_scale[0]}")
+                        time_scale[1]
+                        + pd.to_timedelta(f"{self.npp * i} {time_scale[0]}")
                     ],
                 )
             )
@@ -914,3 +922,58 @@ class CompositionDistribution(Distribution):
         )
         res = list(result.x)
         return obj.with_params(res)
+
+
+class TruncatedDistribution(Distribution):
+    def __init__(self, distribution: Distribution, upper_bound=None, lower_bound=None):
+        super(TruncatedDistribution, self).__init__()
+        if upper_bound is None and lower_bound is None:
+            raise ValueError(
+                "A lower bound OR upper bound should be provided for the truncated distribution."
+            )
+        if upper_bound is None:
+            upper_bound = np.inf
+        elif lower_bound is None:
+            lower_bound = -np.inf
+        self.distribution = distribution
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
+
+    def rvs(self, size: int):
+        u = Uniform(
+            self.distribution.cdf(self.lower_bound),
+            self.distribution.cdf(self.upper_bound),
+        )
+        return self.distribution.inverse_cdf(u.rvs(size))
+
+    def pdf(self, x: Union[np.array, float]):
+        return np.where(
+            self.lower_bound <= x <= self.upper_bound,
+            self.distribution.pdf(x)
+            / (
+                self.distribution.cdf(self.upper_bound)
+                - self.distribution.cdf(self.lower_bound)
+            ),
+            0.0,
+        )
+
+    def cdf(self, x: Union[np.array, float]):
+        denom = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
+            self.lower_bound
+        )
+        right_range_x = (
+            self.distribution.cdf(x) - self.distribution.cdf(self.lower_bound)
+        ) / denom
+        return np.where(self.lower_bound <= x <= self.upper_bound, right_range_x, 0.0)
+
+    def isf(self, q: float):
+        mult = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
+            self.lower_bound
+        )
+        return self.distribution.isf(self.distribution.isf(self.upper_bound) + q * mult)
+
+    def ppf(self, q: float):
+        mult = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
+            self.lower_bound
+        )
+        return self.distribution.ppf(self.distribution.cdf(self.lower_bound) + q * mult)
