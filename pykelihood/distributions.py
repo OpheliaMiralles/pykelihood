@@ -2,7 +2,6 @@ from abc import abstractmethod
 from functools import partial, wraps
 from typing import Any, Callable, Union
 
-import cachetools
 import numpy as np
 import pandas as pd
 import scipy.special
@@ -12,7 +11,7 @@ from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto,
 from pykelihood import kernels
 from pykelihood.parameters import ConstantParameter, Parametrized
 from pykelihood.stats_utils import ConditioningMethod
-from pykelihood.utils import hash_with_series, ifnone
+from pykelihood.utils import ifnone
 
 EULER = -scipy.special.psi(1)
 
@@ -178,9 +177,6 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
         f = getattr(self.base_module, item)
         g = partial(self._wrapper, f)
         g = self._correct_trends(g)
-        g = cachetools.cached(
-            self._cache, key=lambda x: hash((item, hash_with_series(x)))
-        )(g)
         self.__dict__[item] = g
         return g
 
@@ -191,7 +187,6 @@ class Uniform(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0):
         super(Uniform, self).__init__(loc, scale)
-        self._cache = {}
 
     def _wrapper(self, f, x, loc=None, scale=None):
         return f(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()))
@@ -206,7 +201,6 @@ class Exponential(ScipyDistribution):
 
     def __init__(self, loc=0.0, rate=1.0):
         super(Exponential, self).__init__(loc, rate)
-        self._cache = {}
 
     def _wrapper(self, f, x, loc=None, rate=None):
         if rate is not None:
@@ -225,7 +219,6 @@ class Gamma(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super(Gamma, self).__init__(loc, scale, shape)
-        self._cache = {}
 
     def _wrapper(self, f, x, loc=None, scale=None, shape=None):
         return f(
@@ -250,7 +243,6 @@ class Pareto(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, alpha=1.0):
         super(Pareto, self).__init__(loc, scale, alpha)
-        self._cache = {}
 
     def _wrapper(self, f, x, loc=None, scale=None, alpha=None):
         return f(
@@ -275,7 +267,6 @@ class Beta(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, alpha=2.0, beta=1.0):
         super(Beta, self).__init__(loc, scale, alpha, beta)
-        self._cache = {}
 
     def _wrapper(self, f, x, loc=None, scale=None, alpha=None, beta=None):
         return f(
@@ -302,7 +293,6 @@ class Normal(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0):
         super(Normal, self).__init__(loc, scale)
-        self._cache = {}
 
     def _wrapper(self, f, x, loc=None, scale=None):
         return f(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()))
@@ -319,7 +309,6 @@ class GEV(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super(GEV, self).__init__(loc, scale, shape)
-        self._cache = {}
 
     def lb_shape(self, data):
         x_min = data.min()
@@ -367,7 +356,6 @@ class MixtureExponentialModel(Distribution):
 
     def __init__(self, theta=0.99):
         super(MixtureExponentialModel, self).__init__(theta)
-        self._cache = {}
 
     def rvs(self, size):
         theta = self.theta()
@@ -399,7 +387,6 @@ class GPD(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super(GPD, self).__init__(loc, scale, shape)
-        self._cache = {}
 
     def _wrapper(self, f, x, loc=None, scale=None, shape=None):
         return f(
