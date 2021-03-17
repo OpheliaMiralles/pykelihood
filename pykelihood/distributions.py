@@ -2,7 +2,6 @@ from abc import abstractmethod
 from functools import partial, wraps
 from typing import Any, Callable, Sequence, Type, TypeVar, Union
 
-import cachetools
 import numpy as np
 import pandas as pd
 import scipy.special
@@ -11,7 +10,7 @@ from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto,
 
 from pykelihood import kernels
 from pykelihood.parameters import ConstantParameter, Parametrized
-from pykelihood.utils import hash_with_series, ifnone
+from pykelihood.utils import ifnone
 
 T = TypeVar("T")
 SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
@@ -33,7 +32,7 @@ class Distribution(Parametrized):
         return (self.__class__.__name__,) + self.params
 
     @abstractmethod
-    def rvs(self, size: int):
+    def rvs(self, size: int, *args, **kwargs) -> np.ndarray:
         return NotImplemented
 
     @abstractmethod
@@ -163,15 +162,34 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
 
         return g
 
+    def _wrapper(self, f, x, _is_rvs=True, **extra_args):
+        params = {}
+        other_args = {}
+        for key, value in extra_args.items():
+            if key in self.params_names:
+                params[key] = value
+            else:
+                other_args[key] = value
+        if not _is_rvs:
+            return f(x, **self._to_scipy_args(**params), **other_args)
+        return f(**self._to_scipy_args(**params), size=x, **other_args)
+
     def __getattr__(self, item):
-        if item not in ("pdf", "logpdf", "cdf", "logcdf", "ppf", "isf", "sf", "logsf"):
+        if item not in (
+            "pdf",
+            "logpdf",
+            "cdf",
+            "logcdf",
+            "ppf",
+            "isf",
+            "sf",
+            "logsf",
+            "rvs",
+        ):
             return super(ScipyDistribution, self).__getattr__(item)
         f = getattr(self.base_module, item)
-        g = partial(self._wrapper, f)
+        g = partial(self._wrapper, f, _is_rvs=(item == "rvs"))
         g = self._correct_trends(g)
-        g = cachetools.cached(
-            self._cache, key=lambda x: hash((item, hash_with_series(x)))
-        )(g)
         self.__dict__[item] = g
         return g
 
@@ -182,13 +200,9 @@ class Uniform(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0):
         super(Uniform, self).__init__(loc, scale)
-        self._cache = {}
 
-    def _wrapper(self, f, x, loc=None, scale=None):
-        return f(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()))
-
-    def rvs(self, size, loc=None, scale=None):
-        return uniform.rvs(ifnone(loc, self.loc()), ifnone(scale, self.scale()), size)
+    def _to_scipy_args(self, loc=None, scale=None):
+        return {"loc": ifnone(loc, self.loc()), "scale": ifnone(scale, self.scale())}
 
 
 class Exponential(ScipyDistribution):
@@ -197,17 +211,11 @@ class Exponential(ScipyDistribution):
 
     def __init__(self, loc=0.0, rate=1.0):
         super(Exponential, self).__init__(loc, rate)
-        self._cache = {}
 
-    def _wrapper(self, f, x, loc=None, rate=None):
+    def _to_scipy_args(self, loc=None, rate=None):
         if rate is not None:
             rate = 1 / rate
-        return f(x, ifnone(loc, self.loc()), ifnone(rate, 1 / self.rate()))
-
-    def rvs(self, size, loc=None, rate=None):
-        return self.base_module.rvs(
-            ifnone(loc, self.loc()), ifnone(rate, 1 / self.rate()), size
-        )
+        return {"loc": ifnone(loc, self.loc()), "scale": ifnone(rate, 1 / self.rate())}
 
 
 class Gamma(ScipyDistribution):
@@ -216,23 +224,13 @@ class Gamma(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super(Gamma, self).__init__(loc, scale, shape)
-        self._cache = {}
 
-    def _wrapper(self, f, x, loc=None, scale=None, shape=None):
-        return f(
-            x,
-            ifnone(shape, self.shape()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-        )
-
-    def rvs(self, size, loc=None, scale=None, shape=None):
-        return self.base_module.rvs(
-            ifnone(shape, self.shape()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-            size,
-        )
+    def _to_scipy_args(self, loc=None, scale=None, shape=None):
+        return {
+            "a": ifnone(shape, self.shape()),
+            "loc": ifnone(loc, self.loc()),
+            "scale": ifnone(scale, self.scale()),
+        }
 
 
 class Pareto(ScipyDistribution):
@@ -241,23 +239,13 @@ class Pareto(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, alpha=1.0):
         super(Pareto, self).__init__(loc, scale, alpha)
-        self._cache = {}
 
-    def _wrapper(self, f, x, loc=None, scale=None, alpha=None):
-        return f(
-            x,
-            ifnone(alpha, self.alpha()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-        )
-
-    def rvs(self, size, loc=None, scale=None, alpha=None):
-        return self.base_module.rvs(
-            ifnone(alpha, self.alpha()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-            size,
-        )
+    def _to_scipy_args(self, loc=None, scale=None, alpha=None):
+        return {
+            "c": ifnone(alpha, self.alpha()),
+            "loc": ifnone(loc, self.loc()),
+            "scale": ifnone(scale, self.scale()),
+        }
 
 
 class Beta(ScipyDistribution):
@@ -266,25 +254,14 @@ class Beta(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, alpha=2.0, beta=1.0):
         super(Beta, self).__init__(loc, scale, alpha, beta)
-        self._cache = {}
 
-    def _wrapper(self, f, x, loc=None, scale=None, alpha=None, beta=None):
-        return f(
-            x,
-            ifnone(alpha, self.alpha()),
-            ifnone(beta, self.beta()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-        )
-
-    def rvs(self, size, loc=None, scale=None, alpha=None, beta=None):
-        return self.base_module.rvs(
-            ifnone(alpha, self.alpha()),
-            ifnone(beta, self.beta()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-            size,
-        )
+    def _to_scipy_args(self, loc=None, scale=None, alpha=None, beta=None):
+        return {
+            "a": ifnone(alpha, self.alpha()),
+            "b": ifnone(beta, self.beta()),
+            "loc": ifnone(loc, self.loc()),
+            "scale": ifnone(scale, self.scale()),
+        }
 
 
 class Normal(ScipyDistribution):
@@ -293,15 +270,9 @@ class Normal(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0):
         super(Normal, self).__init__(loc, scale)
-        self._cache = {}
 
-    def _wrapper(self, f, x, loc=None, scale=None):
-        return f(x, ifnone(loc, self.loc()), ifnone(scale, self.scale()))
-
-    def rvs(self, size, loc=None, scale=None):
-        return self.base_module.rvs(
-            ifnone(loc, self.loc()), ifnone(scale, self.scale()), size
-        )
+    def _to_scipy_args(self, loc=None, scale=None):
+        return {"loc": ifnone(loc, self.loc()), "scale": ifnone(scale, self.scale())}
 
 
 class GEV(ScipyDistribution):
@@ -310,7 +281,6 @@ class GEV(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super(GEV, self).__init__(loc, scale, shape)
-        self._cache = {}
 
     def lb_shape(self, data):
         x_min = data.min()
@@ -332,25 +302,14 @@ class GEV(ScipyDistribution):
         else:
             return self.scale / (x_max - self.loc())
 
-    def _wrapper(self, f, x, loc=None, scale=None, shape=None):
+    def _to_scipy_args(self, loc=None, scale=None, shape=None):
         if shape is not None:
             shape = -shape
-        return f(
-            x,
-            ifnone(shape, -self.shape()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-        )
-
-    def rvs(self, size, shape=None, loc=None, scale=None):
-        if shape is not None:
-            shape = -shape
-        return self.base_module.rvs(
-            ifnone(shape, -self.shape()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-            size,
-        )
+        return {
+            "c": ifnone(shape, -self.shape()),
+            "loc": ifnone(loc, self.loc()),
+            "scale": ifnone(scale, self.scale()),
+        }
 
 
 class MixtureExponentialModel(Distribution):
@@ -358,7 +317,6 @@ class MixtureExponentialModel(Distribution):
 
     def __init__(self, theta=0.99):
         super(MixtureExponentialModel, self).__init__(theta)
-        self._cache = {}
 
     def rvs(self, size):
         theta = self.theta()
@@ -390,23 +348,13 @@ class GPD(ScipyDistribution):
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super(GPD, self).__init__(loc, scale, shape)
-        self._cache = {}
 
-    def _wrapper(self, f, x, loc=None, scale=None, shape=None):
-        return f(
-            x,
-            ifnone(shape, self.shape()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-        )
-
-    def rvs(self, size, loc=None, scale=None, shape=None):
-        return self.base_module.rvs(
-            ifnone(shape, self.shape()),
-            ifnone(loc, self.loc()),
-            ifnone(scale, self.scale()),
-            size,
-        )
+    def _to_scipy_args(self, loc=None, scale=None, shape=None):
+        return {
+            "c": ifnone(shape, self.shape()),
+            "loc": ifnone(loc, self.loc()),
+            "scale": ifnone(scale, self.scale()),
+        }
 
 
 class ExtendedGPD(Distribution):

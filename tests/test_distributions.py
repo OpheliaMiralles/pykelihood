@@ -73,3 +73,18 @@ def test_named_with_params_partial_assignment():
     m = n.with_params(scale=3)
     assert m.loc == 0
     assert m.scale == 3
+
+
+def test_rvs():
+    n = Normal(1)
+    sample = n.rvs(10000, scale=2)
+    assert np.mean(sample) == approx(1)
+    assert np.std(sample) == approx(2)
+
+
+def test_rvs_random_state():
+    n = Normal()
+    rand_state = 10
+    sample = n.rvs(10000, random_state=rand_state)
+    sample2 = n.rvs(10000, random_state=rand_state)
+    assert (sample == sample2).all()
