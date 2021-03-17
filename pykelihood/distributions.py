@@ -86,6 +86,9 @@ class Distribution(Parametrized):
                     param_dict[name] = param_dict[name].with_params(subdic.values())
         return param_dict
 
+    def _apply_constraints(self, data):
+        return data
+
     @classmethod
     def fit(
         cls: Type[SomeDistribution],
@@ -97,17 +100,18 @@ class Distribution(Parametrized):
         init_parms = {}
         for k in cls.params_names:
             if k in fixed_values:
-                v = fixed_values[k]
+                v = fixed_values.pop(k)
                 if isinstance(v, Parametrized):
                     init_parms[k] = v
                 else:
                     init_parms[k] = ConstantParameter(v)
-        init = cls(**init_parms)
+        init = cls(**init_parms, **fixed_values)
         x0 = x0 if x0 is not None else init.optimisation_params
         if len(x0) != len(init.optimisation_params):
             raise ValueError(
                 f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}"
             )
+        data = init._apply_constraints(data)
 
         def to_minimize(x) -> float:
             return score(init.with_params(x), data)
@@ -864,55 +868,62 @@ class CompositionDistribution(Distribution):
 
 
 class TruncatedDistribution(Distribution):
-    def __init__(self, distribution: Distribution, upper_bound=None, lower_bound=None):
-        super(TruncatedDistribution, self).__init__()
-        if upper_bound is None and lower_bound is None:
-            raise ValueError(
-                "A lower bound OR upper bound should be provided for the truncated distribution."
-            )
-        if upper_bound is None:
-            upper_bound = np.inf
-        elif lower_bound is None:
-            lower_bound = -np.inf
-        self.distribution = distribution
+    params_names = ("distribution",)
+
+    def __init__(
+        self, distribution: Distribution, lower_bound=-np.inf, upper_bound=np.inf
+    ):
+        if upper_bound == lower_bound:
+            raise ValueError("Both bounds are equal.")
+        super(TruncatedDistribution, self).__init__(distribution)
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
+        lower_cdf = self.distribution.cdf(self.lower_bound)
+        upper_cdf = self.distribution.cdf(self.upper_bound)
+        self._normalizer = upper_cdf - lower_cdf
 
-    def rvs(self, size: int):
+    def _build_instance(self, **new_params):
+        distribution = new_params.pop("distribution")
+        if new_params:
+            raise ValueError(f"Unexpected arguments: {new_params}")
+        return type(self)(distribution, self.lower_bound, self.upper_bound)
+
+    def _valid_indices(self, x: np.ndarray):
+        return (self.lower_bound <= x) & (x <= self.upper_bound)
+
+    def _apply_constraints(self, x):
+        return x[self._valid_indices(x)]
+
+    def fit_instance(self, *args, **kwargs):
+        kwargs.update(lower_bound=self.lower_bound, upper_bound=self.upper_bound)
+        return super().fit_instance(*args, **kwargs)
+
+    def rvs(self, size: int, *args, **kwargs):
         u = Uniform(
             self.distribution.cdf(self.lower_bound),
             self.distribution.cdf(self.upper_bound),
         )
-        return self.distribution.inverse_cdf(u.rvs(size))
+        return self.distribution.inverse_cdf(u.rvs(size, *args, **kwargs))
 
     def pdf(self, x: Obs):
         return np.where(
-            self.lower_bound <= x <= self.upper_bound,
-            self.distribution.pdf(x)
-            / (
-                self.distribution.cdf(self.upper_bound)
-                - self.distribution.cdf(self.lower_bound)
-            ),
+            self._valid_indices(x),
+            self.distribution.pdf(x) / self._normalizer,
             0.0,
         )
 
     def cdf(self, x: Obs):
-        denom = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
-            self.lower_bound
-        )
         right_range_x = (
             self.distribution.cdf(x) - self.distribution.cdf(self.lower_bound)
-        ) / denom
-        return np.where(self.lower_bound <= x <= self.upper_bound, right_range_x, 0.0)
+        ) / self._normalizer
+        return np.where(self._valid_indices(x), right_range_x, 0.0)
 
     def isf(self, q: Obs):
-        mult = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
-            self.lower_bound
+        return self.distribution.isf(
+            self.distribution.isf(self.upper_bound) + q * self._normalizer
         )
-        return self.distribution.isf(self.distribution.isf(self.upper_bound) + q * mult)
 
     def ppf(self, q: Obs):
-        mult = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
-            self.lower_bound
+        return self.distribution.ppf(
+            self.distribution.cdf(self.lower_bound) + q * self._normalizer
         )
-        return self.distribution.ppf(self.distribution.cdf(self.lower_bound) + q * mult)

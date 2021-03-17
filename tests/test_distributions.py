@@ -3,7 +3,7 @@ import pytest
 from scipy.stats import genextreme
 
 from pykelihood import kernels
-from pykelihood.distributions import GEV, Normal
+from pykelihood.distributions import GEV, Normal, TruncatedDistribution
 
 REL_PREC = 1e-7
 ABS_PREC = 0.1
@@ -88,3 +88,22 @@ def test_rvs_random_state():
     sample = n.rvs(10000, random_state=rand_state)
     sample2 = n.rvs(10000, random_state=rand_state)
     assert (sample == sample2).all()
+
+
+def test_truncated_distribution_cdf():
+    n = Normal()
+    truncated = TruncatedDistribution(Normal(), lower_bound=0)
+    assert truncated.cdf(-1) == 0
+    assert truncated.cdf(0) == 0
+    assert truncated.cdf(1) == 2 * (n.cdf(1) - n.cdf(0))
+    assert truncated.cdf(np.inf) == 1
+
+
+def test_truncated_distribution_fit():
+    n = Normal(2)
+    data = n.rvs(10000)
+    trunc_data = data[data >= 0]
+    truncated = TruncatedDistribution(Normal(), lower_bound=0)
+    fitted_all_data = truncated.fit_instance(data)
+    fitted_trunc = truncated.fit_instance(trunc_data)
+    assert fitted_trunc.flattened_params == approx(fitted_all_data.flattened_params)
