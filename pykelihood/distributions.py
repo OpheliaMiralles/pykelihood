@@ -358,9 +358,9 @@ class GPD(ScipyDistribution):
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super(GPD, self).__init__(loc, scale, shape)
 
-    def _wrapper(self, f, x, loc=None, scale=None, shape=None):
+    def _to_scipy_args(self, loc=None, scale=None, shape=None):
         return {
-            "shape": ifnone(shape, self.shape()),
+            "c": ifnone(shape, self.shape()),
             "loc": ifnone(loc, self.loc()),
             "scale": ifnone(scale, self.scale()),
         }
