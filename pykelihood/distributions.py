@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from functools import partial, wraps
-from typing import Any, Callable, Union
+from typing import Any, Callable, Sequence, Type, TypeVar, Union
 
 import cachetools
 import numpy as np
@@ -11,10 +11,21 @@ from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto,
 
 from pykelihood import kernels
 from pykelihood.parameters import ConstantParameter, Parametrized
-from pykelihood.stats_utils import ConditioningMethod
 from pykelihood.utils import hash_with_series, ifnone
 
+T = TypeVar("T")
+SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
+Obs = Union[float, np.ndarray, pd.Series]
+
 EULER = -scipy.special.psi(1)
+
+
+def log_likelihood(distribution: "Distribution", data: Obs):
+    return np.sum(distribution.logpdf(data))
+
+
+def opposite_log_likelihood(distribution: "Distribution", data: Obs):
+    return -log_likelihood(distribution, data)
 
 
 class Distribution(Parametrized):
@@ -26,61 +37,42 @@ class Distribution(Parametrized):
         return NotImplemented
 
     @abstractmethod
-    def cdf(self, x: Union[np.array, float]):
+    def cdf(self, x: Obs):
         return NotImplemented
 
     @abstractmethod
-    def isf(self, q: float):
+    def isf(self, q: Obs):
         return NotImplemented
 
     @abstractmethod
-    def ppf(self, q: float):
+    def ppf(self, q: Obs):
         return NotImplemented
 
     @abstractmethod
-    def pdf(self, x: Union[np.array, float]):
+    def pdf(self, x: Obs):
         return NotImplemented
 
     @classmethod
     def param_dict_to_vec(cls, x: dict):
         return tuple(x.get(p) for p in cls.params_names)
 
-    def sf(self, x: Union[np.array, float]):
+    def sf(self, x: Obs):
         return 1 - self.cdf(x)
 
-    def logcdf(self, x: Union[np.array, float]):
+    def logcdf(self, x: Obs):
         return np.log(self.cdf(x))
 
-    def logsf(self, x: Union[np.array, float]):
+    def logsf(self, x: Obs):
         return np.log(self.sf(x))
 
-    def logpdf(self, x: Union[pd.Series, np.array, float], *args, **kwds):
-        return np.log(self.pdf(x, *args, **kwds))
+    def logpdf(self, x: Obs):
+        return np.log(self.pdf(x))
 
-    def inverse_cdf(self, q: float):
+    def inverse_cdf(self, q: Obs):
         if hasattr(self, "ppf"):
             return self.ppf(q)
         else:
             return self.isf(1 - q)
-
-    def log_likelihood(
-        self,
-        data: Union[np.array, pd.Series],
-        penalty: Callable = ConditioningMethod.no_conditioning,
-        *args,
-        **kwds,
-    ):
-        res = self.logpdf(data, *args, **kwds)
-        return np.sum(res) - penalty(data, self)
-
-    def opposite_log_likelihood(
-        self,
-        data: Union[np.array, pd.Series],
-        penalty: Callable = ConditioningMethod.no_conditioning,
-        *args,
-        **kwds,
-    ):
-        return -self.log_likelihood(data, penalty, *args, **kwds)
 
     def _process_fit_params(self, **kwds):
         param_dict = self.param_dict.copy()
@@ -97,12 +89,12 @@ class Distribution(Parametrized):
 
     @classmethod
     def fit(
-        cls,
-        data,
-        x0=None,
-        penalty=ConditioningMethod.no_conditioning,
+        cls: Type[SomeDistribution],
+        data: Obs,
+        x0: Sequence[float] = None,
+        score: Callable[["Distribution", Obs], float] = opposite_log_likelihood,
         **fixed_values,
-    ):
+    ) -> SomeDistribution:
         init_parms = {}
         for k in cls.params_names:
             if k in fixed_values:
@@ -118,9 +110,8 @@ class Distribution(Parametrized):
                 f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}"
             )
 
-        def to_minimize(x):
-            o = init.with_params(x)
-            return o.opposite_log_likelihood(data, penalty=penalty)
+        def to_minimize(x) -> float:
+            return score(init.with_params(x), data)
 
         res = minimize(to_minimize, x0, method="Nelder-Mead")
         return init.with_params(res.x)
@@ -128,13 +119,13 @@ class Distribution(Parametrized):
     def fit_instance(
         self,
         data,
-        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
+        score=opposite_log_likelihood,
         **kwds,
     ):
         param_dict = self._process_fit_params(**(fixed_params or {}))
         kwds.update(param_dict)
-        return self.fit(data, penalty=penalty, **kwds)
+        return self.fit(data, score=score, **kwds)
 
 
 class AvoidAbstractMixin(object):
@@ -431,20 +422,20 @@ class ExtendedGPD(Distribution):
     def rvs(self, size: int):
         return self.inverse_cdf(Uniform().rvs(size))
 
-    def cdf(self, x: Union[np.array, float]):
+    def cdf(self, x: Obs):
         return 1 - np.clip(
             1 + self.shape * ((x - self.loc) / self.scale), 0, a_max=None
         ) ** (-1 / self.shape)
 
-    def inverse_cdf(self, q: float):
+    def inverse_cdf(self, q: Obs):
         return self.loc + self.scale * ((1 - q) ** (-self.shape) - 1) / self.shape
 
-    def pdf(self, x: Union[np.array, float]):
+    def pdf(self, x: Obs):
         return (1 / self.scale) * np.clip(
             1 + self.shape * ((x - self.loc) / self.scale), 0, a_max=None
         ) ** (-1 / self.shape - 1)
 
-    def isf(self, q: float):
+    def isf(self, q: Obs):
         return self.loc + self.scale * (q ** (-self.shape) - 1) / self.shape
 
 
@@ -519,18 +510,18 @@ class PointProcess(Distribution):
     def fit_instance(
         self,
         data,
-        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
+        score=opposite_log_likelihood,
         **kwds,
     ):
         kwds.update(**(fixed_params or {}))
-        return self.fit(data, penalty=penalty, **kwds)
+        return self.fit(data, score=score, **kwds)
 
     def fit(
         self,
         data,
-        penalty=ConditioningMethod.no_conditioning,
         x0=None,
+        score=opposite_log_likelihood,
         opt_method="Nelder-Mead",
         plot=False,
         *args,
@@ -891,18 +882,18 @@ class CompositionDistribution(Distribution):
     def fit_instance(
         self,
         data,
-        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
+        score=opposite_log_likelihood,
         **kwds,
     ):
         kwds.update(**(fixed_params or {}))
-        return self.fit(data, penalty=penalty, **kwds)
+        return self.fit(data, score=score, **kwds)
 
     def fit(
         self,
         data: pd.Series,
-        penalty=ConditioningMethod.no_conditioning,
         x0=None,
+        score=opposite_log_likelihood,
         opt_method="Nelder-Mead",
         *args,
         **kwds,
@@ -912,7 +903,7 @@ class CompositionDistribution(Distribution):
         x0 = obj.optimisation_params if x0 is None else x0
 
         def to_minimize(var_params):
-            return obj.with_params(var_params).opposite_log_likelihood(data, penalty)
+            return score(obj.with_params(var_params), data)
 
         result = minimize(
             to_minimize,
@@ -946,7 +937,7 @@ class TruncatedDistribution(Distribution):
         )
         return self.distribution.inverse_cdf(u.rvs(size))
 
-    def pdf(self, x: Union[np.array, float]):
+    def pdf(self, x: Obs):
         return np.where(
             self.lower_bound <= x <= self.upper_bound,
             self.distribution.pdf(x)
@@ -957,7 +948,7 @@ class TruncatedDistribution(Distribution):
             0.0,
         )
 
-    def cdf(self, x: Union[np.array, float]):
+    def cdf(self, x: Obs):
         denom = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
             self.lower_bound
         )
@@ -966,13 +957,13 @@ class TruncatedDistribution(Distribution):
         ) / denom
         return np.where(self.lower_bound <= x <= self.upper_bound, right_range_x, 0.0)
 
-    def isf(self, q: float):
+    def isf(self, q: Obs):
         mult = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
             self.lower_bound
         )
         return self.distribution.isf(self.distribution.isf(self.upper_bound) + q * mult)
 
-    def ppf(self, q: float):
+    def ppf(self, q: Obs):
         mult = self.distribution.cdf(self.upper_bound) - self.distribution.cdf(
             self.lower_bound
         )
