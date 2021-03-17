@@ -9,8 +9,9 @@ import numpy as np
 import pandas as pd
 from scipy.stats import chi2
 
+from pykelihood import kernels
 from pykelihood.cached_property import cached_property
-from pykelihood.distributions import Distribution, opposite_log_likelihood
+from pykelihood.distributions import GPD, Distribution, opposite_log_likelihood
 
 warnings.filterwarnings("ignore")
 
@@ -339,7 +340,70 @@ class DetrentedFluctuationAnalysis(object):
         return scales, fluct, coeff[0]
 
 
-def pettitt(data: Union[np.array, pd.DataFrame, pd.Series]):
+def threshold_selection(data: Union[pd.DataFrame, pd.Series], test_confidence=0.99):
+    """
+    Method based on a multiple threshold penultimate model,
+    introduced by Northorp and Coleman in 2013 for threshold selection in extreme value analysis.
+    Returns: Let's see
+    """
+    to_concat = []
+    penalty = lambda d, distribution: np.sum(np.abs(distribution.shape()) - 0.5)
+
+    def ll_test(ref_threshold: float):
+        above_threshold = data[data >= ref_threshold]
+        thresholds = [
+            math.ceil(y)
+            for y in [ref_threshold, np.median(above_threshold), above_threshold.max()]
+        ]
+        categories = pd.Series(
+            np.array(
+                pd.cut(
+                    above_threshold, thresholds, right=False, duplicates="drop"
+                ).apply(lambda x: x.left, 2)
+            ),
+            index=above_threshold.index,
+        )
+        # constant fit of the GPD by parts for data above threshold u_j
+        constant_gpd = GPD.fit(above_threshold, loc=ref_threshold)
+        # fit of the GPD with multiple categories associated as a function of threshold intervals
+        h1_gpd = GPD.fit(
+            above_threshold,
+            loc=kernels.linear(categories, a=0, b=1),
+            shape=kernels.categories_qualitative(categories),
+            x0=[constant_gpd.scale()]
+            + [constant_gpd.shape()] * len(categories.unique()),
+            penalty=penalty,
+        )
+        h0_ll = h1_gpd.with_params(
+            [constant_gpd.scale()] + [constant_gpd.shape()] * len(categories.unique())
+        ).log_likelihood(above_threshold)
+        h1_ll = h1_gpd.log_likelihood(above_threshold)
+        nobs = len(above_threshold)
+        delta = 2 * (h1_ll - h0_ll)
+        p_value = chi2.sf(delta, df=len(categories.unique()) - 1)
+        test = delta > chi2.isf(test_confidence, df=len(categories.unique()) - 1)
+        return nobs, h0_ll, h1_ll, p_value, test
+
+    ref_threshold = math.floor(
+        data.quantile(0.7)
+    )  # the lowest threshold considered is the 90% of the distribution
+    n_obs, h0_ll, h1_ll, p_value, test = ll_test(ref_threshold)
+    # rejection of H0 each time changing the parameters according to the threshold value adds enough information for the likelihood
+    # to be significantly improved
+    while test:
+        ref_threshold = math.floor(np.median(data[data >= ref_threshold]))
+        n_obs, h0_ll, h1_ll, p_value, test = ll_test(ref_threshold)
+        to_concat.append(
+            pd.DataFrame(
+                [n_obs, h0_ll, h1_ll, p_value],
+                index=["n_obs", "ll_h0", "ll_h1", "p_value"],
+                columns=[ref_threshold],
+            ).T
+        )
+    return pd.concat(to_concat)
+
+
+def pettitt_test(data: Union[np.array, pd.DataFrame, pd.Series]):
     """
     Pettitt's non-parametric test for change-point detection.
     Given an input signal, it reports the likely position of a single switch point along with
