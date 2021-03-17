@@ -3,41 +3,45 @@ from __future__ import annotations
 import math
 import warnings
 from itertools import count
-from typing import TYPE_CHECKING, Callable, Sequence, Union
+from typing import Callable, Sequence, Union
 
 import numpy as np
 import pandas as pd
 from scipy.stats import chi2
 
 from pykelihood.cached_property import cached_property
-
-if TYPE_CHECKING:
-    from pykelihood.distributions import Distribution
+from pykelihood.distributions import Distribution, opposite_log_likelihood
 
 warnings.filterwarnings("ignore")
 
 
 class ConditioningMethod(object):
     @staticmethod
-    def no_conditioning(data: pd.Series, distribution: Distribution):
-        return 0.0
+    def no_conditioning(distribution: Distribution, data: pd.Series):
+        return opposite_log_likelihood(distribution, data)
 
     @staticmethod
-    def excluding_last_obs_rule(data: pd.Series, distribution: Distribution):
-        return distribution.logpdf(data.iloc[-1])
+    def excluding_last_obs_rule(distribution: Distribution, data: pd.Series):
+        return ConditioningMethod.no_conditioning(
+            distribution, data
+        ) - distribution.logpdf(data.iloc[-1])
 
     @staticmethod
     def partial_conditioning_rule_stopped_obs(
-        data: pd.Series, distribution: Distribution, threshold: Sequence = None
+        distribution: Distribution, data: pd.Series, threshold: Sequence = None
     ):
-        return distribution.logsf(threshold[-1])
+        return ConditioningMethod.no_conditioning(
+            distribution, data
+        ) - distribution.logsf(threshold[-1])
 
     @staticmethod
     def full_conditioning_rule_stopped_obs(
-        data: pd.Series, distribution: Distribution, threshold: Sequence = None
+        distribution: Distribution, data: pd.Series, threshold: Sequence = None
     ):
-        return distribution.logsf(threshold[-1]) + np.sum(
-            distribution.logcdf(threshold[:-1])
+        return (
+            ConditioningMethod.no_conditioning(distribution, data)
+            - distribution.logsf(threshold[-1])
+            + np.sum(distribution.logcdf(threshold[:-1]))
         )
 
 
@@ -85,11 +89,11 @@ class Likelihood(object):
         if self.compute_mle:
             x0 = self.distribution.optimisation_params
             estimate = self.distribution.fit_instance(
-                self.data, penalty=self.conditioning_method, x0=x0
+                self.data, score=self.conditioning_method, x0=x0
             )
         else:
             estimate = self.distribution
-        ll_xi0 = estimate.log_likelihood(self.data, penalty=self.conditioning_method)
+        ll_xi0 = -self.conditioning_method(estimate, self.data)
         ll_xi0 = ll_xi0 if isinstance(ll_xi0, float) else ll_xi0[0]
         return (estimate, ll_xi0)
 
@@ -134,12 +138,10 @@ class Likelihood(object):
             try:
                 pl = mle.fit_instance(
                     self.data,
-                    penalty=self.conditioning_method,
+                    score=self.conditioning_method,
                     fixed_params={param: x},
                 )
-                pl_value = pl.log_likelihood(
-                    self.data, penalty=self.conditioning_method
-                )
+                pl_value = -self.conditioning_method(pl, self.data)
                 pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
                 if np.isfinite(pl_value):
                     profile_ll.append(pl_value)

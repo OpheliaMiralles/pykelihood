@@ -11,7 +11,6 @@ from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto,
 
 from pykelihood import kernels
 from pykelihood.parameters import ConstantParameter, Parametrized
-from pykelihood.stats_utils import ConditioningMethod
 from pykelihood.utils import hash_with_series, ifnone
 
 T = TypeVar("T")
@@ -19,6 +18,14 @@ SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
 Obs = Union[float, np.ndarray, pd.Series]
 
 EULER = -scipy.special.psi(1)
+
+
+def log_likelihood(distribution: "Distribution", data: Obs):
+    return np.sum(distribution.logpdf(data))
+
+
+def opposite_log_likelihood(distribution: "Distribution", data: Obs):
+    return -log_likelihood(distribution, data)
 
 
 class Distribution(Parametrized):
@@ -67,24 +74,6 @@ class Distribution(Parametrized):
         else:
             return self.isf(1 - q)
 
-    def log_likelihood(
-        self,
-        data: Obs,
-        penalty: Callable = ConditioningMethod.no_conditioning,
-    ):
-        res = self.logpdf(data)
-        return np.sum(res) - penalty(data, self)
-
-    def opposite_log_likelihood(
-        self,
-        data: Obs,
-        penalty: Callable = ConditioningMethod.no_conditioning,
-    ):
-        return -self.log_likelihood(
-            data,
-            penalty,
-        )
-
     def _process_fit_params(self, **kwds):
         param_dict = self.param_dict.copy()
         for name in param_dict:
@@ -102,8 +91,8 @@ class Distribution(Parametrized):
     def fit(
         cls: Type[SomeDistribution],
         data: Obs,
-        penalty=ConditioningMethod.no_conditioning,
         x0: Sequence[float] = None,
+        score: Callable[["Distribution", Obs], float] = opposite_log_likelihood,
         **fixed_values,
     ) -> SomeDistribution:
         init_parms = {}
@@ -122,8 +111,7 @@ class Distribution(Parametrized):
             )
 
         def to_minimize(x) -> float:
-            o = init.with_params(x)
-            return o.opposite_log_likelihood(data, penalty=penalty)
+            return score(init.with_params(x), data)
 
         res = minimize(to_minimize, x0, method="Nelder-Mead")
         return init.with_params(res.x)
@@ -131,13 +119,13 @@ class Distribution(Parametrized):
     def fit_instance(
         self,
         data,
-        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
+        score=opposite_log_likelihood,
         **kwds,
     ):
         param_dict = self._process_fit_params(**(fixed_params or {}))
         kwds.update(param_dict)
-        return self.fit(data, penalty=penalty, **kwds)
+        return self.fit(data, score=score, **kwds)
 
 
 class AvoidAbstractMixin(object):
@@ -522,18 +510,18 @@ class PointProcess(Distribution):
     def fit_instance(
         self,
         data,
-        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
+        score=opposite_log_likelihood,
         **kwds,
     ):
         kwds.update(**(fixed_params or {}))
-        return self.fit(data, penalty=penalty, **kwds)
+        return self.fit(data, score=score, **kwds)
 
     def fit(
         self,
         data,
-        penalty=ConditioningMethod.no_conditioning,
         x0=None,
+        score=opposite_log_likelihood,
         opt_method="Nelder-Mead",
         plot=False,
         *args,
@@ -894,18 +882,18 @@ class CompositionDistribution(Distribution):
     def fit_instance(
         self,
         data,
-        penalty: Callable = ConditioningMethod.no_conditioning,
         fixed_params=None,
+        score=opposite_log_likelihood,
         **kwds,
     ):
         kwds.update(**(fixed_params or {}))
-        return self.fit(data, penalty=penalty, **kwds)
+        return self.fit(data, score=score, **kwds)
 
     def fit(
         self,
         data: pd.Series,
-        penalty=ConditioningMethod.no_conditioning,
         x0=None,
+        score=opposite_log_likelihood,
         opt_method="Nelder-Mead",
         *args,
         **kwds,
@@ -915,7 +903,7 @@ class CompositionDistribution(Distribution):
         x0 = obj.optimisation_params if x0 is None else x0
 
         def to_minimize(var_params):
-            return obj.with_params(var_params).opposite_log_likelihood(data, penalty)
+            return score(obj.with_params(var_params), data)
 
         result = minimize(
             to_minimize,
