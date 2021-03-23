@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from functools import partial, wraps
-from typing import Any, Callable, Sequence, Type, TypeVar, Union
+from typing import Any, Callable, Sequence, Type, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -9,22 +9,15 @@ from scipy.optimize import minimize
 from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto, uniform
 
 from pykelihood import kernels
+from pykelihood.generic_types import Obs
+from pykelihood.metrics import opposite_log_likelihood
 from pykelihood.parameters import ConstantParameter, Parametrized
 from pykelihood.utils import ifnone
 
 T = TypeVar("T")
 SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
-Obs = Union[float, np.ndarray, pd.Series]
 
 EULER = -scipy.special.psi(1)
-
-
-def log_likelihood(distribution: "Distribution", data: Obs):
-    return np.sum(distribution.logpdf(data))
-
-
-def opposite_log_likelihood(distribution: "Distribution", data: Obs):
-    return -log_likelihood(distribution, data)
 
 
 class Distribution(Parametrized):

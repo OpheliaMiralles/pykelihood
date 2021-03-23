@@ -2,67 +2,47 @@ from __future__ import annotations
 
 import math
 import warnings
+from functools import partial
 from itertools import count
 from typing import Callable, Sequence, Union
 
 import numpy as np
 import pandas as pd
+from more_itertools import pairwise
+from scipy.optimize import minimize
 from scipy.stats import chi2
 
-from pykelihood import kernels
 from pykelihood.cached_property import cached_property
-from pykelihood.distributions import GPD, Distribution, opposite_log_likelihood
+from pykelihood.distributions import GPD, Distribution, TruncatedDistribution
+from pykelihood.metrics import (
+    AIC,
+    BIC,
+    Brier_score,
+    ConditioningMethod,
+    crps,
+    log_likelihood,
+    opposite_log_likelihood,
+    quantile_score,
+)
 
 warnings.filterwarnings("ignore")
 
 
-class ConditioningMethod(object):
-    @staticmethod
-    def no_conditioning(distribution: Distribution, data: pd.Series):
-        return opposite_log_likelihood(distribution, data)
-
-    @staticmethod
-    def excluding_last_obs_rule(distribution: Distribution, data: pd.Series):
-        return ConditioningMethod.no_conditioning(
-            distribution, data
-        ) - distribution.logpdf(data.iloc[-1])
-
-    @staticmethod
-    def partial_conditioning_rule_stopped_obs(
-        distribution: Distribution, data: pd.Series, threshold: Sequence = None
-    ):
-        return ConditioningMethod.no_conditioning(
-            distribution, data
-        ) - distribution.logsf(threshold[-1])
-
-    @staticmethod
-    def full_conditioning_rule_stopped_obs(
-        distribution: Distribution, data: pd.Series, threshold: Sequence = None
-    ):
-        return (
-            ConditioningMethod.no_conditioning(distribution, data)
-            - distribution.logsf(threshold[-1])
-            + np.sum(distribution.logcdf(threshold[:-1]))
-        )
-
-
-class Likelihood(object):
+class Profiler(object):
     def __init__(
         self,
         distribution: Distribution,
         data: pd.Series,
-        conditioning_method: Callable = ConditioningMethod.no_conditioning,
+        score_function: Callable = opposite_log_likelihood,
         name: str = "Standard",
         inference_confidence: float = 0.99,
-        fit_chi2: bool = False,
         single_profiling_param=None,
-        compute_mle=True,
     ):
         """
 
         :param distribution: distribution on which the inference is based
         :param data: variable of interest
-        :param conditioning_method: penalisation term for the likelihood
+        :param score_function: function used for optimisation
         :param name: name (optional) of the likelihood if it needs to be compared to other likelihood functions
         :param inference_confidence: wanted confidence for intervals
         :param fit_chi2: whether the results from the likelihood ratio method must be fitted to a chi2
@@ -72,11 +52,9 @@ class Likelihood(object):
         self.name = name
         self.distribution = distribution
         self.data = data
-        self.conditioning_method = conditioning_method
+        self.score_function = score_function
         self.inference_confidence = inference_confidence
-        self.fit_chi2 = fit_chi2
         self.single_profiling_param = single_profiling_param
-        self.compute_mle = compute_mle
 
     @cached_property
     def standard_mle(self):
@@ -86,43 +64,24 @@ class Likelihood(object):
         return (estimate, ll)
 
     @cached_property
-    def mle(self):
-        if self.compute_mle:
-            x0 = self.distribution.optimisation_params
-            estimate = self.distribution.fit_instance(
-                self.data, score=self.conditioning_method, x0=x0
-            )
-        else:
-            estimate = self.distribution
-        ll_xi0 = -self.conditioning_method(estimate, self.data)
-        ll_xi0 = ll_xi0 if isinstance(ll_xi0, float) else ll_xi0[0]
-        return (estimate, ll_xi0)
-
-    @cached_property
-    def AIC(self):
-        mle_aic = -2 * self.mle[1] + 2 * len(self.mle[0].optimisation_params)
-        std_mle_aic = -2 * self.standard_mle[1] + 2 * len(
-            self.standard_mle[0].optimisation_params
+    def optimum(self):
+        x0 = self.distribution.optimisation_params
+        estimate = self.distribution.fit_instance(
+            self.data, score=self.score_function, x0=x0
         )
-        return {"AIC MLE": mle_aic, "AIC Standard MLE Fit": std_mle_aic}
-
-    def Deviance(self):
-        mle_deviance = -2 * self.mle[1]
-        std_mle_deviance = -2 * self.standard_mle[1]
-        return {
-            "Deviance MLE": mle_deviance,
-            "AIC Standard MLE Deviance": std_mle_deviance,
-        }
+        func = -self.score_function(estimate, self.data)
+        func = func if isinstance(func, float) else func[0]
+        return (estimate, func)
 
     @cached_property
     def profiles(self):
         profiles = {}
-        mle, ll_xi0 = self.mle
+        opt, func = self.optimum
         if self.single_profiling_param is not None:
             params = [self.single_profiling_param]
         else:
-            params = mle.optimisation_param_dict.keys()
-        for name, k in mle.optimisation_param_dict.items():
+            params = opt.optimisation_param_dict.keys()
+        for name, k in opt.optimisation_param_dict.items():
             if name in params:
                 r = k.real
                 lb = r - 5 * (10 ** math.floor(math.log10(np.abs(r))))
@@ -132,34 +91,29 @@ class Likelihood(object):
         return profiles
 
     def test_profile_likelihood(self, range_for_param, param):
-        mle, ll_xi0 = self.mle
+        opt, func = self.optimum
         profile_ll = []
         params = []
         for x in range_for_param:
             try:
-                pl = mle.fit_instance(
+                pl = opt.fit_instance(
                     self.data,
-                    score=self.conditioning_method,
+                    score=self.score_function,
                     fixed_params={param: x},
                 )
-                pl_value = -self.conditioning_method(pl, self.data)
+                pl_value = -self.score_function(pl, self.data)
                 pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
                 if np.isfinite(pl_value):
                     profile_ll.append(pl_value)
                     params.append(list(pl.flattened_params))
             except:
                 pass
-        delta = [2 * (ll_xi0 - ll) for ll in profile_ll if np.isfinite(ll)]
-        if self.fit_chi2:
-            df, loc, scale = chi2.fit(delta)
-            chi2_par = {"df": df, "loc": loc, "scale": scale}
-        else:
-            chi2_par = {"df": 1}
-        lower_bound = ll_xi0 - chi2.ppf(self.inference_confidence, **chi2_par) / 2
+        chi2_par = {"df": 1}
+        lower_bound = func - chi2.ppf(self.inference_confidence, **chi2_par) / 2
         filtered_params = pd.DataFrame(
-            [x + [ll] for x, ll in zip(params, profile_ll) if ll >= lower_bound]
+            [x + [eval] for x, eval in zip(params, profile_ll) if eval >= lower_bound]
         )
-        cols = list(mle.flattened_param_dict.keys()) + ["likelihood"]
+        cols = list(opt.flattened_param_dict.keys()) + ["score"]
         filtered_params = filtered_params.rename(columns=dict(zip(count(), cols)))
         return filtered_params
 
@@ -177,7 +131,7 @@ class Likelihood(object):
         else:
             params = profiles.keys()
         for param in params:
-            columns = list(self.mle[0].optimisation_param_dict.keys())
+            columns = list(self.optimum[0].optimisation_param_dict.keys())
             result = profiles[param].apply(
                 lambda row: metric(
                     self.distribution.with_params({k: row[k] for k in columns}.values())
@@ -340,67 +294,169 @@ class DetrentedFluctuationAnalysis(object):
         return scales, fluct, coeff[0]
 
 
-def threshold_selection(data: Union[pd.DataFrame, pd.Series], test_confidence=0.99):
+def threshold_selection_gpd_NorthorpColeman(
+    data: Union[pd.Series, np.ndarray],
+    thresholds: Union[Sequence, np.ndarray],
+    plot=False,
+):
     """
     Method based on a multiple threshold penultimate model,
     introduced by Northorp and Coleman in 2013 for threshold selection in extreme value analysis.
-    Returns: Let's see
+    Returns: table with likelihood computed using hypothesis of constant parameters h0, ll with h1, p_value of test, # obs
+    and figure to plot as an option
     """
-    to_concat = []
-    penalty = lambda d, distribution: np.sum(np.abs(distribution.shape()) - 0.5)
+    if isinstance(data, pd.Series):
+        data = data.rename("realized")
+    elif isinstance(data, np.ndarray):
+        data = pd.Series(data, name="realized")
+    else:
+        return TypeError("Observations should be in array or pandas series format.")
+    if isinstance(thresholds, Sequence):
+        thresholds = np.array(thresholds)
 
-    def ll_test(ref_threshold: float):
-        above_threshold = data[data >= ref_threshold]
-        thresholds = [
-            math.ceil(y)
-            for y in [ref_threshold, np.median(above_threshold), above_threshold.max()]
-        ]
-        categories = pd.Series(
-            np.array(
-                pd.cut(
-                    above_threshold, thresholds, right=False, duplicates="drop"
-                ).apply(lambda x: x.left, 2)
-            ),
-            index=above_threshold.index,
-        )
-        # constant fit of the GPD by parts for data above threshold u_j
-        constant_gpd = GPD.fit(above_threshold, loc=ref_threshold)
-        # fit of the GPD with multiple categories associated as a function of threshold intervals
-        h1_gpd = GPD.fit(
-            above_threshold,
-            loc=kernels.linear(categories, a=0, b=1),
-            shape=kernels.categories_qualitative(categories),
-            x0=[constant_gpd.scale()]
-            + [constant_gpd.shape()] * len(categories.unique()),
-            penalty=penalty,
-        )
-        h0_ll = h1_gpd.with_params(
-            [constant_gpd.scale()] + [constant_gpd.shape()] * len(categories.unique())
-        ).log_likelihood(above_threshold)
-        h1_ll = h1_gpd.log_likelihood(above_threshold)
-        nobs = len(above_threshold)
-        delta = 2 * (h1_ll - h0_ll)
-        p_value = chi2.sf(delta, df=len(categories.unique()) - 1)
-        test = delta > chi2.isf(test_confidence, df=len(categories.unique()) - 1)
-        return nobs, h0_ll, h1_ll, p_value, test
+    fits = {}
+    nll_ref = {}
+    for u in thresholds:
+        d = data[data > u]
+        fits[u] = GPD.fit(d, loc=u)
+        nll_ref[u] = opposite_log_likelihood(fits[u], d)
 
-    ref_threshold = math.floor(
-        data.quantile(0.7)
-    )  # the lowest threshold considered is the 90% of the distribution
-    n_obs, h0_ll, h1_ll, p_value, test = ll_test(ref_threshold)
-    # rejection of H0 each time changing the parameters according to the threshold value adds enough information for the likelihood
-    # to be significantly improved
-    while test:
-        ref_threshold = math.floor(np.median(data[data >= ref_threshold]))
-        n_obs, h0_ll, h1_ll, p_value, test = ll_test(ref_threshold)
-        to_concat.append(
-            pd.DataFrame(
-                [n_obs, h0_ll, h1_ll, p_value],
-                index=["n_obs", "ll_h0", "ll_h1", "p_value"],
-                columns=[ref_threshold],
-            ).T
+    def negated_ll(x: np.array, ref_threshold: float):
+        tol = 1e-10
+        sigma_init = x[0]
+        if sigma_init <= tol:
+            return 10 ** 10
+        xi_init = x[1:]
+        # It could be interesting to consider this parameter stability condition
+        # if len(xi_init[np.abs(xi_init) >= 1.]):
+        #     return 10**10
+        thresh = [u for u in thresholds if u >= ref_threshold]
+        thresh_diff = pd.Series(
+            np.concatenate([np.diff(thresh), [np.nan]]), index=thresh, name="w"
         )
-    return pd.concat(to_concat)
+        xi = pd.Series(xi_init, index=thresh, name="xi")
+        sigma = pd.Series(
+            sigma_init
+            + np.cumsum(np.concatenate([[0], xi.iloc[:-1] * thresh_diff.iloc[:-1]])),
+            index=thresh,
+            name="sigma",
+        )
+        params_and_conditions = (
+            pd.concat([sigma, xi, thresh_diff], axis=1)
+            .assign(
+                positivity_p_condition=lambda x: (1 + (x["xi"] * x["w"]) / x["sigma"])
+                .shift(1)
+                .fillna(1.0)
+            )
+            .assign(
+                logp=lambda x: np.cumsum(
+                    (1 / x["xi"]) * np.log(1 + x["xi"] * x["w"] / x["sigma"])
+                )
+                .shift(1)
+                .fillna(0.0)
+            )
+            .reset_index()
+            .rename(columns={"index": "lb"})
+        )
+        if np.any(params_and_conditions["positivity_p_condition"] <= tol):
+            return 1 / tol
+        thresh_for_pairs = np.concatenate([thresh, [data.max() + 1]])
+        y_cut = (
+            pd.concat(
+                [
+                    data,
+                    pd.Series(
+                        np.array(
+                            pd.cut(
+                                data, thresh_for_pairs, right=True, include_lowest=False
+                            ).apply(lambda x: x.left)
+                        ),
+                        name="lb",
+                        index=data.index,
+                    ),
+                ],
+                axis=1,
+            )
+            .dropna()
+            .merge(
+                params_and_conditions.drop(columns=["w", "positivity_p_condition"]),
+                on="lb",
+                how="left",
+            )
+        )
+        if (
+            1 + y_cut["xi"] * (y_cut["realized"] - y_cut["lb"]) / y_cut["sigma"] <= tol
+        ).any():
+            return 1 / tol
+        y_cut = y_cut.assign(
+            nlogl=lambda x: x["logp"]
+            + np.log(x["sigma"])
+            + (1 + 1 / x["xi"])
+            * np.log(1 + x["xi"] * (x["realized"] - x["lb"]) / x["sigma"])
+        )
+        logl_per_interval = y_cut.groupby("lb").agg({"nlogl": "sum"})
+        return logl_per_interval[np.isfinite(logl_per_interval)].sum()[0]
+
+    par = {}
+    results_dic = {}
+    u_test = [thresholds[-1] + i for i in [5, 10, 20]]
+    for u in thresholds:
+        sigma_init, xi_1 = fits[u].optimisation_params
+        xi_init = np.array([xi_1] * len(thresholds[thresholds >= u]))
+        to_minimize = partial(negated_ll, ref_threshold=u)
+        x0 = np.concatenate([[sigma_init], xi_init])
+        params = minimize(
+            to_minimize,
+            x0=x0,
+            method="Nelder-Mead",
+            options={"maxiter": 10000, "fatol": 0.05},
+        )
+        print(f"Threshold {u}: ", params.message)
+        mle = params.x
+        nll = params.fun
+        nll_h0 = to_minimize(x0)
+        par[u] = mle
+        delta = 2 * (nll_h0 - nll)
+        df = len(thresholds[thresholds >= u]) - 1
+        p_value = chi2.sf(delta, df=df)
+        aic = AIC(fits[u], data[data > u])
+        bic = BIC(fits[u], data[data > u])
+        crpss = crps(fits[u], data[data > u])
+        results_dic[u] = {
+            "nobs": len(data[data > u]),
+            "nll_h0": nll_h0,
+            "nll_h1": nll,
+            "pvalue": p_value,
+            "aic": aic,
+            "bic": bic,
+            "crps": crpss,
+        }
+        for t in u_test:
+            results_dic[u][f"bs_{int(t)}"] = Brier_score(
+                fits[u], data[data > u], threshold=t
+            )
+        for q in [0.9, 0.95, 0.99]:
+            results_dic[u][f"qs_{int(q * 100)}"] = quantile_score(
+                fits[u], np.quantile(data[data > u], q), quantile=q
+            )
+    results = pd.DataFrame.from_dict(results_dic, orient="index")
+    if not plot:
+        return results
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(constrained_layout=True)
+    ax.plot(results.index, results["pvalue"], color="navy")
+    ax.scatter(results.index, results["pvalue"], marker="x", s=8, color="navy")
+    ax2 = ax.twinx()
+    for f, c in zip([85, 90, 100], ["salmon", "goldenrod", "royalblue"]):
+        ax2.plot(results.dropna()[f"bs_{f}"], c=c, label=r"u={}".format(f))
+    ax2.set_ylabel("Brier score")
+    ax2.legend()
+    ax.set_title("Threshold Selection plot based on LR test")
+    ax.set_xlabel("threshold")
+    ax.set_ylabel("p-value")
+    fig.show()
+    return results, fig
 
 
 def pettitt_test(data: Union[np.array, pd.DataFrame, pd.Series]):
@@ -429,3 +485,13 @@ def pettitt_test(data: Union[np.array, pd.DataFrame, pd.Series]):
     K = np.max(np.abs(U))
     p = np.exp(-3 * K ** 2 / (T ** 3 + T ** 2))
     return (loc, p)
+
+
+if __name__ == "__main__":
+    data = pd.read_csv(
+        "/Users/Boubou/Documents/GitHub/Venezuela-Data/data/venezuela_completed_with_climate_variable.csv"
+    )["data"]
+    data = data[data > 0.5]
+    results = threshold_selection_NC(
+        data, thresholds=np.concatenate([np.arange(1, 66, 5), [80]])
+    )
