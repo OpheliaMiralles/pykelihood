@@ -50,6 +50,18 @@ def gaussian(X, mu, sigma, scaling):
     return mult * expo
 
 
+@parametrized_function(a=0.0, b=0.0, c=0.0)
+def trigonometric(X, a, b, c):
+    """
+
+    :param X: vector rescaled per period of interest. Example: we are interested in seasonal variations for daily observations over 10 years. X can be
+    the number of days since start, on which we apply lambda x: x//365.25, and then groupby integer values (years) and rescale each time vector per year between 0 and 1.
+    This way, we get yearly aligned periods corresponding to seasons.
+    :return: a simple trigonometric kernel
+    """
+    return a + b * np.cos(2 * np.pi * X) + c * np.sin(2 * np.pi * X)
+
+
 @parametrized_function(mu=0.0, alpha=0.0, theta=1.0)
 def hawkes_with_exp_kernel(X, mu, alpha, theta):
     return mu + alpha * theta * np.array(
