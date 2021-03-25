@@ -485,13 +485,3 @@ def pettitt_test(data: Union[np.array, pd.DataFrame, pd.Series]):
     K = np.max(np.abs(U))
     p = np.exp(-3 * K ** 2 / (T ** 3 + T ** 2))
     return (loc, p)
-
-
-if __name__ == "__main__":
-    data = pd.read_csv(
-        "/Users/Boubou/Documents/GitHub/Venezuela-Data/data/venezuela_completed_with_climate_variable.csv"
-    )["data"]
-    data = data[data > 0.5]
-    results = threshold_selection_NC(
-        data, thresholds=np.concatenate([np.arange(1, 66, 5), [80]])
-    )
