@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pykelihood"
-version = "0.3.0"
+version = "0.3.1"
 description = "Intuitive syntax for complex statistical model fitting and parameter sensitivity analysis."
 authors = ["Ophélia Miralles <ophelia.miralles@epfl.ch>"]
 license = "MIT"
