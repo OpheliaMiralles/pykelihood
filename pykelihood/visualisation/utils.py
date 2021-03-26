@@ -9,7 +9,7 @@ import pandas as pd
 matplotlib.rcParams["text.usetex"] = True
 
 from pykelihood.distributions import GEV, Distribution, Exponential, Uniform
-from pykelihood.stats_utils import Likelihood
+from pykelihood.stats_utils import Profiler
 
 warnings.filterwarnings("ignore")
 
@@ -19,7 +19,7 @@ def get_quantiles_and_confidence_intervals_uniform_scale(
     data: Union[pd.DataFrame, np.array, pd.Series],
     ci_confidence=0.99,
 ):
-    ll = Likelihood(fit, data, inference_confidence=ci_confidence)
+    ll = Profiler(fit, data, inference_confidence=ci_confidence)
     min_max = []
     levels = np.linspace(0.01, 0.99, 100)
     for level in levels:
@@ -29,7 +29,7 @@ def get_quantiles_and_confidence_intervals_uniform_scale(
     min_max = pd.DataFrame(
         min_max, columns=["lower_bound", "upper_bound"], index=levels
     )
-    empirical = pd.Series(ll.mle[0].cdf(data)).quantile(levels)
+    empirical = pd.Series(ll.optimum[0].cdf(data)).quantile(levels)
     theoretical = Uniform(0, 1).inverse_cdf(levels)
     return theoretical, empirical, min_max["lower_bound"], min_max["upper_bound"]
 
@@ -39,7 +39,7 @@ def get_quantiles_and_confidence_intervals(
     data: Union[pd.DataFrame, np.array, pd.Series],
     ci_confidence=0.99,
 ):
-    ll = Likelihood(fit, data, inference_confidence=ci_confidence)
+    ll = Profiler(fit, data, inference_confidence=ci_confidence)
     min_max = []
     levels = np.linspace(0.01, 0.99, 100)
     empirical = pd.Series(data).quantile(levels)

@@ -8,19 +8,16 @@ from typing import Callable, Sequence, Union
 
 import numpy as np
 import pandas as pd
-from more_itertools import pairwise
 from scipy.optimize import minimize
 from scipy.stats import chi2
 
 from pykelihood.cached_property import cached_property
-from pykelihood.distributions import GPD, Distribution, TruncatedDistribution
+from pykelihood.distributions import GPD, Distribution
 from pykelihood.metrics import (
     AIC,
     BIC,
     Brier_score,
-    ConditioningMethod,
     crps,
-    log_likelihood,
     opposite_log_likelihood,
     quantile_score,
 )

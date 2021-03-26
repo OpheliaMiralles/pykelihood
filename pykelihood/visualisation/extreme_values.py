@@ -10,7 +10,7 @@ matplotlib.rcParams["text.usetex"] = True
 
 from pykelihood import kernels
 from pykelihood.distributions import Exponential, MixtureExponentialModel
-from pykelihood.stats_utils import Likelihood
+from pykelihood.stats_utils import Profiler
 
 try:
     from hawkeslib import UnivariateExpHawkesProcess as UEHP
@@ -776,7 +776,7 @@ def Kgaps_diagnostic_plots(
         )
         mem = MixtureExponentialModel.fit(iet_normalised_to_cluster_distance)
         theta = mem.theta()
-        ll = Likelihood(mem, iet_normalised_to_cluster_distance)
+        ll = Profiler(mem, iet_normalised_to_cluster_distance)
         CI = [ll.profiles["theta"]["theta"].min(), ll.profiles["theta"]["theta"].max()]
         thetas.append(theta)
         CIs.append(CI)
