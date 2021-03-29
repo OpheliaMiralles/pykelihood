@@ -146,7 +146,7 @@ class Profiler(object):
             return [None, None]
 
 
-class DetrentedFluctuationAnalysis(object):
+class DetrendedFluctuationAnalysis(object):
     def __init__(
         self,
         data: pd.DataFrame,
@@ -186,13 +186,13 @@ class DetrentedFluctuationAnalysis(object):
             phi.dropna()
         )  # cases where there is only one value for a given day / irrelevant for DFA
         self.y = np.cumsum(np.array(phi))
-        if scale_lim == None:
+        if scale_lim is None:
             lim_inf = 10 ** (math.floor(np.log10(len(data))) - 1)
             lim_sup = min(
                 10 ** (math.ceil(np.log10(len(data)))), len(phi)
             )  # assuming all observations are equally splitted
             scale_lim = [lim_inf, lim_sup]
-        if scale_step == None:
+        if scale_step is None:
             scale_step = 10 ** (math.floor(np.log10(len(data)))) / 2
         self.scale_lim = scale_lim
         self.scale_step = scale_step
