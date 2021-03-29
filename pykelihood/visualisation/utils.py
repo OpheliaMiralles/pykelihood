@@ -74,8 +74,8 @@ def pp_plot(
     plt.legend()
     plt.xlabel(f"Theoretical quantiles ({n} observations)")
     plt.ylabel("Empirical quantiles")
-    plt.tight_layout()
     plt.title("PP Plot")
+    plt.tight_layout()
     if path_to_figure is None:
         path_to_figure = __file__
     plt.savefig(f"{path_to_figure}/{figure_name}.png")
@@ -104,8 +104,8 @@ def qq_plot(
     plt.legend()
     plt.xlabel(f"Theoretical quantiles ({n} observations)")
     plt.ylabel("Empirical quantiles")
-    plt.tight_layout()
     plt.title("QQ Plot")
+    plt.tight_layout()
     if path_to_figure is None:
         path_to_figure = __file__
     plt.savefig(f"{path_to_figure}/{figure_name}.png")
@@ -137,8 +137,8 @@ def qq_plot_exponential_scale(
     plt.legend()
     plt.xlabel(f"Theoretical unit Exponential quantiles ({n} observations)")
     plt.ylabel("Empirical quantiles")
-    plt.tight_layout()
     plt.title("QQ Plot: Unit Exponential Scale")
+    plt.tight_layout()
     if path_to_figure is None:
         path_to_figure = __file__
     plt.savefig(f"{path_to_figure}/{figure_name}.png")
@@ -170,8 +170,8 @@ def qq_plot_frechet_scale(
     plt.legend()
     plt.xlabel(r"Theoretical unit Fr\'echet quantiles ({} observations)".format(n))
     plt.ylabel("Empirical quantiles")
-    plt.tight_layout()
     plt.title(r"QQ Plot: Unit Fr\'echet Scale")
+    plt.tight_layout()
     if path_to_figure is None:
         path_to_figure = __file__
     plt.savefig(f"{path_to_figure}/{figure_name}.png")

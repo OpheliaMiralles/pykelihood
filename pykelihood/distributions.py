@@ -6,7 +6,17 @@ import numpy as np
 import pandas as pd
 import scipy.special
 from scipy.optimize import minimize
-from scipy.stats import beta, expon, gamma, genextreme, genpareto, norm, pareto, uniform
+from scipy.stats import (
+    beta,
+    expon,
+    gamma,
+    genextreme,
+    genpareto,
+    lognorm,
+    norm,
+    pareto,
+    uniform,
+)
 
 from pykelihood import kernels
 from pykelihood.generic_types import Obs
@@ -109,7 +119,7 @@ class Distribution(Parametrized):
         def to_minimize(x) -> float:
             return score(init.with_params(x), data)
 
-        res = minimize(to_minimize, x0, method="Nelder-Mead")
+        res = minimize(to_minimize, x0, method="Nelder-Mead", options={"fatol": 1e-3})
         return init.with_params(res.x)
 
     def fit_instance(
@@ -270,6 +280,17 @@ class Normal(ScipyDistribution):
 
     def _to_scipy_args(self, loc=None, scale=None):
         return {"loc": ifnone(loc, self.loc()), "scale": ifnone(scale, self.scale())}
+
+
+class LogNormale(ScipyDistribution):
+    params_names = ("loc", "scale")
+    base_module = lognorm
+
+    def __init__(self, loc=0.0, scale=1.0):
+        super(LogNormale, self).__init__(loc, scale)
+
+    def _to_scipy_args(self, loc=None, scale=None):
+        return {"s": ifnone(scale, self.scale()), "loc": ifnone(loc, self.loc())}
 
 
 class GEV(ScipyDistribution):

@@ -88,6 +88,56 @@ def quantile_score(distribution: Distribution, data: Obs, quantile: float = None
     return np.mean(rho(data - distribution.inverse_cdf(quantile)))
 
 
+def qq_l1_distance(distribution: Distribution, data: Obs):
+    """
+    QQ-Plot-like metrics: mean L1 distance between the x=y line and the (theoretical quantiles, empirical quantiles) one.
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
+    arXiv preprint arXiv:2102.00884.
+    """
+    levels = np.linspace(1e-4, 1.0 - 1e-4, 100)
+    empirical_quantile = np.quantile(data, levels)
+    return np.mean(np.abs(distribution.inverse_cdf(levels) - empirical_quantile))
+
+
+def qq_l2_distance(distribution: Distribution, data: Obs):
+    """
+    QQ-Plot-like metrics: mean L2 distance between the x=y line and the (theoretical quantiles, empirical quantiles) one.
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
+    arXiv preprint arXiv:2102.00884.
+    """
+    levels = np.linspace(1e-4, 1.0 - 1e-4, 100)
+    empirical_quantile = np.quantile(data, levels)
+    return np.mean((distribution.inverse_cdf(levels) - empirical_quantile) ** 2)
+
+
+def pp_l1_distance(distribution: Distribution, data: Obs):
+    """
+    PP-Plot-like metrics: mean L1 distance between the x=y line and the (theoretical cdf, empirical cdf) one.
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
+    arXiv preprint arXiv:2102.00884.
+    """
+    levels = np.linspace(1e-4, 1.0 - 1e-4, 100)
+    empirical_cdf = np.quantile(distribution.cdf(data), levels)
+    mult = 1 / (np.sqrt(levels * (1 - levels) / np.sqrt(len(data))))
+    return np.mean(mult * np.abs(levels - empirical_cdf))
+
+
+def pp_l2_distance(distribution: Distribution, data: Obs):
+    """
+    PP-Plot-like metrics: mean L2 distance between the x=y line and the (theoretical cdf, empirical cdf) one.
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
+    arXiv preprint arXiv:2102.00884.
+    """
+    levels = np.linspace(1e-4, 1.0 - 1e-4, 100)
+    empirical_cdf = np.quantile(distribution.cdf(data), levels)
+    mult = 1 / (np.sqrt(levels * (1 - levels) / np.sqrt(len(data))))
+    return np.mean(mult * (levels - empirical_cdf) ** 2)
+
+
 class ConditioningMethod(object):
     @staticmethod
     def no_conditioning(distribution: Distribution, data: Obs):
