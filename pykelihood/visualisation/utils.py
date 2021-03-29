@@ -57,6 +57,7 @@ def get_quantiles_and_confidence_intervals(
 def pp_plot(
     fit: Distribution,
     data: Union[pd.DataFrame, np.array, pd.Series],
+    ax=plt.gca(),
     path_to_figure: str = None,
     figure_name="pp_plot",
     ci_confidence=0.99,
@@ -68,23 +69,23 @@ def pp_plot(
         upper_bound,
     ) = get_quantiles_and_confidence_intervals_uniform_scale(fit, data, ci_confidence)
     n = len(data)
-    plt.scatter(theoretical, empirical, s=5, color="navy")
-    plt.plot(theoretical, theoretical, label=f"$x=y$", color="navy")
-    plt.fill_between(theoretical, lower_bound, upper_bound, alpha=0.2, color="navy")
-    plt.legend()
-    plt.xlabel(f"Theoretical quantiles ({n} observations)")
-    plt.ylabel("Empirical quantiles")
-    plt.title("PP Plot")
+    ax.scatter(theoretical, empirical, s=5, color="navy")
+    ax.plot(theoretical, theoretical, label=f"$x=y$", color="navy")
+    ax.fill_between(theoretical, lower_bound, upper_bound, alpha=0.2, color="navy")
+    ax.legend()
+    ax.set_xlabel(f"Theoretical quantiles ({n} observations)")
+    ax.set_label("Empirical quantiles")
+    ax.set_title("PP Plot")
     plt.tight_layout()
-    if path_to_figure is None:
-        path_to_figure = __file__
-    plt.savefig(f"{path_to_figure}/{figure_name}.png")
-    plt.clf()
+    if path_to_figure is not None:
+        plt.savefig(f"{path_to_figure}/{figure_name}.png")
+    return ax
 
 
 def qq_plot(
     fit: Distribution,
     data: Union[pd.DataFrame, np.array, pd.Series],
+    ax=plt.gca(),
     path_to_figure: str = None,
     figure_name="qq_plot",
     ci_confidence=0.99,
@@ -96,25 +97,25 @@ def qq_plot(
         upper_bound,
     ) = get_quantiles_and_confidence_intervals(fit, data, ci_confidence)
     n = len(data)
-    plt.scatter(theoretical, empirical, s=5, color="navy")
-    plt.plot(theoretical, theoretical, label=f"$x=y$", color="navy")
-    plt.fill_betweenx(
+    ax.scatter(theoretical, empirical, s=5, color="navy")
+    ax.plot(theoretical, theoretical, label=f"$x=y$", color="navy")
+    ax.fill_betweenx(
         y=empirical, x1=lower_bound, x2=upper_bound, alpha=0.2, color="navy"
     )
-    plt.legend()
-    plt.xlabel(f"Theoretical quantiles ({n} observations)")
-    plt.ylabel("Empirical quantiles")
-    plt.title("QQ Plot")
+    ax.legend()
+    ax.set_xlabel(f"Theoretical quantiles ({n} observations)")
+    ax.set_ylabel("Empirical quantiles")
+    ax.set_title("QQ Plot")
     plt.tight_layout()
-    if path_to_figure is None:
-        path_to_figure = __file__
-    plt.savefig(f"{path_to_figure}/{figure_name}.png")
-    plt.clf()
+    if path_to_figure is not None:
+        plt.savefig(f"{path_to_figure}/{figure_name}.png")
+    return ax
 
 
 def qq_plot_exponential_scale(
     fit: Distribution,
     data: Union[pd.DataFrame, np.array, pd.Series],
+    ax=plt.gca(),
     path_to_figure: str = None,
     figure_name="qq_plot",
     ci_confidence=0.99,
@@ -131,23 +132,23 @@ def qq_plot_exponential_scale(
     lb_exp = unit_exp.inverse_cdf(lower_bound)
     ub_exp = unit_exp.inverse_cdf(upper_bound)
     n = len(data)
-    plt.scatter(theo_exp, empi_exp, s=5, color="navy")
-    plt.plot(theo_exp, theo_exp, label=f"$x=y$", color="navy")
-    plt.fill_betweenx(y=empi_exp, x1=lb_exp, x2=ub_exp, alpha=0.2, color="navy")
-    plt.legend()
-    plt.xlabel(f"Theoretical unit Exponential quantiles ({n} observations)")
-    plt.ylabel("Empirical quantiles")
-    plt.title("QQ Plot: Unit Exponential Scale")
+    ax.scatter(theo_exp, empi_exp, s=5, color="navy")
+    ax.plot(theo_exp, theo_exp, label=f"$x=y$", color="navy")
+    ax.fill_betweenx(y=empi_exp, x1=lb_exp, x2=ub_exp, alpha=0.2, color="navy")
+    ax.legend()
+    ax.set_xlabel(f"Theoretical unit Exponential quantiles ({n} observations)")
+    ax.set_ylabel("Empirical quantiles")
+    ax.set_title("QQ Plot: Unit Exponential Scale")
     plt.tight_layout()
-    if path_to_figure is None:
-        path_to_figure = __file__
-    plt.savefig(f"{path_to_figure}/{figure_name}.png")
-    plt.clf()
+    if path_to_figure is not None:
+        plt.savefig(f"{path_to_figure}/{figure_name}.png")
+    return ax
 
 
 def qq_plot_frechet_scale(
     fit: Distribution,
     data: Union[pd.DataFrame, np.array, pd.Series],
+    ax=plt.gca(),
     path_to_figure: str = None,
     figure_name="qq_plot",
     ci_confidence=0.99,
@@ -164,15 +165,14 @@ def qq_plot_frechet_scale(
     lb_fr = unit_frechet.inverse_cdf(lower_bound)
     ub_fr = unit_frechet.inverse_cdf(upper_bound)
     n = len(data)
-    plt.scatter(theo_fr, empi_fr, s=5, color="navy")
-    plt.plot(theo_fr, theo_fr, label=f"$x=y$", color="navy")
-    plt.fill_betweenx(y=empi_fr, x1=lb_fr, x2=ub_fr, alpha=0.2, color="navy")
-    plt.legend()
-    plt.xlabel(r"Theoretical unit Fr\'echet quantiles ({} observations)".format(n))
-    plt.ylabel("Empirical quantiles")
-    plt.title(r"QQ Plot: Unit Fr\'echet Scale")
+    ax.scatter(theo_fr, empi_fr, s=5, color="navy")
+    ax.plot(theo_fr, theo_fr, label=f"$x=y$", color="navy")
+    ax.fill_betweenx(y=empi_fr, x1=lb_fr, x2=ub_fr, alpha=0.2, color="navy")
+    ax.legend()
+    ax.set_xlabel(r"Theoretical unit Fr\'echet quantiles ({} observations)".format(n))
+    ax.set_ylabel("Empirical quantiles")
+    ax.set_title(r"QQ Plot: Unit Fr\'echet Scale")
     plt.tight_layout()
-    if path_to_figure is None:
-        path_to_figure = __file__
-    plt.savefig(f"{path_to_figure}/{figure_name}.png")
-    plt.clf()
+    if path_to_figure is not None:
+        plt.savefig(f"{path_to_figure}/{figure_name}.png")
+    return ax

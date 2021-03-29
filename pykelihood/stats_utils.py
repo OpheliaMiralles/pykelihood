@@ -12,13 +12,17 @@ from scipy.optimize import minimize
 from scipy.stats import chi2
 
 from pykelihood.cached_property import cached_property
-from pykelihood.distributions import GPD, Distribution
+from pykelihood.distributions import GPD, Distribution, Exponential
 from pykelihood.metrics import (
     AIC,
     BIC,
     Brier_score,
     crps,
     opposite_log_likelihood,
+    pp_l1_distance,
+    pp_l2_distance,
+    qq_l1_distance,
+    qq_l2_distance,
     quantile_score,
 )
 
@@ -291,6 +295,34 @@ class DetrentedFluctuationAnalysis(object):
         return scales, fluct, coeff[0]
 
 
+def pettitt_test(data: Union[np.array, pd.DataFrame, pd.Series]):
+    """
+    Pettitt's non-parametric test for change-point detection.
+    Given an input signal, it reports the likely position of a single switch point along with
+    the significance probability for location K, approximated for p <= 0.05.
+    """
+    T = len(data)
+    if isinstance(data, pd.DataFrame) or isinstance(data, pd.Series):
+        X = np.array(data).reshape((len(data), 1))
+    else:
+        X = data.reshape((len(data), 1))
+    vector_of_ones = np.ones([1, len(X)])
+    matrix_col_X = np.matmul(X, vector_of_ones)
+    matrix_lines_X = matrix_col_X.T
+    diff = matrix_lines_X - matrix_col_X
+    diff_sign = np.sign(diff)
+    U_initial = diff_sign[0, 1:].sum()
+    sum_of_each_line = diff_sign[1:].sum(axis=1)
+    cs = sum_of_each_line.cumsum()
+    U = U_initial + cs
+    U = list(U)
+    U.insert(0, U_initial)
+    loc = np.argmax(np.abs(U))
+    K = np.max(np.abs(U))
+    p = np.exp(-3 * K ** 2 / (T ** 3 + T ** 2))
+    return (loc, p)
+
+
 def threshold_selection_gpd_NorthorpColeman(
     data: Union[pd.Series, np.ndarray],
     thresholds: Union[Sequence, np.ndarray],
@@ -432,7 +464,7 @@ def threshold_selection_gpd_NorthorpColeman(
             results_dic[u][f"bs_{int(t)}"] = Brier_score(
                 fits[u], data[data > u], threshold=t
             )
-        for q in [0.9, 0.95, 0.99]:
+        for q in [0.9, 0.95]:
             results_dic[u][f"qs_{int(q * 100)}"] = quantile_score(
                 fits[u], np.quantile(data[data > u], q), quantile=q
             )
@@ -442,13 +474,20 @@ def threshold_selection_gpd_NorthorpColeman(
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(constrained_layout=True)
-    ax.plot(results.index, results["pvalue"], color="navy")
+    ax.plot(results.index, results["pvalue"], color="navy", label="p-value")
     ax.scatter(results.index, results["pvalue"], marker="x", s=8, color="navy")
+    ax.legend(loc="upper center", title="LR test")
     ax2 = ax.twinx()
-    for f, c in zip([85, 90, 100], ["salmon", "goldenrod", "royalblue"]):
-        ax2.plot(results.dropna()[f"bs_{f}"], c=c, label=r"u={}".format(f))
-    ax2.set_ylabel("Brier score")
-    ax2.legend()
+    results = results.assign(
+        rescaled_crps=lambda x: x["crps"] * (x["qs_90"].mean() / x["crps"].mean())
+    )
+    for f, c in zip([90, 95], ["salmon", "goldenrod"]):
+        ax2.plot(
+            results.dropna()[f"qs_{f}"], c=c, label=r"${}\%$ Quantile Score".format(f)
+        )
+    ax2.plot(results.dropna()["rescaled_crps"], c="royalblue", label="CRPS")
+    ax2.set_ylabel("GoF scores")
+    ax2.legend(title="GoF scores")
     ax.set_title("Threshold Selection plot based on LR test")
     ax.set_xlabel("threshold")
     ax.set_ylabel("p-value")
@@ -456,29 +495,99 @@ def threshold_selection_gpd_NorthorpColeman(
     return results, fig
 
 
-def pettitt_test(data: Union[np.array, pd.DataFrame, pd.Series]):
+def threshold_selection_GOF(
+    data: Union[pd.Series, np.ndarray],
+    init_threshold: float,
+    metric=qq_l1_distance,
+    plot=False,
+):
     """
-    Pettitt's non-parametric test for change-point detection.
-    Given an input signal, it reports the likely position of a single switch point along with
-    the significance probability for location K, approximated for p <= 0.05.
+    Threshold selection method based on goodness of fit maximisation.
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process. arXiv preprint arXiv:2102.00884.
+    :return: table with results and plot (if selected)
     """
-    T = len(data)
-    if isinstance(data, pd.DataFrame) or isinstance(data, pd.Series):
-        X = np.array(data).reshape((len(data), 1))
-    else:
-        X = data.reshape((len(data), 1))
-    vector_of_ones = np.ones([1, len(X)])
-    matrix_col_X = np.matmul(X, vector_of_ones)
-    matrix_lines_X = matrix_col_X.T
-    diff = matrix_lines_X - matrix_col_X
-    diff_sign = np.sign(diff)
-    U_initial = diff_sign[0, 1:].sum()
-    sum_of_each_line = diff_sign[1:].sum(axis=1)
-    cs = sum_of_each_line.cumsum()
-    U = U_initial + cs
-    U = list(U)
-    U.insert(0, U_initial)
-    loc = np.argmax(np.abs(U))
-    K = np.max(np.abs(U))
-    p = np.exp(-3 * K ** 2 / (T ** 3 + T ** 2))
-    return (loc, p)
+
+    def to_minimize(x):
+        threshold = x[0]
+        new_data = data[data > threshold] - threshold
+        gpd_fit = GPD.fit(new_data, loc=0.0)
+        unit_exp = Exponential()
+        return metric(
+            distribution=unit_exp, data=unit_exp.inverse_cdf(gpd_fit.cdf(new_data))
+        )
+
+    res = minimize(
+        to_minimize,
+        x0=np.array(init_threshold),
+        method="Nelder-Mead",
+        options={"maxiter": 5e4},
+    )
+    if not plot:
+        return res
+    import matplotlib.pyplot as plt
+
+    optimal_thresh = res.x[0]
+    threshold_sequence = sorted(
+        np.concatenate(
+            [
+                np.linspace(
+                    init_threshold,
+                    init_threshold
+                    + 2 * (10 ** math.floor(math.log10(np.abs(init_threshold)))),
+                    30,
+                ),
+                [optimal_thresh],
+            ]
+        )
+    )
+    thresh_seq_func = [to_minimize([t]) for t in threshold_sequence]
+    data_to_fit = data[data > optimal_thresh]
+    gpd_fit = GPD.fit(data_to_fit, loc=optimal_thresh)
+    fig = plt.figure(figsize=(15, 5), constrained_layout=True)
+    gs = fig.add_gridspec(1, 3)
+    ax = []
+    for i in range(1):
+        for j in range(3):
+            axe = fig.add_subplot(gs[i, j])
+            ax.append(axe)
+    plt.subplots_adjust(wspace=0.2)
+    ax0, ax1, ax2 = ax
+    ax0.plot(threshold_sequence, thresh_seq_func, color="navy")
+    ax0.scatter(threshold_sequence, thresh_seq_func, marker="x", s=8, color="navy")
+    ax0.vlines(
+        res.x,
+        res.fun,
+        np.max(thresh_seq_func),
+        color="royalblue",
+        label="Optimal threshold",
+    )
+    ax0.set_title("Threshold Selection plot based on GoF")
+    ax0.set_xlabel("threshold")
+    ax0.set_ylabel(metric.__name__.replace("_", " "))
+    from pykelihood.visualisation.utils import qq_plot
+
+    if metric.__name__.startswith("qq"):
+        from pykelihood.visualisation.utils import qq_plot_exponential_scale
+
+        qq_plot_exponential_scale(gpd_fit, data_to_fit, ax=ax1)
+    elif metric.__name__.startswith("pp"):
+        from pykelihood.visualisation.utils import pp_plot
+
+        pp_plot(gpd_fit, data_to_fit, ax=ax1)
+    qq_plot(gpd_fit, data_to_fit, ax2)
+    fig.show()
+    return res, fig
+
+
+if __name__ == "__main__":
+    data = pd.read_csv(
+        "/Users/Boubou/Documents/GitHub/Venezuela-Data/data/venezuela_data.csv"
+    )["data"]
+    init_threshold = 5
+    res = {}
+    fig = {}
+    for metric in [qq_l1_distance, qq_l2_distance, pp_l1_distance, pp_l2_distance]:
+        res[metric.__name__], fig[metric.__name__] = threshold_selection_GOF(
+            data, init_threshold, metric=metric, plot=True
+        )
