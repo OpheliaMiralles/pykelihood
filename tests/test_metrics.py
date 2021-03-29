@@ -8,6 +8,10 @@ from pykelihood.metrics import (
     Brier_score,
     crps,
     opposite_log_likelihood,
+    pp_l1_distance,
+    pp_l2_distance,
+    qq_l1_distance,
+    qq_l2_distance,
     quantile_score,
 )
 
@@ -77,7 +81,15 @@ def test_gpd(shape):
 @pytest.mark.parametrize("distribution", [GEV, GPD], ids=lambda c: c.__name__)
 @pytest.mark.parametrize(
     "score_func",
-    [crps, partial(Brier_score, threshold=0), opposite_log_likelihood],
+    [
+        crps,
+        partial(Brier_score, threshold=0),
+        opposite_log_likelihood,
+        qq_l1_distance,
+        qq_l2_distance,
+        pp_l1_distance,
+        pp_l2_distance,
+    ],
     ids=str,
 )
 def test_logical(score_func, distribution, shape, normal_data, make_data):
