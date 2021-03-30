@@ -495,9 +495,10 @@ def threshold_selection_gpd_NorthorpColeman(
     return results, fig
 
 
-def threshold_selection_GOF(
+def threshold_selection_GoF(
     data: Union[pd.Series, np.ndarray],
-    init_threshold: float,
+    min_threshold: float,
+    max_threshold: float,
     metric=qq_l1_distance,
     plot=False,
 ):
@@ -517,31 +518,16 @@ def threshold_selection_GOF(
             distribution=unit_exp, data=unit_exp.inverse_cdf(gpd_fit.cdf(new_data))
         )
 
-    res = minimize(
-        to_minimize,
-        x0=np.array(init_threshold),
-        method="Nelder-Mead",
-        options={"maxiter": 5e4},
-    )
+    threshold_sequence = np.linspace(min_threshold, max_threshold, 300)
+    func_eval = [to_minimize([t]) for t in threshold_sequence]
+    optimal_thresh = threshold_sequence[func_eval.index(np.min(func_eval))]
+    func = np.min(func_eval)
+    res = [optimal_thresh, func]
+
     if not plot:
         return res
     import matplotlib.pyplot as plt
 
-    optimal_thresh = res.x[0]
-    threshold_sequence = sorted(
-        np.concatenate(
-            [
-                np.linspace(
-                    init_threshold,
-                    init_threshold
-                    + 2 * (10 ** math.floor(math.log10(np.abs(init_threshold)))),
-                    30,
-                ),
-                [optimal_thresh],
-            ]
-        )
-    )
-    thresh_seq_func = [to_minimize([t]) for t in threshold_sequence]
     data_to_fit = data[data > optimal_thresh]
     gpd_fit = GPD.fit(data_to_fit, loc=optimal_thresh)
     fig = plt.figure(figsize=(15, 5), constrained_layout=True)
@@ -553,12 +539,12 @@ def threshold_selection_GOF(
             ax.append(axe)
     plt.subplots_adjust(wspace=0.2)
     ax0, ax1, ax2 = ax
-    ax0.plot(threshold_sequence, thresh_seq_func, color="navy")
-    ax0.scatter(threshold_sequence, thresh_seq_func, marker="x", s=8, color="navy")
+    ax0.plot(threshold_sequence, func_eval, color="navy")
+    ax0.scatter(threshold_sequence, func_eval, marker="x", s=8, color="navy")
     ax0.vlines(
-        res.x,
-        res.fun,
-        np.max(thresh_seq_func),
+        optimal_thresh,
+        func,
+        np.max(func_eval),
         color="royalblue",
         label="Optimal threshold",
     )
@@ -578,16 +564,3 @@ def threshold_selection_GOF(
     qq_plot(gpd_fit, data_to_fit, ax2)
     fig.show()
     return res, fig
-
-
-if __name__ == "__main__":
-    data = pd.read_csv(
-        "/Users/Boubou/Documents/GitHub/Venezuela-Data/data/venezuela_data.csv"
-    )["data"]
-    init_threshold = 5
-    res = {}
-    fig = {}
-    for metric in [qq_l1_distance, qq_l2_distance, pp_l1_distance, pp_l2_distance]:
-        res[metric.__name__], fig[metric.__name__] = threshold_selection_GOF(
-            data, init_threshold, metric=metric, plot=True
-        )
