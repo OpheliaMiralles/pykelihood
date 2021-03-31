@@ -86,7 +86,7 @@ class Distribution(Parametrized):
                     subparam = name_fixed_param.replace(f"{name}_", "")
                     subdic = param_dict[name].param_dict.copy()
                     subdic[subparam] = ConstantParameter(value_fixed_param)
-                    param_dict[name] = param_dict[name].with_params(subdic.values())
+                    param_dict[name] = param_dict[name].with_params(**subdic)
         return param_dict
 
     def _apply_constraints(self, data):
@@ -300,26 +300,6 @@ class GEV(ScipyDistribution):
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super(GEV, self).__init__(loc, scale, shape)
 
-    def lb_shape(self, data):
-        x_min = data.min()
-        x_max = data.max()
-        if x_min * x_max < 0:
-            return -np.inf
-        elif x_min > 0:
-            return self.scale / (x_max - self.loc())
-        else:
-            return self.scale / (x_min - self.loc())
-
-    def ub_shape(self, data):
-        x_min = data.min()
-        x_max = data.max()
-        if x_min * x_max < 0:
-            return np.inf
-        elif x_min > 0:
-            return self.scale / (x_min - self.loc())
-        else:
-            return self.scale / (x_max - self.loc())
-
     def _to_scipy_args(self, loc=None, scale=None, shape=None):
         if shape is not None:
             shape = -shape
@@ -328,6 +308,27 @@ class GEV(ScipyDistribution):
             "loc": ifnone(loc, self.loc()),
             "scale": ifnone(scale, self.scale()),
         }
+
+
+class Frechet(GEV):
+    def __init__(self, loc=0.0, scale=1.0, shape=1.0):
+        """
+        Reparametrization of GEV to get the Fréchet form F(x) = exp(-(x-m)/s)^{-\alpha}
+        :param loc, scale, shape: Initialized to 0., 1. and 1. for standard Fréchet F(x) = exp(-1/x)
+        """
+        if shape <= 0.0:
+            raise ValueError(
+                r"The shape parameter must be strictly positive for a Fréchet distribution."
+            )
+        gev_loc = loc + scale
+        gev_scale = scale / shape
+        gev_shape = 1 / shape
+        super(Frechet, self).__init__(gev_loc, gev_scale, gev_shape)
+
+
+class Gumbel(GEV):
+    def __init__(self, loc=1.0, scale=1.0):
+        super(Gumbel, self).__init__(loc, scale, shape=ConstantParameter(0))
 
 
 class MixtureExponentialModel(Distribution):
