@@ -16,7 +16,7 @@ try:
     from hawkeslib import UnivariateExpHawkesProcess as UEHP
 except ImportError:
     UEHP = None
-from pykelihood.distributions import Distribution
+from pykelihood.distributions import Distribution, opposite_log_likelihood
 from pykelihood.parameters import Parameter
 from pykelihood.visualisation.utils import (
     get_quantiles_and_confidence_intervals,
@@ -368,11 +368,13 @@ def extremogram_plot(
 
     def extremogram_loop(h_range, indices_exceedances):
         counts = []
+        indices_exceedances = np.array(indices_exceedances)
         for h in h_range:
-            counts.append(
-                len(np.intersect1d(indices_exceedances + h, indices_exceedances))
-                / len(indices_exceedances)
-            )
+            mat1 = np.tile(indices_exceedances, (len(indices_exceedances), 1))
+            mat2 = np.tile(indices_exceedances + h, (len(indices_exceedances), 1))
+            diff = mat2.T - mat1
+            diff = diff[np.abs(diff) < 0.5]
+            counts.append(len(diff) / len(indices_exceedances))
         return counts
 
     # empirical
@@ -389,7 +391,9 @@ def extremogram_plot(
     extremogram_realized = pd.Series(extremogram_realized, index=h_range)
 
     # Simulated Poisson process
-    exp_fit = Exponential.fit(data_extremogram["iat"], loc=0.0)
+    exp_fit = Exponential.fit(
+        data_extremogram["iat"], loc=0.0, x0=[len(data_extremogram) / len(data)]
+    )
     exceedances_pp = []
     for i in range(1000):
         exceedances_pp.append(exp_fit.rvs(len(data_extremogram)).cumsum())
@@ -397,7 +401,7 @@ def extremogram_plot(
     for i in range(len(exceedances_pp)):
         # PP
         ex_pp = exceedances_pp[i].copy()
-        indices_exceedances = [int(round(e, 0)) for e in ex_pp]
+        indices_exceedances = [e for e in ex_pp]
         local_count_pp = extremogram_loop(h_range, indices_exceedances)
         local_count_pp = pd.Series(local_count_pp, index=h_range)
         count_pp.append(local_count_pp)
@@ -435,26 +439,46 @@ def extremogram_plot(
         if UEHP is not None:
             uv = UEHP()
             uv.fit(np.array(data_extremogram["days_since_start"]))
-            mu, alpha, theta = uv.get_params()
+            exceedances_hp = []
+            for _ in range(1000):
+                exceedances_hp.append(
+                    uv.sample(data_extremogram["days_since_start"].max())
+                )
         else:
-            mu = len(data_extremogram) / len(data)
+            from pykelihood.samplers import HawkesByThinningModified
+
+            mu = 1 / (len(data_extremogram) / len(data))
             alpha = 0
             theta = 0
-        hawkes_fit = Exponential.fit(
-            data_extremogram["iat"],
-            x0=(0.0, mu, alpha, theta),
-            rate=kernels.hawkes_with_exp_kernel(
-                np.array(data_extremogram["days_since_start"])
-            ),
-        )
-        exceedances_hp = []
-        for i in range(1000):
-            exceedances_hp.append(hawkes_fit.rvs(len(data_extremogram)).cumsum())
+
+            def score(dist, data):
+                if dist.rate.alpha >= 1.0:
+                    return 10 ** 10
+                else:
+                    return opposite_log_likelihood(dist, data)
+
+            hawkes_fit = Exponential.fit(
+                data_extremogram["iat"],
+                x0=(mu, alpha, theta),
+                loc=0.0,
+                rate=kernels.hawkes_with_exp_kernel(
+                    np.array(data_extremogram["days_since_start"])
+                ),
+                score=score,
+            )
+            mu, alpha, theta = hawkes_fit.optimisation_params
+            exceedances_hp = []
+            for _ in range(1000):
+                exceedances_hp.append(
+                    HawkesByThinningModified(
+                        data_extremogram["days_since_start"].max(), mu, alpha, theta
+                    )
+                )
         count_hp = []
         for i in range(len(exceedances_hp)):
             # HP
             ex_hp = exceedances_hp[i]
-            indices_exceedances = [int(round(e, 0)) for e in ex_hp]
+            indices_exceedances = [e for e in ex_hp]
             local_count_hp = extremogram_loop(h_range, indices_exceedances)
             local_count_hp = pd.Series(local_count_hp, index=h_range)
             count_hp.append(local_count_hp)
@@ -471,7 +495,8 @@ def extremogram_plot(
                     index=["hp_lb", "hp_ub"],
                     columns=h_range,
                 ).T,
-            ]
+            ],
+            axis=1,
         )
         plt.plot(h_range, mean_hp, label="Hawkes Process Simulated", color="royalblue")
         plt.fill_between(
@@ -547,7 +572,9 @@ def mean_cluster_size(
     )
 
     # Simulated
-    exp_fit = Exponential.fit(data_extremal_index["iat"], loc=0.0)
+    exp_fit = Exponential.fit(
+        data_extremal_index["iat"], loc=0.0, x0=[len(data_extremal_index) / len(data)]
+    )
     exceedances_pp = []
     for i in range(1000):
         exceedances_pp.append(exp_fit.rvs(len(data_extremal_index)).cumsum())
@@ -562,8 +589,8 @@ def mean_cluster_size(
     pp_cluster_sizes = pd.concat(pp_cluster_sizes, axis=1)
     x = block_sizes
     mean_pp = pp_cluster_sizes.mean(axis=1)
-    quantile_inf_pp = np.quantile(pp_cluster_sizes, q=0.01, axis=1)
-    quantile_sup_pp = np.quantile(pp_cluster_sizes, q=0.99, axis=1)
+    quantile_inf_pp = np.quantile(pp_cluster_sizes, q=0.1, axis=1)
+    quantile_sup_pp = np.quantile(pp_cluster_sizes, q=0.9, axis=1)
     to_return = pd.concat(
         [
             empirical_mean_cluster_size.rename("realized"),
@@ -590,21 +617,44 @@ def mean_cluster_size(
         if UEHP is not None:
             uv = UEHP()
             uv.fit(np.array(data_extremal_index["days_since_start"]))
-            mu, alpha, theta = uv.get_params()
+            exceedances_hp = []
+            for _ in range(1000):
+                exceedances_hp.append(
+                    pd.DataFrame(uv.sample(T=len(data_extremal_index)), columns=[_])
+                )
         else:
-            mu = len(data_extremal_index) / len(data)
+            from pykelihood.samplers import HawkesByThinningModified
+
+            mu = 1 / (len(data_extremal_index) / len(data))
             alpha = 0
             theta = 0
-        hawkes_fit = Exponential.fit(
-            data_extremal_index["iat"],
-            x0=(0.0, mu, alpha, theta),
-            rate=kernels.hawkes_with_exp_kernel(
-                np.array(data_extremal_index["days_since_start"])
-            ),
-        )
-        exceedances_hp = []
-        for i in range(1000):
-            exceedances_hp.append(hawkes_fit.rvs(len(data_extremal_index)).cumsum())
+
+            def score(dist, data):
+                if dist.rate.alpha >= 1.0:
+                    return 10 ** 10
+                else:
+                    return opposite_log_likelihood(dist, data)
+
+            hawkes_fit = Exponential.fit(
+                data_extremal_index["iat"],
+                x0=(mu, alpha, theta),
+                loc=0.0,
+                rate=kernels.hawkes_with_exp_kernel(
+                    np.array(data_extremal_index["days_since_start"])
+                ),
+                score=score,
+            )
+            mu, alpha, theta = hawkes_fit.optimisation_params
+            exceedances_hp = []
+            for _ in range(1000):
+                exceedances_hp.append(
+                    pd.DataFrame(
+                        HawkesByThinningModified(
+                            len(data_extremal_index), mu, alpha, theta
+                        ),
+                        columns=[_],
+                    )
+                )
         hp_cluster_sizes = []
         for i in range(len(exceedances_hp)):
             # HP
@@ -615,8 +665,8 @@ def mean_cluster_size(
             hp_cluster_sizes.append(local_count_hp)
         hp_cluster_sizes = pd.concat(hp_cluster_sizes, axis=1)
         mean_hp = hp_cluster_sizes.mean(axis=1)
-        quantile_inf_hp = np.quantile(hp_cluster_sizes, q=0.01, axis=1)
-        quantile_sup_hp = np.quantile(hp_cluster_sizes, q=0.99, axis=1)
+        quantile_inf_hp = np.nanquantile(hp_cluster_sizes, q=0.1, axis=1)
+        quantile_sup_hp = np.nanquantile(hp_cluster_sizes, q=0.9, axis=1)
         to_return = pd.concat(
             [
                 to_return,
@@ -626,7 +676,8 @@ def mean_cluster_size(
                     columns=x,
                     index=["hp_lb", "hp_ub"],
                 ).T,
-            ]
+            ],
+            axis=1,
         )
         plt.plot(x, mean_hp, label="Hawkes Process Simulated", color="royalblue")
         plt.fill_between(
@@ -685,64 +736,94 @@ def cum_number_exceedances(
     # Simulated Poisson process
     exp_fit = Exponential.fit(data_gpd["iat"], loc=0.0)
     simulations = []
-    for _ in range(1000):
+    for _ in range(500):
         simulations.append(
             pd.DataFrame(np.cumsum(exp_fit.rvs(len(data_gpd))), columns=[_])
         )
     simulations = pd.concat(simulations, axis=1)
-    mean_pp = simulations.mean(axis=1)
-    quantile_inf_pp = np.quantile(simulations, q=0.01, axis=1)
-    quantile_sup_pp = np.quantile(simulations, q=0.99, axis=1)
-    mean_pp_ = swap_axes(mean_pp)
-    x1_pp = pd.to_datetime(
-        length_total_period * quantile_inf_pp, unit="d", origin=origin
+    s_pp = (
+        simulations.stack()
+        .reset_index()
+        .pivot(index=0, columns="level_1", values="level_0")
+        .ffill()
+        .fillna(0.0)
     )
-    x2_pp = pd.to_datetime(
-        length_total_period * quantile_sup_pp, unit="d", origin=origin
+    mean_pp = s_pp.mean(axis=1)
+    quantile_inf_pp = np.quantile(s_pp, q=0.01, axis=1)
+    quantile_sup_pp = np.quantile(s_pp, q=0.99, axis=1)
+    mean_pp.index = pd.to_datetime(
+        length_total_period * mean_pp.index, unit="d", origin=origin
     )
-    mean_pp_.index = pd.to_datetime(
-        length_total_period * mean_pp, unit="d", origin=origin
+    to_return = [realized_, mean_pp]
+    plt.plot(mean_pp, label="Poisson Process Simulated", color="salmon")
+    plt.fill_between(
+        x=mean_pp.index,
+        y1=quantile_inf_pp,
+        y2=quantile_sup_pp,
+        color="salmon",
+        alpha=0.2,
     )
-    to_return = [realized_, mean_pp_]
-    plt.plot(mean_pp_, label="Poisson Process Simulated", color="salmon")
-    plt.fill_betweenx(y=mean_pp_, x1=x1_pp, x2=x2_pp, color="salmon", alpha=0.2)
-    plt.plot(realized_, label="Empirical", color="slategrey")
     if compare_to_hawkes:
         if UEHP is not None:
             uv = UEHP()
             uv.fit(np.array(data_gpd["time"]))
-            mu, alpha, theta = uv.get_params()
+            simulations_hp = []
+            tol = 1e-3
+            for _ in range(500):
+                simulations_hp.append(pd.DataFrame(uv.sample(T=1 + tol), columns=[_]))
         else:
+            from pykelihood.samplers import HawkesByThinningModified
+
             mu = 1 / (len(data_gpd) / len(data))
             alpha = 0
             theta = 0
-        hawkes_fit = Exponential.fit(
-            data_gpd["iat"],
-            x0=(0.0, mu, alpha, theta),
-            rate=kernels.hawkes_with_exp_kernel(np.array(data_gpd["time"])),
-        )
-        simulations_hp = []
-        for _ in range(1000):
-            simulations_hp.append(
-                pd.DataFrame(np.cumsum(hawkes_fit.rvs(len(data_gpd))), columns=[_])
+
+            def score(dist, data):
+                if dist.rate.alpha >= 1.0:
+                    return 10 ** 10
+                else:
+                    return opposite_log_likelihood(dist, data)
+
+            hawkes_fit = Exponential.fit(
+                data_gpd["iat"],
+                x0=(mu, alpha, theta),
+                loc=0.0,
+                rate=kernels.hawkes_with_exp_kernel(np.array(data_gpd["time"])),
+                score=score,
             )
-        simulations_hp = pd.concat(simulations_hp, axis=1)
-        mean_hp = simulations_hp.mean(axis=1)
-        quantile_inf_hp = np.quantile(simulations_hp, q=0.01, axis=1)
-        quantile_sup_hp = np.quantile(simulations_hp, q=0.99, axis=1)
-        mean_hp_ = swap_axes(mean_hp)
-        x1 = pd.to_datetime(
-            length_total_period * quantile_inf_hp, unit="d", origin=origin
+            mu, alpha, theta = hawkes_fit.optimisation_params
+            simulations_hp = []
+            for _ in range(500):
+                simulations_hp.append(
+                    pd.DataFrame(
+                        HawkesByThinningModified(len(data_gpd), mu, alpha, theta),
+                        columns=[_],
+                    )
+                )
+        simulations_hp = pd.concat(simulations_hp, axis=1).loc[: len(data_gpd)]
+        s_hp = (
+            simulations_hp.stack()
+            .reset_index()
+            .pivot(index=0, columns="level_1", values="level_0")
+            .ffill()
+            .fillna(0.0)
         )
-        x2 = pd.to_datetime(
-            length_total_period * quantile_sup_hp, unit="d", origin=origin
+        mean_hp = s_hp.mean(axis=1)
+        quantile_inf_hp = np.nanquantile(s_hp, q=0.01, axis=1)
+        quantile_sup_hp = np.nanquantile(s_hp, q=0.99, axis=1)
+        mean_hp.index = pd.to_datetime(
+            length_total_period * mean_hp.index, unit="d", origin=origin
         )
-        mean_hp_.index = pd.to_datetime(
-            length_total_period * mean_hp, unit="d", origin=origin
+        to_return.append(mean_hp)
+        plt.plot(mean_hp, label="Hawkes Process Simulated", color="royalblue")
+        plt.fill_between(
+            x=mean_hp.index,
+            y1=quantile_inf_hp,
+            y2=quantile_sup_hp,
+            color="royalblue",
+            alpha=0.2,
         )
-        to_return.append(mean_hp_)
-        plt.plot(mean_hp_, label="Hawkes Process Simulated", color="royalblue")
-        plt.fill_betweenx(y=mean_hp_, x1=x1, x2=x2, color="royalblue", alpha=0.2)
+    plt.plot(realized_, label="Empirical", color="slategrey")
     plt.title("Cumulative Exceedances over Threshold")
     plt.ylabel("Number of Exceedances")
     plt.xlabel("Time")
