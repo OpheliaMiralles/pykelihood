@@ -12,11 +12,12 @@ from scipy.optimize import minimize
 from scipy.stats import chi2
 
 from pykelihood.cached_property import cached_property
-from pykelihood.distributions import GPD, Distribution, Exponential
+from pykelihood.distributions import GPD, Distribution, Exponential, kernels
 from pykelihood.metrics import (
     AIC,
     BIC,
     Brier_score,
+    bootstrap,
     crps,
     opposite_log_likelihood,
     pp_l1_distance,
@@ -478,14 +479,21 @@ def threshold_selection_gpd_NorthorpColeman(
     ax.scatter(results.index, results["pvalue"], marker="x", s=8, color="navy")
     ax.legend(loc="upper center", title="LR test")
     ax2 = ax.twinx()
-    results = results.assign(
-        rescaled_crps=lambda x: x["crps"] * (x["qs_90"].mean() / x["crps"].mean())
-    )
+    if results["crps"].any():
+        results = results.assign(
+            rescaled_crps=lambda x: x["crps"] * (x["qs_90"].mean() / x["crps"].mean())
+        )
+        ax2.plot(
+            results.dropna(subset=["pvalue"])["rescaled_crps"],
+            c="royalblue",
+            label="CRPS",
+        )
     for f, c in zip([90, 95], ["salmon", "goldenrod"]):
         ax2.plot(
-            results.dropna()[f"qs_{f}"], c=c, label=r"${}\%$ Quantile Score".format(f)
+            results.dropna(subset=["pvalue"])[f"qs_{f}"],
+            c=c,
+            label=r"${}\%$ Quantile Score".format(f),
         )
-    ax2.plot(results.dropna()["rescaled_crps"], c="royalblue", label="CRPS")
     ax2.set_ylabel("GoF scores")
     ax2.legend(title="GoF scores")
     ax.set_title("Threshold Selection plot based on LR test")
@@ -496,10 +504,12 @@ def threshold_selection_gpd_NorthorpColeman(
 
 
 def threshold_selection_GoF(
-    data: Union[pd.Series, np.ndarray],
+    data: Union[pd.Series, np.ndarray, pd.DataFrame],
     min_threshold: float,
     max_threshold: float,
     metric=qq_l1_distance,
+    bootstrap_method=None,
+    data_column=None,
     plot=False,
 ):
     """
@@ -508,18 +518,33 @@ def threshold_selection_GoF(
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process. arXiv preprint arXiv:2102.00884.
     :return: table with results and plot (if selected)
     """
+    if isinstance(data, pd.DataFrame):
+        data_series = data[data_column]
+        if data_column is None:
+            raise AttributeError(
+                "The data column is needed to perform the threshold selection on a DataFrame."
+            )
+    else:
+        data_series = data
 
     def to_minimize(x):
         threshold = x[0]
-        new_data = data[data > threshold] - threshold
-        gpd_fit = GPD.fit(new_data, loc=0.0)
         unit_exp = Exponential()
-        return metric(
-            distribution=unit_exp, data=unit_exp.inverse_cdf(gpd_fit.cdf(new_data))
-        )
+        if bootstrap_method is None:
+            print("Performing threshold selection without bootstrap...")
+            new_data = data_series[data_series > threshold]
+            gpd_fit = GPD.fit(new_data, loc=0.0)
+            return metric(
+                distribution=unit_exp, data=unit_exp.inverse_cdf(gpd_fit.cdf(new_data))
+            )
+        else:
+            bootstrap_func = partial(bootstrap_method, threshold=threshold)
+            new_metric = bootstrap(metric, bootstrap_func)
+            return new_metric(unit_exp, data)
 
-    threshold_sequence = np.linspace(min_threshold, max_threshold, 300)
+    threshold_sequence = np.linspace(min_threshold, max_threshold, 50)
     func_eval = [to_minimize([t]) for t in threshold_sequence]
+
     optimal_thresh = threshold_sequence[func_eval.index(np.min(func_eval))]
     func = np.min(func_eval)
     res = [optimal_thresh, func]
@@ -528,8 +553,13 @@ def threshold_selection_GoF(
         return res
     import matplotlib.pyplot as plt
 
-    data_to_fit = data[data > optimal_thresh]
-    gpd_fit = GPD.fit(data_to_fit, loc=optimal_thresh)
+    # data_to_fit = data_series[data_series > optimal_thresh]
+    # gpd_fit = GPD.fit(data_to_fit, loc=optimal_thresh)
+    data_above = data[data["data"] > optimal_thresh]
+    data_to_fit = data_above["data"]
+    gpd_fit = GPD.fit(
+        data_to_fit, loc=kernels.linear(data_above["time"], a=optimal_thresh)
+    )
     fig = plt.figure(figsize=(15, 5), constrained_layout=True)
     gs = fig.add_gridspec(1, 3)
     ax = []
@@ -561,6 +591,6 @@ def threshold_selection_GoF(
         from pykelihood.visualisation.utils import pp_plot
 
         pp_plot(gpd_fit, data_to_fit, ax=ax1)
-    qq_plot(gpd_fit, data_to_fit, ax2)
+    qq_plot(GPD.fit(data_to_fit, loc=optimal_thresh), data_to_fit, ax2)
     fig.show()
     return res, fig

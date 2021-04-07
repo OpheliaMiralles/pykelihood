@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import typing
-from typing import Sequence
+from typing import Callable, Iterable, Sequence
 
 import numpy as np
 
@@ -9,6 +9,20 @@ from pykelihood.generic_types import Obs
 
 if typing.TYPE_CHECKING:
     from pykelihood.distributions import Distribution
+
+
+def bootstrap(
+    metric: Callable[[Distribution, Obs], float],
+    bootstrap_method: Callable[[Obs], Iterable[Obs]],
+):
+    def bootstrapped(distribution, data):
+        datasets = bootstrap_method(data)
+        sizes = [len(d) for d in datasets]
+        return np.sum([len(d) * metric(distribution, d) for d in datasets]) / np.sum(
+            sizes
+        )
+
+    return bootstrapped
 
 
 def likelihood(distribution: Distribution, data: Obs):
