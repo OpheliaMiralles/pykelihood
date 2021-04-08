@@ -11,6 +11,10 @@ if typing.TYPE_CHECKING:
     from pykelihood.distributions import Distribution
 
 
+def likelihood(distribution: Distribution, data: Obs):
+    return np.prod(distribution.pdf(data))
+
+
 def log_likelihood(distribution: Distribution, data: Obs):
     return np.sum(distribution.logpdf(data))
 
