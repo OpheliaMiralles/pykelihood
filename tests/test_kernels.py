@@ -97,7 +97,7 @@ def test_polynomial_regression_with_uniform_degree_across_columns(matrix_data):
     assert len(regression.optimisation_params) == nparams
     np.testing.assert_allclose(
         regression.with_params([1] * nparams)(),
-        (matrix_data).sum(axis=1) + (matrix_data ** 2).sum(axis=1),
+        matrix_data.sum(axis=1) + (matrix_data ** 2).sum(axis=1),
     )
 
 

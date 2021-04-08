@@ -119,7 +119,7 @@ class Distribution(Parametrized):
         def to_minimize(x) -> float:
             return score(init.with_params(x), data)
 
-        res = minimize(to_minimize, x0, method="Nelder-Mead", options={"fatol": 1e-3})
+        res = minimize(to_minimize, x0, method="Nelder-Mead")
         return init.with_params(res.x)
 
     def fit_instance(

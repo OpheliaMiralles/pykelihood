@@ -60,7 +60,7 @@ class Profiler(object):
     @cached_property
     def standard_mle(self):
         estimate = self.distribution.fit(self.data)
-        ll = estimate.log_likelihood(self.data)
+        ll = -opposite_log_likelihood(estimate, self.data)
         ll = ll if isinstance(ll, float) else ll[0]
         return (estimate, ll)
 
@@ -84,7 +84,7 @@ class Profiler(object):
             params = opt.optimisation_param_dict.keys()
         for name, k in opt.optimisation_param_dict.items():
             if name in params:
-                r = k.real
+                r = float(k)
                 lb = r - 5 * (10 ** math.floor(math.log10(np.abs(r))))
                 ub = r + 5 * (10 ** math.floor(math.log10(np.abs(r))))
                 range = list(np.linspace(lb, ub, 50))
@@ -143,7 +143,7 @@ class Profiler(object):
         if len(estimates):
             return [np.min(estimates), np.max(estimates)]
         else:
-            return [None, None]
+            return [-np.inf, np.inf]
 
 
 class DetrendedFluctuationAnalysis(object):

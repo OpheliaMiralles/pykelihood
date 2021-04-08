@@ -102,7 +102,7 @@ def test_profiles_with_trend(likelihood_with_trend):
     assert len(profiles) == len(mle.optimisation_params)
     for key in profiles:
         if len(profiles[key]):
-            assert pd.Series((profiles[key]["score"] <= likelihood_opt)).all()
+            np.testing.assert_array_less(profiles[key]["score"], likelihood_opt)
             assert len(profiles[key].columns) == len(mle.flattened_params) + 1
             assert (
                 profiles[key][key].min()
@@ -127,20 +127,16 @@ def test_profiles_with_fixed_param(likelihood_with_fixed_param):
 
 
 def test_confidence_interval(likelihood, likelihood_with_single_profiling_param):
-    return_periods = np.linspace(20, 200, 5)
+    return_period = 50
     mle, likelihood_opt = likelihood.optimum
-    assert likelihood.inference_confidence == 0.99
-    for return_period in return_periods:
 
-        def metric(distribution):
-            return distribution.isf(1 / return_period)
+    def metric(distribution):
+        return distribution.isf(1 / return_period)
 
-        estimated_level = metric(mle)
-        CI = likelihood.confidence_interval(metric)
-        single_param_CI = likelihood_with_single_profiling_param.confidence_interval(
-            metric
-        )
-        assert CI[0] <= estimated_level <= CI[1]
-        assert CI[0] <= single_param_CI[0]
-        # profiling according to only one parameter gives less wide and less reliable confidence intervals
-        assert CI[1] >= single_param_CI[1]
+    estimated_level = metric(mle)
+    CI = likelihood.confidence_interval(metric)
+    single_param_CI = likelihood_with_single_profiling_param.confidence_interval(metric)
+    assert CI[0] <= estimated_level <= CI[1]
+    assert CI[0] <= single_param_CI[0]
+    # profiling according to only one parameter gives less wide and less reliable confidence intervals
+    assert CI[1] >= single_param_CI[1]
