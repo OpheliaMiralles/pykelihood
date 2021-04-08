@@ -509,6 +509,7 @@ def threshold_selection_GoF(
     max_threshold: float,
     metric=qq_l1_distance,
     bootstrap_method=None,
+    GPD_instance=None,
     data_column=None,
     plot=False,
 ):
@@ -527,13 +528,16 @@ def threshold_selection_GoF(
     else:
         data_series = data
 
+    if GPD_instance is None:
+        GPD_instance = GPD()
+
     def to_minimize(x):
         threshold = x[0]
         unit_exp = Exponential()
         if bootstrap_method is None:
             print("Performing threshold selection without bootstrap...")
             new_data = data_series[data_series > threshold]
-            gpd_fit = GPD.fit(new_data, loc=0.0)
+            gpd_fit = GPD_instance.fit_instance(new_data, loc=0.0)
             return metric(
                 distribution=unit_exp, data=unit_exp.inverse_cdf(gpd_fit.cdf(new_data))
             )
@@ -553,22 +557,17 @@ def threshold_selection_GoF(
         return res
     import matplotlib.pyplot as plt
 
-    # data_to_fit = data_series[data_series > optimal_thresh]
-    # gpd_fit = GPD.fit(data_to_fit, loc=optimal_thresh)
-    data_above = data[data["data"] > optimal_thresh]
-    data_to_fit = data_above["data"]
-    gpd_fit = GPD.fit(
-        data_to_fit, loc=kernels.linear(data_above["time"], a=optimal_thresh)
-    )
-    fig = plt.figure(figsize=(15, 5), constrained_layout=True)
-    gs = fig.add_gridspec(1, 3)
+    data_to_fit = data_series[data_series > optimal_thresh]
+    gpd_fit = GPD_instance.fit_instance(data_to_fit)
+    fig = plt.figure(figsize=(10, 5), constrained_layout=True)
+    gs = fig.add_gridspec(1, 2)
     ax = []
     for i in range(1):
-        for j in range(3):
+        for j in range(2):
             axe = fig.add_subplot(gs[i, j])
             ax.append(axe)
     plt.subplots_adjust(wspace=0.2)
-    ax0, ax1, ax2 = ax
+    ax0, ax1 = ax
     ax0.plot(threshold_sequence, func_eval, color="navy")
     ax0.scatter(threshold_sequence, func_eval, marker="x", s=8, color="navy")
     ax0.vlines(
@@ -581,7 +580,6 @@ def threshold_selection_GoF(
     ax0.set_title("Threshold Selection plot based on GoF")
     ax0.set_xlabel("threshold")
     ax0.set_ylabel(metric.__name__.replace("_", " "))
-    from pykelihood.visualisation.utils import qq_plot
 
     if metric.__name__.startswith("qq"):
         from pykelihood.visualisation.utils import qq_plot_exponential_scale
@@ -591,6 +589,5 @@ def threshold_selection_GoF(
         from pykelihood.visualisation.utils import pp_plot
 
         pp_plot(gpd_fit, data_to_fit, ax=ax1)
-    qq_plot(GPD.fit(data_to_fit, loc=optimal_thresh), data_to_fit, ax2)
     fig.show()
     return res, fig
