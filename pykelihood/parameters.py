@@ -153,19 +153,14 @@ class ConstantParameter(Parameter):
 
 
 class ParametrizedFunction(Parametrized):
-    def __init__(self, f: Callable, *args, fname=None, **params: Parametrized):
-        self._init_args = args
-        self.f = partial(f, *args)
-        self.original_f = f
+    def __init__(self, f: Callable, *, fname=None, **params: Parametrized):
         super(ParametrizedFunction, self).__init__(*params.values())
         self.params_names = tuple(params.keys())
+        self.f = f
         self.fname = fname or f.__qualname__
-        self._mul = 1
 
     def __call__(self, *args, **kwargs):
-        if not args and not kwargs:
-            return self._mul * self.f(**self.param_dict)
-        return self._mul * self.original_f(*args, **kwargs, **self.param_dict)
+        return self.f(*args, **kwargs, **self.param_dict)
 
     def __getattr__(self, param):
         try:
@@ -178,4 +173,4 @@ class ParametrizedFunction(Parametrized):
         return f"{self.fname}({', '.join(args)})"
 
     def _build_instance(self, **new_params):
-        return type(self)(self.original_f, *self._init_args, **new_params)
+        return type(self)(self.f, fname=self.fname, **new_params)

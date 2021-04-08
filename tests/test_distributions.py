@@ -62,7 +62,7 @@ def test_named_with_params():
 
 
 def test_named_with_params_multi_level():
-    n = Normal(loc=kernels.linear(), scale=1)
+    n = Normal(loc=kernels.linear([]), scale=1)
     m = n.with_params(loc_a=2, scale=3)
     assert m.loc.a == 2
     assert m.scale == 3

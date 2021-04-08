@@ -1,4 +1,5 @@
 import re
+from functools import partial
 from itertools import count
 from typing import Collection, Sequence, Union
 
@@ -10,7 +11,7 @@ from pykelihood.parameters import Parameter, ParametrizedFunction, ensure_parame
 
 def parametrized_function(**param_defaults):
     def wrapper(f):
-        def wrapped(*args, **param_values) -> ParametrizedFunction:
+        def wrapped(x, **param_values) -> ParametrizedFunction:
             final_params = {}
             for p_name, default_value in param_defaults.items():
                 override = param_values.get(p_name)
@@ -18,7 +19,8 @@ def parametrized_function(**param_defaults):
                     final_params[p_name] = ensure_parametrized(override, constant=True)
                 else:
                     final_params[p_name] = ensure_parametrized(default_value)
-            return ParametrizedFunction(f, *args, **final_params)
+            func = partial(f, x)
+            return ParametrizedFunction(func, fname=f.__name__, **final_params)
 
         return wrapped
 
@@ -77,11 +79,11 @@ def hawkes2(t, tau, mu, alpha, theta):
 
 # Sophisticated kernels with multiple covariates
 def linear_regression(
-    x: Union[int, pd.DataFrame, np.ndarray] = 2, add_intercept=False, **constraints
+    x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
 ) -> ParametrizedFunction:
     """Computes a trend as a linear sum of the columns in the data.
 
-    :param x: the number of dimensions or the data the kernel will be computed on. There will be one parameter for each column.
+    :param x: the data the kernel will be computed on. There will be one parameter for each column.
     :param add_intercept: if True, an intercept is added to the result
     :param constraints: fixed values for the parameters of the regression. The constraints are given as `beta_i=value`,
                         where i is the index of the column starting with 1.
@@ -89,18 +91,10 @@ def linear_regression(
                         'beta_2=2', 'beta_cname=2', 'cname=2'.
                         'beta_0' constrains the value of the intercept if add_intercept is True.
     """
-    args = ()
-    if isinstance(x, int):
-        assert x > 0, "Unexpected number of parameters for linear regression"
-        ndim = x
+    if len(x.shape) > 1:
+        ndim = x.shape[1]
     else:
-        args = (x,)
-        if len(x.shape) > 1:
-            ndim = x.shape[1]
-        else:
-            raise ValueError(
-                "Consider using kernels.linear for a 1-dimensional data array"
-            )
+        raise ValueError("Consider using kernels.linear for a 1-dimensional data array")
     fixed = {}
     for p_name, p_value in constraints.items():
         if p_name.startswith("beta_"):
@@ -121,13 +115,13 @@ def linear_regression(
         f"beta_{i}": Parameter() if i not in fixed else fixed[i] for i in param_indices
     }
 
-    def _compute(data, **params_from_wrapper):
+    def _compute(**params_from_wrapper):
         intercept = params_from_wrapper.pop("beta_0", 0)
         sorted_params = [params_from_wrapper[k] for k in params if k != "beta_0"]
-        return intercept + (sorted_params * data).sum(axis=1)
+        return intercept + (sorted_params * x).sum(axis=1)
 
     return ParametrizedFunction(
-        _compute, *args, **params, fname=linear_regression.__qualname__
+        _compute, **params, fname=linear_regression.__qualname__
     )
 
 
@@ -176,12 +170,12 @@ def exponential_linear_regression(
         f"beta_{i}": Parameter() if i not in fixed else fixed[i] for i in param_indices
     }
 
-    def _compute(data, **params_from_wrapper):
+    def _compute(**params_from_wrapper):
         sorted_params = [params_from_wrapper[k] for k in params]
-        return np.exp((sorted_params * data).sum(axis=1))
+        return np.exp((sorted_params * x).sum(axis=1))
 
     return ParametrizedFunction(
-        _compute, *args, **params, fname=exponential_linear_regression.__qualname__
+        _compute, **params, fname=exponential_linear_regression.__qualname__
     )
 
 
@@ -237,8 +231,8 @@ def polynomial_regression(
             name = f"beta_{col_idx+1}_{d}"
             params[name] = fixed.get((col_idx + 1, d), Parameter())
 
-    def _compute(data, **params_from_wrapper):
-        data = np.array(data)
+    def _compute(**params_from_wrapper):
+        data = np.array(x)
         data_with_extra_cols = np.zeros(shape=(len(data), ncols))
         extra_col_idx = 0
         for col_idx, max_degree in enumerate(degree):
@@ -249,7 +243,7 @@ def polynomial_regression(
         return (sorted_params * data_with_extra_cols).sum(axis=1)
 
     return ParametrizedFunction(
-        _compute, *args, **params, fname=polynomial_regression.__qualname__
+        _compute, **params, fname=polynomial_regression.__qualname__
     )
 
 
@@ -266,9 +260,9 @@ def categories_qualitative(
         for value in unique_values
     }
 
-    def _compute(data, **params_from_wrapper):
-        return type(data)(list(map(lambda v: params_from_wrapper[str(v)], data)))
+    def _compute(**params_from_wrapper):
+        return type(x)(list(map(lambda v: params_from_wrapper[str(v)], x)))
 
     return ParametrizedFunction(
-        _compute, x, **params, fname=categories_qualitative.__qualname__
+        _compute, **params, fname=categories_qualitative.__qualname__
     )

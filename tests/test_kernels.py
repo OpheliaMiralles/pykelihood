@@ -20,29 +20,13 @@ def test_linear_trend_with_constraint(dataset):
     assert (trend.with_params([3])() == 2 + dataset * 3).all()
 
 
-def test_linear_trend_deferred_data(dataset):
-    trend = kernels.linear()
-    assert len(trend.params) == 2
-    assert len(trend.optimisation_params) == 2
-    assert (trend.with_params([3, 4])(dataset) == 3 + dataset * 4).all()
-
-
 def test_trend_in_trend(dataset):
     inner_trend = kernels.linear(dataset)
-    outer_trend = kernels.linear(b=inner_trend)
+    outer_trend = kernels.linear(dataset, b=inner_trend)
     assert {"a", "b_a", "b_b"} == set(outer_trend.flattened_param_dict.keys())
 
 
 def test_linear_regression(matrix_data):
-    regression = kernels.linear_regression(3)
-    assert len(regression.optimisation_params) == 3
-    assert (
-        regression.with_params([1, 2, 3])(matrix_data)
-        == ([1, 2, 3] * matrix_data).sum(axis=1)
-    ).all()
-
-
-def test_linear_regression_with_data(matrix_data):
     regression = kernels.linear_regression(matrix_data)
     assert len(regression.params) == len(matrix_data.columns)
     assert (
