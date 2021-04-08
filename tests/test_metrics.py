@@ -2,11 +2,15 @@ from functools import partial
 
 import numpy as np
 import pytest
+from pytest import approx
+from scipy.stats import norm
 
+from pykelihood import kernels
 from pykelihood.distributions import GEV, GPD, Normal
 from pykelihood.metrics import (
     Brier_score,
     crps,
+    log_likelihood,
     opposite_log_likelihood,
     pp_l1_distance,
     pp_l2_distance,
@@ -27,6 +31,16 @@ def make_data():
 @pytest.fixture
 def normal_data():
     return np.array(Normal().rvs(100000))
+
+
+def test_log_likelihood_is_correct(normal_data):
+    ndata = normal_data[:1000]
+    n = Normal(loc=kernels.linear(np.arange(len(ndata)))).fit_instance(ndata)
+    actual = log_likelihood(n, ndata)
+    expected = sum(
+        norm.logpdf(x, loc=loc, scale=n.scale()) for x, loc in zip(ndata, n.loc())
+    )
+    assert actual == approx(expected)
 
 
 @pytest.mark.parametrize("shape", [-0.5, 0.0, 0.5])
@@ -77,7 +91,7 @@ def test_gpd(shape):
     assert np.all(crps_gpd - qs_gpd >= 0)
 
 
-@pytest.mark.parametrize("shape", [-0.5, 0, 0.5], ids=str)
+@pytest.mark.parametrize("shape", [-0.5, 0, 0.5])
 @pytest.mark.parametrize("distribution", [GEV, GPD], ids=lambda c: c.__name__)
 @pytest.mark.parametrize(
     "score_func",
@@ -90,7 +104,6 @@ def test_gpd(shape):
         pp_l1_distance,
         pp_l2_distance,
     ],
-    ids=str,
 )
 def test_logical(score_func, distribution, shape, normal_data, make_data):
     data = make_data(distribution, shape)
