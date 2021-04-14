@@ -100,7 +100,7 @@ class Profiler(object):
                 pl = opt.fit_instance(
                     self.data,
                     score=self.score_function,
-                    fixed_params={param: x},
+                    **{param: x},
                 )
                 pl_value = -self.score_function(pl, self.data)
                 pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]

@@ -76,19 +76,6 @@ class Distribution(Parametrized):
         else:
             return self.isf(1 - q)
 
-    def _process_fit_params(self, **kwds):
-        param_dict = self.param_dict.copy()
-        for name in param_dict:
-            for name_fixed_param, value_fixed_param in kwds.items():
-                if name_fixed_param == name:
-                    param_dict[name] = ConstantParameter(value_fixed_param)
-                elif name_fixed_param.startswith(name):
-                    subparam = name_fixed_param.replace(f"{name}_", "")
-                    subdic = param_dict[name].param_dict.copy()
-                    subdic[subparam] = ConstantParameter(value_fixed_param)
-                    param_dict[name] = param_dict[name].with_params(subdic.values())
-        return param_dict
-
     def _apply_constraints(self, data):
         return data
 
@@ -108,7 +95,7 @@ class Distribution(Parametrized):
                     init_parms[k] = v
                 else:
                     init_parms[k] = ConstantParameter(v)
-        init = cls(**init_parms, **fixed_values)
+        init = cls(**init_parms)
         x0 = x0 if x0 is not None else init.optimisation_params
         if len(x0) != len(init.optimisation_params):
             raise ValueError(
@@ -122,16 +109,36 @@ class Distribution(Parametrized):
         res = minimize(to_minimize, x0, method="Nelder-Mead")
         return init.with_params(res.x)
 
+    def _process_fit_params(self, **kwds):
+        out_dict = self.param_dict.copy()
+        to_remove = set()
+        for param_name in out_dict:
+            for name_fixed_param, value_fixed_param in kwds.items():
+                if name_fixed_param.startswith(param_name):
+                    # this name is being processed, no need to keep it
+                    to_remove.add(name_fixed_param)
+                    replacement = ConstantParameter(value_fixed_param)
+                    if name_fixed_param == param_name:
+                        out_dict[param_name] = replacement
+                    else:
+                        sub_name = name_fixed_param.replace(f"{param_name}_", "")
+                        old_param = out_dict[param_name]
+                        new_param = old_param.with_params(**{sub_name: replacement})
+                        out_dict[param_name] = new_param
+        # other non-parameter kw arguments
+        for name, value in kwds.items():
+            if name not in to_remove:
+                out_dict[name] = value
+        return out_dict
+
     def fit_instance(
         self,
         data,
-        fixed_params=None,
         score=opposite_log_likelihood,
-        **kwds,
+        **fixed_values,
     ):
-        param_dict = self._process_fit_params(**(fixed_params or {}))
-        kwds.update(param_dict)
-        return self.fit(data, score=score, **kwds)
+        param_dict = self._process_fit_params(**fixed_values)
+        return self.fit(data, score=score, **param_dict)
 
 
 class AvoidAbstractMixin(object):

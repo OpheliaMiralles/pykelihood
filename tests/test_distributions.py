@@ -4,6 +4,7 @@ from scipy.stats import genextreme
 
 from pykelihood import kernels
 from pykelihood.distributions import GEV, Normal, TruncatedDistribution
+from pykelihood.metrics import log_likelihood
 
 REL_PREC = 1e-7
 ABS_PREC = 0.1
@@ -84,6 +85,24 @@ def test_fit_instance(dataset):
     std_fit = Normal.fit(dataset)
     instance_fit = Normal(loc=kernels.constant()).fit_instance(dataset)
     assert std_fit.loc() == approx(instance_fit.loc())
+
+
+def test_fit_instance_fixed_params(dataset):
+    n = Normal().fit_instance(dataset, loc=5)
+    assert n.loc() == 5
+
+
+def test_fit_instance_fixed_params_multi_level(dataset, linear_kernel):
+    n = Normal(loc=linear_kernel)
+    m = n.fit_instance(dataset, loc_a=5)
+    assert m.loc.a() == 5
+
+
+def test_fit_instance_fixed_params_extra_levels(dataset):
+    covariate = np.arange(len(dataset))
+    n = Normal(loc=kernels.linear(covariate, a=kernels.linear(covariate)))
+    m = n.fit_instance(dataset, loc_a_a=5)
+    assert m.loc.a.a() == 5
 
 
 def test_rvs():
