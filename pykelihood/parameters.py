@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from functools import partial
 from typing import Any, Callable, Dict, Iterable, Tuple, TypeVar, Union
 
 from pykelihood.utils import flatten_dict
@@ -64,6 +63,9 @@ class Parametrized(object):
             for name, value in self.param_dict.items()
             if not isinstance(value, ConstantParameter)
         }
+
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError("A generic Parametrized object has no value!")
 
     def __repr__(self):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
@@ -160,7 +162,8 @@ class ParametrizedFunction(Parametrized):
         self.fname = fname or f.__qualname__
 
     def __call__(self, *args, **kwargs):
-        return self.f(*args, **kwargs, **self.param_dict)
+        param_values = {p_name: p() for p_name, p in self.param_dict.items()}
+        return self.f(*args, **kwargs, **param_values)
 
     def __getattr__(self, param):
         try:
