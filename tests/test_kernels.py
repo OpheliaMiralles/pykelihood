@@ -5,6 +5,12 @@ import numpy as np
 from pykelihood import kernels, parameters
 
 
+def test_constant_kernel():
+    constant = kernels.constant(2)
+    assert constant() == 2
+    assert constant.with_params(value=5)() == 5
+
+
 def test_linear_trend(dataset):
     trend = kernels.linear(dataset)
     assert len(trend.params) == 2

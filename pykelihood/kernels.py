@@ -27,6 +27,10 @@ def parametrized_function(**param_defaults):
     return wrapper
 
 
+def constant(v=0.0):
+    return ParametrizedFunction(lambda value: value, fname=constant.__name__, value=v)
+
+
 # Usual kernels with one covariate
 @parametrized_function(a=0.0, b=0.0)
 def linear(X, a, b):
