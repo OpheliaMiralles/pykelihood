@@ -11,6 +11,14 @@ def test_constant_kernel():
     assert constant.with_params(value=5)() == 5
 
 
+def test_kernel():
+    x = np.array([1, 2, 3])
+    linear = kernels.linear(x, a=0, b=2)
+    assert list(linear()) == list(2 * x)
+    assert list(linear.with_covariate(1 + x)()) == list(2 * (1 + x))
+    assert list(linear()) == list(2 * x)
+
+
 def test_linear_trend(dataset):
     trend = kernels.linear(dataset)
     assert len(trend.params) == 2

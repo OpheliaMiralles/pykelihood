@@ -1,5 +1,4 @@
 import re
-from functools import partial
 from itertools import count
 from typing import Collection, Sequence, Union
 
@@ -9,9 +8,54 @@ import pandas as pd
 from pykelihood.parameters import Parameter, ParametrizedFunction, ensure_parametrized
 
 
-def parametrized_function(**param_defaults):
+class Kernel(ParametrizedFunction):
+    def __init__(self, f, x=None, fname=None, **params):
+        """Function of one covariate with parameters."""
+        fname = fname or f.__qualname__
+        super(Kernel, self).__init__(f, fname=fname, **params)
+        self._validate(x)
+        self.x = x
+
+    def _validate(self, x):
+        try:
+            iter(x)
+        except TypeError:
+            raise ValueError(
+                f"Incorrect covariate for {self.fname}: {self.x}"
+            ) from None
+
+    def __call__(self, x=None):
+        if x is None:
+            x = self.x
+        self._validate(x)
+        param_values = {p_name: p() for p_name, p in self.param_dict.items()}
+        return self.f(x, **param_values)
+
+    def _build_instance(self, **new_params):
+        return type(self)(self.f, self.x, fname=self.fname, **new_params)
+
+    def with_covariate(self, covariate):
+        return type(self)(self.f, covariate, fname=self.fname, **self.param_dict)
+
+
+class constant(Kernel):
+    def __init__(self, value=0.0):
+        super(constant, self).__init__(self._call, fname="constant", value=value)
+
+    def _build_instance(self, value):
+        return constant(value)
+
+    def _validate(self, x):
+        if x is not None:
+            raise ValueError(f"Unexpected data for constant kernel: {x}")
+
+    def _call(self, _x, value):
+        return value
+
+
+def kernel(**param_defaults):
     def wrapper(f):
-        def wrapped(x, **param_values) -> ParametrizedFunction:
+        def wrapped(x, **param_values) -> Kernel:
             final_params = {}
             for p_name, default_value in param_defaults.items():
                 override = param_values.get(p_name)
@@ -19,16 +63,11 @@ def parametrized_function(**param_defaults):
                     final_params[p_name] = ensure_parametrized(override, constant=True)
                 else:
                     final_params[p_name] = ensure_parametrized(default_value)
-            func = partial(f, x)
-            return ParametrizedFunction(func, fname=f.__name__, **final_params)
+            return Kernel(f, x, fname=f.__name__, **final_params)
 
         return wrapped
 
     return wrapper
-
-
-def constant(v=0.0):
-    return ParametrizedFunction(lambda value: value, fname=constant.__name__, value=v)
 
 
 """
@@ -36,31 +75,31 @@ Simple kernels with one covariate
 """
 
 
-@parametrized_function(a=0.0, b=0.0)
+@kernel(a=0.0, b=0.0)
 def linear(X, a, b):
     return a + b * X
 
 
-@parametrized_function(a=0.0, b=0.0, c=0.0)
+@kernel(a=0.0, b=0.0, c=0.0)
 def polynomial(X, a, b, c):
     return a + b * X + c * X ** 2
 
 
-@parametrized_function(a=0.0, b=0.0)
+@kernel(a=0.0, b=0.0)
 def expo(X, a, b):
     inner = b * X
     inner = a + inner
     return np.exp(inner)
 
 
-@parametrized_function(mu=0.0, sigma=1.0, scaling=0.0)
+@kernel(mu=0.0, sigma=1.0, scaling=0.0)
 def gaussian(X, mu, sigma, scaling):
     mult = scaling * 1 / (sigma * np.sqrt(2 * np.pi))
     expo = np.exp(-((X - mu) ** 2) / sigma ** 2)
     return mult * expo
 
 
-@parametrized_function(a=0.0, b=0.0, c=0.0)
+@kernel(a=0.0, b=0.0, c=0.0)
 def trigonometric(X, a, b, c):
     """
 
@@ -72,7 +111,7 @@ def trigonometric(X, a, b, c):
     return a + b * np.cos(2 * np.pi * X) + c * np.sin(2 * np.pi * X)
 
 
-@parametrized_function(mu=0.0, alpha=0.0, theta=1.0)
+@kernel(mu=0.0, alpha=0.0, theta=1.0)
 def hawkes_with_exp_kernel(X, mu, alpha, theta):
     return mu + alpha * theta * np.array(
         [np.sum(np.exp(-theta * (X[i] - X[:i]))) for i in range(len(X))]
@@ -92,7 +131,7 @@ Sophisticated kernels with multiple covariates
 
 def linear_regression(
     x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
-) -> ParametrizedFunction:
+) -> Kernel:
     """Computes a trend as a linear sum of the columns in the data.
 
     :param x: the data the kernel will be computed on. There will be one parameter for each column.
@@ -127,19 +166,17 @@ def linear_regression(
         f"beta_{i}": Parameter() if i not in fixed else fixed[i] for i in param_indices
     }
 
-    def _compute(**params_from_wrapper):
+    def _compute(data, **params_from_wrapper):
         intercept = params_from_wrapper.pop("beta_0", 0)
         sorted_params = [params_from_wrapper[k] for k in params if k != "beta_0"]
-        return intercept + (sorted_params * x).sum(axis=1)
+        return intercept + (sorted_params * data).sum(axis=1)
 
-    return ParametrizedFunction(
-        _compute, **params, fname=linear_regression.__qualname__
-    )
+    return Kernel(_compute, x, **params, fname=linear_regression.__qualname__)
 
 
 def exponential_linear_regression(
     x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
-) -> ParametrizedFunction:
+) -> Kernel:
     """Computes a trend as the exponential of a linear sum of the columns in the data.
 
     :param x: the number of dimensions or the data the kernel will be computed on. There will be one parameter for each column.
@@ -174,12 +211,12 @@ def exponential_linear_regression(
         f"beta_{i}": Parameter() if i not in fixed else fixed[i] for i in param_indices
     }
 
-    def _compute(**params_from_wrapper):
+    def _compute(data, **params_from_wrapper):
         sorted_params = [params_from_wrapper[k] for k in params]
-        return np.exp((sorted_params * x).sum(axis=1))
+        return np.exp((sorted_params * data).sum(axis=1))
 
-    return ParametrizedFunction(
-        _compute, **params, fname=exponential_linear_regression.__qualname__
+    return Kernel(
+        _compute, x, **params, fname=exponential_linear_regression.__qualname__
     )
 
 
@@ -187,7 +224,7 @@ def polynomial_regression(
     x: Union[pd.DataFrame, np.ndarray],
     degree: Union[int, Sequence] = 2,
     **constraints,
-) -> ParametrizedFunction:
+) -> Kernel:
     """Computes a trend as the sum of the columns in the data to the power of n for n smaller or equal to degree.
 
     :param x: the number of dimensions or the data the kernel will be computed on. There will be one parameter for each column.
@@ -200,16 +237,14 @@ def polynomial_regression(
     if len(x.shape) > 1:
         ndim = x.shape[1]
     else:
-        raise ValueError(
-            "Consider using kernels.polynomial for a 1-dimensional data array"
-        )
+        raise ValueError("Consider using kernels.linear for a 1-dimensional data array")
     if isinstance(degree, int):
         assert degree > 0, "This model considers positive power laws only."
         degree = [degree] * ndim
     else:
         assert (
             len(degree) == ndim
-        ), "The number of degrees is different from the number of covariates."
+        ), "The number of degrees is different than the number of covariates."
     ncols = sum(degree)
     fixed = {}
     for p_name, p_value in constraints.items():
@@ -229,8 +264,8 @@ def polynomial_regression(
             name = f"beta_{col_idx+1}_{d}"
             params[name] = fixed.get((col_idx + 1, d), Parameter())
 
-    def _compute(**params_from_wrapper):
-        data = np.array(x)
+    def _compute(data, **params_from_wrapper):
+        data = np.array(data)
         data_with_extra_cols = np.zeros(shape=(len(data), ncols))
         extra_col_idx = 0
         for col_idx, max_degree in enumerate(degree):
@@ -240,14 +275,10 @@ def polynomial_regression(
         sorted_params = [params_from_wrapper[k] for k in params]
         return (sorted_params * data_with_extra_cols).sum(axis=1)
 
-    return ParametrizedFunction(
-        _compute, **params, fname=polynomial_regression.__qualname__
-    )
+    return Kernel(_compute, x, **params, fname=polynomial_regression.__qualname__)
 
 
-def categories_qualitative(
-    x: Collection, fixed_values: dict = None
-) -> ParametrizedFunction:
+def categories_qualitative(x: Collection, fixed_values: dict = None) -> Kernel:
     unique_values = sorted(set(map(str, x)))
     fixed_values = {str(k): v for k, v in (fixed_values or {}).items()}
     parameter = (Parameter() for _ in count())  # generate parameters on demand
@@ -258,9 +289,7 @@ def categories_qualitative(
         for value in unique_values
     }
 
-    def _compute(**params_from_wrapper):
-        return type(x)(list(map(lambda v: params_from_wrapper[str(v)], x)))
+    def _compute(data, **params_from_wrapper):
+        return type(data)(list(map(lambda v: params_from_wrapper[str(v)], data)))
 
-    return ParametrizedFunction(
-        _compute, **params, fname=categories_qualitative.__qualname__
-    )
+    return Kernel(_compute, x, **params, fname=categories_qualitative.__qualname__)
