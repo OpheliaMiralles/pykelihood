@@ -31,7 +31,11 @@ def constant(v=0.0):
     return ParametrizedFunction(lambda value: value, fname=constant.__name__, value=v)
 
 
-# Usual kernels with one covariate
+"""
+Simple kernels with one covariate
+"""
+
+
 @parametrized_function(a=0.0, b=0.0)
 def linear(X, a, b):
     return a + b * X
@@ -81,7 +85,11 @@ def hawkes2(t, tau, mu, alpha, theta):
     )
 
 
-# Sophisticated kernels with multiple covariates
+"""
+Sophisticated kernels with multiple covariates
+"""
+
+
 def linear_regression(
     x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
 ) -> ParametrizedFunction:
@@ -130,7 +138,7 @@ def linear_regression(
 
 
 def exponential_linear_regression(
-    x: Union[int, pd.DataFrame, np.ndarray] = 2, add_intercept=False, **constraints
+    x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
 ) -> ParametrizedFunction:
     """Computes a trend as the exponential of a linear sum of the columns in the data.
 
@@ -142,18 +150,10 @@ def exponential_linear_regression(
                         'beta_2=2', 'beta_cname=2', 'cname=2'.
                         'beta_0' constrains the value of the intercept if add_intercept is True.
     """
-    args = ()
-    if isinstance(x, int):
-        assert x > 0, "Unexpected number of parameters for linear regression"
-        ndim = x
+    if len(x.shape) > 1:
+        ndim = x.shape[1]
     else:
-        args = (x,)
-        if len(x.shape) > 1:
-            ndim = x.shape[1]
-        else:
-            raise ValueError(
-                "Consider using kernels.expo for a 1-dimensional data array"
-            )
+        raise ValueError("Consider using kernels.expo for a 1-dimensional data array")
     fixed = {}
     for p_name, p_value in constraints.items():
         if p_name.startswith("beta_"):
@@ -184,7 +184,7 @@ def exponential_linear_regression(
 
 
 def polynomial_regression(
-    x: Union[int, pd.DataFrame, np.ndarray] = 2,
+    x: Union[pd.DataFrame, np.ndarray],
     degree: Union[int, Sequence] = 2,
     **constraints,
 ) -> ParametrizedFunction:
@@ -197,25 +197,19 @@ def polynomial_regression(
                         'beta_2_2=2', 'beta_cname_2=2', 'cname_2=2'
                         The last two are valid only if data is given as a dataframe with the second column named 'cname'.
     """
-    args = ()
-    if isinstance(x, int):
-        assert x > 0, "Unexpected number of parameters for polynomial regression"
-        ndim = x
+    if len(x.shape) > 1:
+        ndim = x.shape[1]
     else:
-        args = (x,)
-        if len(x.shape) > 1:
-            ndim = x.shape[1]
-        else:
-            raise ValueError(
-                "Consider using kernels.linear for a 1-dimensional data array"
-            )
+        raise ValueError(
+            "Consider using kernels.polynomial for a 1-dimensional data array"
+        )
     if isinstance(degree, int):
         assert degree > 0, "This model considers positive power laws only."
         degree = [degree] * ndim
     else:
         assert (
             len(degree) == ndim
-        ), "The number of degrees is different than the number of covariates."
+        ), "The number of degrees is different from the number of covariates."
     ncols = sum(degree)
     fixed = {}
     for p_name, p_value in constraints.items():
