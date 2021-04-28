@@ -407,8 +407,8 @@ def extremogram_plot(
         count_pp.append(local_count_pp)
     count_pp = pd.concat(count_pp, axis=1)
     mean_pp = count_pp.mean(axis=1)
-    quantile_inf_pp = np.quantile(count_pp, q=0.01, axis=1)
-    quantile_sup_pp = np.quantile(count_pp, q=0.99, axis=1)
+    quantile_inf_pp = np.quantile(count_pp, q=0.001, axis=1)
+    quantile_sup_pp = np.quantile(count_pp, q=0.999, axis=1)
     to_return = pd.concat(
         [
             extremogram_realized.rename("realized"),
@@ -441,9 +441,7 @@ def extremogram_plot(
             uv.fit(np.array(data_extremogram["days_since_start"]))
             exceedances_hp = []
             for _ in range(1000):
-                exceedances_hp.append(
-                    uv.sample(data_extremogram["days_since_start"].max())
-                )
+                exceedances_hp.append(uv.sample(data["days_since_start"].max()))
         else:
             from pykelihood.samplers import HawkesByThinningModified
 
@@ -471,7 +469,7 @@ def extremogram_plot(
             for _ in range(1000):
                 exceedances_hp.append(
                     HawkesByThinningModified(
-                        data_extremogram["days_since_start"].max(), mu, alpha, theta
+                        data["days_since_start"].max(), mu, alpha, theta
                     )
                 )
         count_hp = []
@@ -484,8 +482,8 @@ def extremogram_plot(
             count_hp.append(local_count_hp)
         count_hp = pd.concat(count_hp, axis=1)
         mean_hp = count_hp.mean(axis=1)
-        quantile_inf_hp = np.quantile(count_hp, q=0.01, axis=1)
-        quantile_sup_hp = np.quantile(count_hp, q=0.99, axis=1)
+        quantile_inf_hp = np.nanquantile(count_hp, q=0.001, axis=1)
+        quantile_sup_hp = np.nanquantile(count_hp, q=0.999, axis=1)
         to_return = pd.concat(
             [
                 to_return,
@@ -589,8 +587,8 @@ def mean_cluster_size(
     pp_cluster_sizes = pd.concat(pp_cluster_sizes, axis=1)
     x = block_sizes
     mean_pp = pp_cluster_sizes.mean(axis=1)
-    quantile_inf_pp = np.quantile(pp_cluster_sizes, q=0.1, axis=1)
-    quantile_sup_pp = np.quantile(pp_cluster_sizes, q=0.9, axis=1)
+    quantile_inf_pp = np.nanquantile(pp_cluster_sizes, q=0.001, axis=1)
+    quantile_sup_pp = np.nanquantile(pp_cluster_sizes, q=0.999, axis=1)
     to_return = pd.concat(
         [
             empirical_mean_cluster_size.rename("realized"),
@@ -620,7 +618,9 @@ def mean_cluster_size(
             exceedances_hp = []
             for _ in range(1000):
                 exceedances_hp.append(
-                    pd.DataFrame(uv.sample(T=len(data_extremal_index)), columns=[_])
+                    pd.DataFrame(
+                        uv.sample(T=data["days_since_start"].max()), columns=[_]
+                    )
                 )
         else:
             from pykelihood.samplers import HawkesByThinningModified
@@ -650,7 +650,7 @@ def mean_cluster_size(
                 exceedances_hp.append(
                     pd.DataFrame(
                         HawkesByThinningModified(
-                            len(data_extremal_index), mu, alpha, theta
+                            data["days_since_start"].max(), mu, alpha, theta
                         ),
                         columns=[_],
                     )
@@ -665,8 +665,8 @@ def mean_cluster_size(
             hp_cluster_sizes.append(local_count_hp)
         hp_cluster_sizes = pd.concat(hp_cluster_sizes, axis=1)
         mean_hp = hp_cluster_sizes.mean(axis=1)
-        quantile_inf_hp = np.nanquantile(hp_cluster_sizes, q=0.1, axis=1)
-        quantile_sup_hp = np.nanquantile(hp_cluster_sizes, q=0.9, axis=1)
+        quantile_inf_hp = np.nanquantile(hp_cluster_sizes, q=0.001, axis=1)
+        quantile_sup_hp = np.nanquantile(hp_cluster_sizes, q=0.999, axis=1)
         to_return = pd.concat(
             [
                 to_return,
@@ -745,16 +745,16 @@ def cum_number_exceedances(
         simulations.stack()
         .reset_index()
         .pivot(index=0, columns="level_1", values="level_0")
-        .ffill()
-        .fillna(0.0)
+        .interpolate("index", axis=0)
+        .bfill(0.0)
     )
     mean_pp = s_pp.mean(axis=1)
-    quantile_inf_pp = np.quantile(s_pp, q=0.01, axis=1)
+    quantile_inf_pp = np.quantile(s_pp, q=0.001, axis=1)
     quantile_sup_pp = np.quantile(s_pp, q=0.99, axis=1)
     mean_pp.index = pd.to_datetime(
         length_total_period * mean_pp.index, unit="d", origin=origin
     )
-    to_return = [realized_, mean_pp]
+    to_return = [realized_, mean_pp, quantile_inf_pp, quantile_sup_pp]
     plt.plot(mean_pp, label="Poisson Process Simulated", color="salmon")
     plt.fill_between(
         x=mean_pp.index,
@@ -768,9 +768,8 @@ def cum_number_exceedances(
             uv = UEHP()
             uv.fit(np.array(data_gpd["time"]))
             simulations_hp = []
-            tol = 1e-3
             for _ in range(500):
-                simulations_hp.append(pd.DataFrame(uv.sample(T=1 + tol), columns=[_]))
+                simulations_hp.append(pd.DataFrame(uv.sample(T=1), columns=[_]))
         else:
             from pykelihood.samplers import HawkesByThinningModified
 
@@ -796,25 +795,25 @@ def cum_number_exceedances(
             for _ in range(500):
                 simulations_hp.append(
                     pd.DataFrame(
-                        HawkesByThinningModified(len(data_gpd), mu, alpha, theta),
+                        HawkesByThinningModified(1, mu, alpha, theta),
                         columns=[_],
                     )
                 )
-        simulations_hp = pd.concat(simulations_hp, axis=1).loc[: len(data_gpd)]
+        simulations_hp = pd.concat(simulations_hp, axis=1)
         s_hp = (
             simulations_hp.stack()
             .reset_index()
             .pivot(index=0, columns="level_1", values="level_0")
-            .ffill()
-            .fillna(0.0)
+            .interpolate("index", axis=0)
+            .bfill(0.0)
         )
         mean_hp = s_hp.mean(axis=1)
-        quantile_inf_hp = np.nanquantile(s_hp, q=0.01, axis=1)
-        quantile_sup_hp = np.nanquantile(s_hp, q=0.99, axis=1)
+        quantile_inf_hp = np.nanquantile(s_hp, q=0.001, axis=1)
+        quantile_sup_hp = np.nanquantile(s_hp, q=0.999, axis=1)
         mean_hp.index = pd.to_datetime(
             length_total_period * mean_hp.index, unit="d", origin=origin
         )
-        to_return.append(mean_hp)
+        to_return.extend([mean_hp, quantile_inf_hp, quantile_sup_hp])
         plt.plot(mean_hp, label="Hawkes Process Simulated", color="royalblue")
         plt.fill_between(
             x=mean_hp.index,

@@ -12,7 +12,7 @@ from scipy.optimize import minimize
 from scipy.stats import chi2
 
 from pykelihood.cached_property import cached_property
-from pykelihood.distributions import GPD, Distribution, Exponential, kernels
+from pykelihood.distributions import GPD, Distribution, Exponential
 from pykelihood.metrics import (
     AIC,
     BIC,
@@ -20,12 +20,10 @@ from pykelihood.metrics import (
     bootstrap,
     crps,
     opposite_log_likelihood,
-    pp_l1_distance,
-    pp_l2_distance,
     qq_l1_distance,
-    qq_l2_distance,
     quantile_score,
 )
+from pykelihood.parameters import ParametrizedFunction
 
 warnings.filterwarnings("ignore")
 
@@ -519,6 +517,8 @@ def threshold_selection_GoF(
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process. arXiv preprint arXiv:2102.00884.
     :return: table with results and plot (if selected)
     """
+    from copy import copy
+
     if isinstance(data, pd.DataFrame):
         data_series = data[data_column]
         if data_column is None:
@@ -531,25 +531,48 @@ def threshold_selection_GoF(
     if GPD_instance is None:
         GPD_instance = GPD()
 
+    def update_covariates(GPD_instance, threshold):
+        count = 0
+        temp_gpd = copy(GPD_instance)
+        for param in GPD_instance.param_dict:
+            if isinstance(GPD_instance.__getattr__(param), ParametrizedFunction):
+                # tracking number of functional parameters
+                count += 1
+                parametrized_param = getattr(GPD_instance, param)
+                covariate = parametrized_param.x
+                new_covariate = data[data[data_column] > threshold][covariate.name]
+                temp_gpd = temp_gpd.with_params(
+                    **{param: GPD_instance.loc.with_covariate(new_covariate)}
+                )
+        return temp_gpd, count
+
     def to_minimize(x):
         threshold = x[0]
         unit_exp = Exponential()
         if bootstrap_method is None:
             print("Performing threshold selection without bootstrap...")
             new_data = data_series[data_series > threshold]
-            gpd_fit = GPD_instance.fit_instance(new_data, loc=0.0)
-            return metric(
-                distribution=unit_exp, data=unit_exp.inverse_cdf(gpd_fit.cdf(new_data))
-            )
+            temp_gpd, count = update_covariates(GPD_instance, threshold)
+            gpd_fit = temp_gpd.fit_instance(new_data, x0=GPD_instance.flattened_params)
+            if count > 0:
+                return metric(
+                    distribution=unit_exp,
+                    data=unit_exp.inverse_cdf(gpd_fit.cdf(new_data)),
+                )
+            else:
+                return metric(distribution=gpd_fit, data=new_data)
         else:
             bootstrap_func = partial(bootstrap_method, threshold=threshold)
             new_metric = bootstrap(metric, bootstrap_func)
             return new_metric(unit_exp, data)
 
-    threshold_sequence = np.linspace(min_threshold, max_threshold, 50)
-    func_eval = [to_minimize([t]) for t in threshold_sequence]
+    threshold_sequence = np.linspace(min_threshold, max_threshold, 30)
+    func_eval = np.array([to_minimize([t]) for t in threshold_sequence])
+    nans_inf = np.isnan(func_eval) | ~np.isfinite(func_eval)
+    func_eval = func_eval[~nans_inf]
+    threshold_sequence = threshold_sequence[~nans_inf]
 
-    optimal_thresh = threshold_sequence[func_eval.index(np.min(func_eval))]
+    optimal_thresh = threshold_sequence[np.where(func_eval == np.min(func_eval))[0]][0]
     func = np.min(func_eval)
     res = [optimal_thresh, func]
 
@@ -558,7 +581,8 @@ def threshold_selection_GoF(
     import matplotlib.pyplot as plt
 
     data_to_fit = data_series[data_series > optimal_thresh]
-    gpd_fit = GPD_instance.fit_instance(data_to_fit)
+    optimal_gpd, count = update_covariates(GPD_instance, optimal_thresh)
+    gpd_fit = optimal_gpd.fit_instance(data_to_fit)
     fig = plt.figure(figsize=(10, 5), constrained_layout=True)
     gs = fig.add_gridspec(1, 2)
     ax = []
@@ -582,9 +606,14 @@ def threshold_selection_GoF(
     ax0.set_ylabel(metric.__name__.replace("_", " "))
 
     if metric.__name__.startswith("qq"):
-        from pykelihood.visualisation.utils import qq_plot_exponential_scale
+        if count > 0 or bootstrap_method is not None:
+            from pykelihood.visualisation.utils import qq_plot_exponential_scale
 
-        qq_plot_exponential_scale(gpd_fit, data_to_fit, ax=ax1)
+            qq_plot_exponential_scale(gpd_fit, data_to_fit, ax=ax1)
+        else:
+            from pykelihood.visualisation.utils import qq_plot
+
+            qq_plot(gpd_fit, data_to_fit, ax=ax1)
     elif metric.__name__.startswith("pp"):
         from pykelihood.visualisation.utils import pp_plot
 
