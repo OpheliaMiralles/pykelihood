@@ -95,6 +95,10 @@ class Distribution(Parametrized):
                     init_parms[k] = v
                 else:
                     init_parms[k] = ConstantParameter(v)
+        # Add keyword arguments useful for object creation
+        for k, v in fixed_values.items():
+            if k not in init_parms:
+                init_parms[k] = v
         init = cls(**init_parms)
         x0 = x0 if x0 is not None else init.optimisation_params
         if len(x0) != len(init.optimisation_params):
