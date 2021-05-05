@@ -4,7 +4,6 @@ from scipy.stats import genextreme
 
 from pykelihood import kernels
 from pykelihood.distributions import GEV, Normal, TruncatedDistribution
-from pykelihood.metrics import log_likelihood
 
 REL_PREC = 1e-7
 ABS_PREC = 0.1
@@ -24,17 +23,17 @@ class TestGEV:
         for ds in datasets:
             c, loc, scale = genextreme.fit(ds)
             fit = GEV.fit(ds)
-            assert fit.loc == approx(loc)
-            assert fit.scale == approx(scale)
-            assert fit.shape == approx(-c)
+            assert fit.loc() == approx(loc)
+            assert fit.scale() == approx(scale)
+            assert fit.shape() == approx(-c)
 
     def test_fixed_values(self):
         data = np.random.standard_normal(1000)
         raw = Normal.fit(data)
-        assert raw.loc == approx(0.0)
-        assert raw.scale == approx(1.0)
+        assert raw.loc() == approx(0.0)
+        assert raw.scale() == approx(1.0)
         fixed = Normal.fit(data, loc=1.0)
-        assert fixed.loc == 1.0
+        assert fixed.loc() == 1.0
 
 
 def test_cache():
@@ -56,29 +55,29 @@ def test_cache():
 def test_basic_with_params():
     n = Normal()
     m = n.with_params([2, 3])
-    assert m.loc == 2
-    assert m.scale == 3
+    assert m.loc() == 2
+    assert m.scale() == 3
 
 
 def test_named_with_params():
     n = Normal()
     m = n.with_params(loc=2, scale=3)
-    assert m.loc == 2
-    assert m.scale == 3
+    assert m.loc() == 2
+    assert m.scale() == 3
 
 
 def test_named_with_params_multi_level(linear_kernel):
     n = Normal(loc=linear_kernel, scale=1)
     m = n.with_params(loc_a=2, scale=3)
-    assert m.loc.a == 2
-    assert m.scale == 3
+    assert m.loc.a() == 2
+    assert m.scale() == 3
 
 
 def test_named_with_params_partial_assignment():
     n = Normal()
     m = n.with_params(scale=3)
-    assert m.loc == 0
-    assert m.scale == 3
+    assert m.loc() == 0
+    assert m.scale() == 3
 
 
 def test_fit_instance(dataset):
@@ -136,4 +135,7 @@ def test_truncated_distribution_fit():
     truncated = TruncatedDistribution(Normal(), lower_bound=0)
     fitted_all_data = truncated.fit_instance(data)
     fitted_trunc = truncated.fit_instance(trunc_data)
-    assert fitted_trunc.flattened_params == approx(fitted_all_data.flattened_params)
+    for p_trunc, p_all in zip(
+        fitted_trunc.flattened_params, fitted_all_data.flattened_params
+    ):
+        assert p_trunc() == p_all()

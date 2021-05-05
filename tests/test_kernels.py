@@ -30,7 +30,7 @@ def test_linear_trend_with_constraint(dataset):
     trend = kernels.linear(dataset, a=2)
     assert len(trend.params) == 2
     assert len(trend.optimisation_params) == 1
-    assert trend.a == 2
+    assert trend.a() == 2
     assert (trend.with_params([3])() == 2 + dataset * 3).all()
 
 

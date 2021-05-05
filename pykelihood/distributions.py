@@ -100,7 +100,7 @@ class Distribution(Parametrized):
             if k not in init_parms:
                 init_parms[k] = v
         init = cls(**init_parms)
-        x0 = x0 if x0 is not None else init.optimisation_params
+        x0 = x0 or [x.value for x in init.optimisation_params]
         if len(x0) != len(init.optimisation_params):
             raise ValueError(
                 f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}"

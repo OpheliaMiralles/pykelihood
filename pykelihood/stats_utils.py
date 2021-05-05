@@ -105,7 +105,7 @@ class Profiler(object):
                 pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
                 if np.isfinite(pl_value):
                     profile_ll.append(pl_value)
-                    params.append(list(pl.flattened_params))
+                    params.append([p.value for p in pl.flattened_params])
             except:
                 pass
         chi2_par = {"df": 1}

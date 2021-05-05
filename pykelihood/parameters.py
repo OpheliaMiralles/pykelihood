@@ -22,8 +22,7 @@ class Parametrized(object):
         self._params = tuple(ensure_parametrized(p) for p in params)
 
     def _build_instance(self, **new_params):
-        sorted_params = [new_params[p_name] for p_name in self.params_names]
-        return type(self)(*sorted_params)
+        return type(self)(**new_params)
 
     @property
     def params(self) -> Tuple[Parametrized]:
@@ -107,12 +106,9 @@ class Parametrized(object):
         return self._params[idx]
 
 
-class Parameter(float, Parametrized):
-    def __new__(cls, x=0.0):
-        return float.__new__(cls, x)
-
-    def __init__(self, *args, **kwargs):
-        pass
+class Parameter(Parametrized):
+    def __init__(self, value=0.0):
+        self._value = value
 
     @property
     def params(self):
@@ -134,14 +130,21 @@ class Parameter(float, Parametrized):
             return param
         return type(self)(param)
 
+    @property
+    def value(self):
+        return self._value
+
     def __call__(self):
-        return self
+        return self.value
 
     def __repr__(self):
-        return float.__repr__(self)
+        return repr(self.value)
 
     def __getattr__(self, item):
         raise AttributeError
+
+    def __float__(self):
+        return float(self.value)
 
 
 class ConstantParameter(Parameter):

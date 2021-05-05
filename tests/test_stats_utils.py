@@ -85,7 +85,7 @@ def test_profiles(likelihood):
             # the mle for this parameter should be within the bounds found by varying it
             assert (
                 profiles[key][key].min()
-                <= mle.optimisation_param_dict[key]
+                <= mle.optimisation_param_dict[key]()
                 <= profiles[key][key].max()
             )
 
@@ -106,7 +106,7 @@ def test_profiles_with_trend(likelihood_with_trend):
             assert len(profiles[key].columns) == len(mle.flattened_params) + 1
             assert (
                 profiles[key][key].min()
-                <= mle.optimisation_param_dict[key]
+                <= mle.optimisation_param_dict[key]()
                 <= profiles[key][key].max()
             )
 
@@ -121,7 +121,7 @@ def test_profiles_with_fixed_param(likelihood_with_fixed_param):
             assert len(profiles[key].columns) == len(mle.flattened_params) + 1
             assert (
                 profiles[key][key].min()
-                <= mle.optimisation_param_dict[key]
+                <= mle.optimisation_param_dict[key]()
                 <= profiles[key][key].max()
             )
 

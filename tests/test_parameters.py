@@ -5,12 +5,12 @@ from pykelihood import parameters
 
 def test_parameter():
     p = parameters.Parameter(3.0)
-    assert p == 3.0
+    assert p() == 3.0
 
 
 def test_parameter_with_params():
     p = parameters.Parameter()
-    assert p.with_params([5.0]) == 5.0
+    assert p.with_params([5.0])() == 5.0
 
 
 def test_flattened_params():
