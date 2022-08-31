@@ -157,28 +157,29 @@ class AvoidAbstractMixin(object):
         return x
 
 
+# def _correct_trends(f):
+#     @wraps(f)
+#     def g(*args, **kwargs):
+#         res = f(*args, **kwargs)
+#         res = np.array(res)
+#         # if res is a matrix, then we only want the diagonal
+#         try:
+#             x, y = res.shape
+#         except ValueError:
+#             # only 1 dimension
+#             return res
+#         else:
+#             if x == 1 or y == 1:
+#                 return res.flatten()
+#             if x != y:
+#                 raise ValueError("Unexpected size of arguments")
+#             return np.diag(res)
+#
+#     return g
+
+
 class ScipyDistribution(Distribution, AvoidAbstractMixin):
     base_module: Any
-
-    def _correct_trends(self, f):
-        @wraps(f)
-        def g(*args, **kwargs):
-            res = f(*args, **kwargs)
-            res = np.array(res)
-            # if res is a matrix, then we only want the diagonal
-            try:
-                x, y = res.shape
-            except ValueError:
-                # only 1 dimension
-                return res
-            else:
-                if x == 1 or y == 1:
-                    return res.flatten()
-                if x != y:
-                    raise ValueError("Unexpected size of arguments")
-                return np.diag(res)
-
-        return g
 
     def _wrapper(self, f, x, _is_rvs=True, **extra_args):
         params = {}
@@ -207,7 +208,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
             return super(ScipyDistribution, self).__getattr__(item)
         f = getattr(self.base_module, item)
         g = partial(self._wrapper, f, _is_rvs=(item == "rvs"))
-        g = self._correct_trends(g)
+        # g = _correct_trends(g)
         self.__dict__[item] = g
         return g
 
