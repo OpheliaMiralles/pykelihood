@@ -30,13 +30,13 @@ warnings.filterwarnings("ignore")
 
 class Profiler(object):
     def __init__(
-            self,
-            distribution: Distribution,
-            data: pd.Series,
-            score_function: Callable = opposite_log_likelihood,
-            name: str = "Standard",
-            inference_confidence: float = 0.99,
-            single_profiling_param=None,
+        self,
+        distribution: Distribution,
+        data: pd.Series,
+        score_function: Callable = opposite_log_likelihood,
+        name: str = "Standard",
+        inference_confidence: float = 0.99,
+        single_profiling_param=None,
     ):
         """
 
@@ -84,8 +84,16 @@ class Profiler(object):
         for name, k in opt.optimisation_param_dict.items():
             if name in params:
                 r = k.real
-                lb = r - 1 * (10 ** math.floor(math.log10(np.abs(r)))) if name != 'shape' else -1.
-                ub = r + 1 * (10 ** math.floor(math.log10(np.abs(r)))) if name != 'shape' else 1.
+                lb = (
+                    r - 1 * (10 ** math.floor(math.log10(np.abs(r))))
+                    if name != "shape"
+                    else -1.0
+                )
+                ub = (
+                    r + 1 * (10 ** math.floor(math.log10(np.abs(r))))
+                    if name != "shape"
+                    else 1.0
+                )
                 range = list(np.linspace(lb, ub, 50))
                 profiles[name] = self.test_profile_likelihood(range, name)
         return profiles
@@ -147,10 +155,10 @@ class Profiler(object):
 
 class DetrendedFluctuationAnalysis(object):
     def __init__(
-            self,
-            data: pd.DataFrame,
-            scale_lim: Sequence[int] = None,
-            scale_step: float = None,
+        self,
+        data: pd.DataFrame,
+        scale_lim: Sequence[int] = None,
+        scale_step: float = None,
     ):
         """
 
@@ -167,15 +175,15 @@ class DetrendedFluctuationAnalysis(object):
         else:
             mean = (
                 data.groupby(["month", "day"])
-                    .agg({"data": "mean"})["data"]
-                    .rename("mean")
-                    .reset_index()
+                .agg({"data": "mean"})["data"]
+                .rename("mean")
+                .reset_index()
             )
             std = (
                 data.groupby(["month", "day"])
-                    .agg({"data": "std"})["data"]
-                    .rename("std")
-                    .reset_index()
+                .agg({"data": "std"})["data"]
+                .rename("std")
+                .reset_index()
             )
             data = data.merge(mean, on=["month", "day"], how="left").merge(
                 std, on=["month", "day"], how="left"
@@ -242,7 +250,7 @@ class DetrendedFluctuationAnalysis(object):
                 return "Brownian Noise"
 
     def __call__(
-            self, polynomial_order: int, show=False, ax=None, supplement_title="", color="r"
+        self, polynomial_order: int, show=False, ax=None, supplement_title="", color="r"
     ):
         """
         Detrended Fluctuation Analysis - measures power law scaling coefficient
@@ -323,9 +331,9 @@ def pettitt_test(data: Union[np.array, pd.DataFrame, pd.Series]):
 
 
 def threshold_selection_gpd_NorthorpColeman(
-        data: Union[pd.Series, np.ndarray],
-        thresholds: Union[Sequence, np.ndarray],
-        plot=False,
+    data: Union[pd.Series, np.ndarray],
+    thresholds: Union[Sequence, np.ndarray],
+    plot=False,
 ):
     """
     Method based on a multiple threshold penultimate model,
@@ -356,7 +364,7 @@ def threshold_selection_gpd_NorthorpColeman(
             return 10 ** 10
         xi_init = x[1:]
         # It could be interesting to consider this parameter stability condition
-        if len(xi_init[np.abs(xi_init) >= 1.]):
+        if len(xi_init[np.abs(xi_init) >= 1.0]):
             return 10 ** 10
         thresh = [u for u in thresholds if u >= ref_threshold]
         thresh_diff = pd.Series(
@@ -371,20 +379,20 @@ def threshold_selection_gpd_NorthorpColeman(
         )
         params_and_conditions = (
             pd.concat([sigma, xi, thresh_diff], axis=1)
-                .assign(
+            .assign(
                 positivity_p_condition=lambda x: (1 + (x["xi"] * x["w"]) / x["sigma"])
-                    .shift(1)
-                    .fillna(1.0)
+                .shift(1)
+                .fillna(1.0)
             )
-                .assign(
+            .assign(
                 logp=lambda x: np.cumsum(
                     (1 / x["xi"]) * np.log(1 + x["xi"] * x["w"] / x["sigma"])
                 )
-                    .shift(1)
-                    .fillna(0.0)
+                .shift(1)
+                .fillna(0.0)
             )
-                .reset_index()
-                .rename(columns={"index": "lb"})
+            .reset_index()
+            .rename(columns={"index": "lb"})
         )
         if np.any(params_and_conditions["positivity_p_condition"] <= tol):
             return 1 / tol
@@ -405,22 +413,22 @@ def threshold_selection_gpd_NorthorpColeman(
                 ],
                 axis=1,
             )
-                .dropna()
-                .merge(
+            .dropna()
+            .merge(
                 params_and_conditions.drop(columns=["w", "positivity_p_condition"]),
                 on="lb",
                 how="left",
             )
         )
         if (
-                1 + y_cut["xi"] * (y_cut["realized"] - y_cut["lb"]) / y_cut["sigma"] <= tol
+            1 + y_cut["xi"] * (y_cut["realized"] - y_cut["lb"]) / y_cut["sigma"] <= tol
         ).any():
             return 1 / tol
         y_cut = y_cut.assign(
             nlogl=lambda x: x["logp"]
-                            + np.log(x["sigma"])
-                            + (1 + 1 / x["xi"])
-                            * np.log(1 + x["xi"] * (x["realized"] - x["lb"]) / x["sigma"])
+            + np.log(x["sigma"])
+            + (1 + 1 / x["xi"])
+            * np.log(1 + x["xi"] * (x["realized"] - x["lb"]) / x["sigma"])
         )
         logl_per_interval = y_cut.groupby("lb").agg({"nlogl": "sum"})
         return logl_per_interval[np.isfinite(logl_per_interval)].sum()[0]
@@ -502,13 +510,10 @@ def threshold_selection_gpd_NorthorpColeman(
 
 
 def threshold_selection_GoF(
-    data: Union[pd.Series, np.ndarray, pd.DataFrame],
+    data: Union[pd.Series, np.ndarray],
     min_threshold: float,
     max_threshold: float,
     metric=qq_l1_distance,
-    bootstrap_method=None,
-    GPD_instance=None,
-    data_column=None,
     plot=False,
 ):
     """

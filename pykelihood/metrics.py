@@ -169,7 +169,7 @@ class ConditioningMethod(object):
 
     @staticmethod
     def partial_conditioning_rule_stopped_obs(
-            distribution: Distribution, data: Obs, threshold: Sequence = None
+        distribution: Distribution, data: Obs, threshold: Sequence = None
     ):
         if threshold is None:
             raise ValueError("This metric requires a input threshold.")
@@ -179,30 +179,35 @@ class ConditioningMethod(object):
 
     @staticmethod
     def full_conditioning_rule_stopped_obs(
-            distribution: Distribution, data: Obs, threshold: Sequence = None
+        distribution: Distribution, data: Obs, threshold: Sequence = None
     ):
         if threshold is None:
             raise ValueError("This metric requires a input threshold.")
         return (
-                ConditioningMethod.no_conditioning(distribution, data)
-                + distribution.logsf(threshold[-1])
-                + np.sum(distribution.logcdf(threshold[:-1]))
+            ConditioningMethod.no_conditioning(distribution, data)
+            + distribution.logsf(threshold[-1])
+            + np.sum(distribution.logcdf(threshold[:-1]))
         )
 
     @staticmethod
     def partial_conditioning_on_cropped_obs(
-            distribution: Distribution, data: Obs, threshold: Sequence = None
+        distribution: Distribution, data: Obs, threshold: Sequence = None
     ):
         if threshold is None:
             raise ValueError("This metric requires a input threshold.")
         return (
-                ConditioningMethod.no_conditioning(distribution, data)
-                + np.sum(distribution.logcdf(threshold[:-1])) + distribution.logpdf(data.iloc[-1])
+            ConditioningMethod.no_conditioning(distribution, data)
+            + np.sum(distribution.logcdf(threshold[:-1]))
+            + distribution.logpdf(data.iloc[-1])
         )
 
     @staticmethod
     def full_conditioning_using_correlated_distribution(
-            distribution: Distribution, data: Obs, joint_structure: object, correlated_margin: Distribution, threshold: Sequence = None
+        distribution: Distribution,
+        data: Obs,
+        joint_structure: object,
+        correlated_margin: Distribution,
+        threshold: Sequence = None,
     ):
         # Historical sample is untouchable, it has not been stopped and so the ll is that of the interest variable only
         # Then the ll is that of the conditional distribution of X1 given that X2 is under the threshold until the last observation, where it is above
@@ -211,34 +216,53 @@ class ConditioningMethod(object):
             raise ValueError("This metric requires a input threshold.")
         h_sample_size = len(data) - len(threshold)
         data_before_thresh = np.array(data.iloc[h_sample_size:-1])
-        joint_distro_before_thresh = gumbel_conditional_density(distribution.cdf(data_before_thresh),
-                                                                correlated_margin.cdf(threshold[:-1]),
-                                                                joint_structure, log=True)  # log pdf of joint distribution before threshold
+        joint_distro_before_thresh = gumbel_conditional_density(
+            distribution.cdf(data_before_thresh),
+            correlated_margin.cdf(threshold[:-1]),
+            joint_structure,
+            log=True,
+        )  # log pdf of joint distribution before threshold
         data_after_thresh = float(data.tail(1))
-        joint_distro_after_thresh = np.log(1 - gumbel_conditional_density(distribution.cdf(data_after_thresh),
-                                                                          correlated_margin.cdf(threshold[-1]),
-                                                                          joint_structure))  # log pdf of joint distribution after threshold
-        return (ConditioningMethod.no_conditioning(distribution, data.iloc[:h_sample_size])
-                - np.sum(joint_distro_before_thresh) - joint_distro_after_thresh +
-                np.sum(correlated_margin.logcdf(threshold[:-1])) +
-                correlated_margin.logsf(threshold[-1])
-                )
+        joint_distro_after_thresh = np.log(
+            1
+            - gumbel_conditional_density(
+                distribution.cdf(data_after_thresh),
+                correlated_margin.cdf(threshold[-1]),
+                joint_structure,
+            )
+        )  # log pdf of joint distribution after threshold
+        return (
+            ConditioningMethod.no_conditioning(distribution, data.iloc[:h_sample_size])
+            - np.sum(joint_distro_before_thresh)
+            - joint_distro_after_thresh
+            + np.sum(correlated_margin.logcdf(threshold[:-1]))
+            + correlated_margin.logsf(threshold[-1])
+        )
 
     @staticmethod
     def partial_conditioning_using_correlated_distribution_cropped_obs(
-            distribution: Distribution, data: Obs, joint_structure: object, correlated_margin: Distribution, threshold: Sequence = None
+        distribution: Distribution,
+        data: Obs,
+        joint_structure: object,
+        correlated_margin: Distribution,
+        threshold: Sequence = None,
     ):
         if threshold is None:
             raise ValueError("This metric requires a input threshold.")
         h_sample_size = len(data) - len(threshold)
         data = data.iloc[:-1]
         data_before_thresh = np.array(data.iloc[h_sample_size:])
-        joint_distro_before_thresh = gumbel_conditional_density(distribution.cdf(data_before_thresh), correlated_margin.cdf(threshold[:-1]), joint_structure,
-                                                                log=True)  # log pdf of joint distribution before threshold
-        return (ConditioningMethod.no_conditioning(distribution, data.iloc[:h_sample_size])
-                - np.sum(joint_distro_before_thresh) +
-                np.sum(correlated_margin.logcdf(threshold[:-1]))
-                )
+        joint_distro_before_thresh = gumbel_conditional_density(
+            distribution.cdf(data_before_thresh),
+            correlated_margin.cdf(threshold[:-1]),
+            joint_structure,
+            log=True,
+        )  # log pdf of joint distribution before threshold
+        return (
+            ConditioningMethod.no_conditioning(distribution, data.iloc[:h_sample_size])
+            - np.sum(joint_distro_before_thresh)
+            + np.sum(correlated_margin.logcdf(threshold[:-1]))
+        )
 
 
 def gumbel_conditional_density(x, u2, joint_structure, log=True):
@@ -250,7 +274,11 @@ def gumbel_conditional_density(x, u2, joint_structure, log=True):
             cdf = joint_structure.cdf(np.array(list(zip(x, u2))))
         else:
             return 0
-    der = (1 / x) * (-np.log(x)) ** (theta - 1) * ((-np.log(x)) ** theta + (-np.log(u2)) ** theta) ** (1 / theta - 1)
+    der = (
+        (1 / x)
+        * (-np.log(x)) ** (theta - 1)
+        * ((-np.log(x)) ** theta + (-np.log(u2)) ** theta) ** (1 / theta - 1)
+    )
     if log:
         return np.log(cdf) + np.log(der)
     else:
