@@ -47,9 +47,29 @@ class Parametrized(object):
             for name, value in self.param_dict.items()
         }
 
+    def param_mapping(self, only_opt=False):
+        results: "list[str, list[Parametrized]]" = []
+        unique = []
+        for q, param_name in zip(
+            (p_ for p in self.params for p_ in p.params), self.flattened_param_dict
+        ):
+            if not (only_opt and isinstance(q, ConstantParameter)):
+                if q not in unique:
+                    unique.append(q)
+                    results.append([q, [param_name]])
+                else:
+                    for q_, names in results:
+                        if q_ is q:
+                            names.append(param_name)
+        return results
+
     @property
     def optimisation_params(self) -> Tuple[Parametrized]:
-        return tuple(p_ for p in self.params for p_ in p.optimisation_params)
+        unique = []
+        for q in (p_ for p in self.params for p_ in p.optimisation_params):
+            if q not in unique:
+                unique.append(q)
+        return unique
 
     @property
     def optimisation_param_dict(self) -> Dict[str, Parametrized]:
@@ -75,9 +95,15 @@ class Parametrized(object):
             raise ValueError("Please only use one way to provide values to parameters.")
         if params is not None:
             params = iter(params)
+            mapping = self.param_mapping(only_opt=True)
             new_params = {}
-            for p_name, param in self.param_dict.items():
-                new_params[p_name] = param.with_params(params)
+            for new_param, (param, names) in zip(params, mapping):
+                new_param_obj = param.with_params([new_param])
+                for name in names:
+                    new_params[name] = new_param_obj
+            return self.with_params(**new_params)
+            # for p_name, param in self.param_dict.items():
+            #     new_params[p_name] = param.with_params(params)
         else:
             new_params = {}
             for p_name, param in self.param_dict.items():
