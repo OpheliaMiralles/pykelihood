@@ -116,8 +116,14 @@ class Distribution(Parametrized):
     def _process_fit_params(self, **kwds):
         out_dict = self.param_dict.copy()
         to_remove = set()
+        all_fixed_params = {}
+        for name_fixed_param, value_fixed_param in kwds.items():
+            for _, related_params in self.param_mapping():
+                if name_fixed_param in related_params and len(related_params) >= 1:
+                    for p in related_params:
+                        all_fixed_params[p] = value_fixed_param
         for param_name in out_dict:
-            for name_fixed_param, value_fixed_param in kwds.items():
+            for name_fixed_param, value_fixed_param in all_fixed_params.items():
                 if name_fixed_param.startswith(param_name):
                     # this name is being processed, no need to keep it
                     to_remove.add(name_fixed_param)
@@ -139,10 +145,11 @@ class Distribution(Parametrized):
         self,
         data,
         score=opposite_log_likelihood,
+        x0: Sequence[float] = None,
         **fixed_values,
     ):
         param_dict = self._process_fit_params(**fixed_values)
-        return self.fit(data, score=score, **param_dict)
+        return self.fit(data, score=score, x0=x0, **param_dict)
 
 
 class AvoidAbstractMixin(object):
