@@ -92,6 +92,13 @@ def expo(X, a, b):
     return np.exp(inner)
 
 
+@kernel(a=0.0, b=1.0, c=1.0)
+def expo_ratio(X, a, b, c):
+    inner = a * X
+    inner = inner / b
+    return c * np.exp(inner)
+
+
 @kernel(mu=0.0, sigma=1.0, scaling=0.0)
 def gaussian(X, mu, sigma, scaling):
     mult = scaling * 1 / (sigma * np.sqrt(2 * np.pi))
@@ -261,7 +268,7 @@ def polynomial_regression(
     params = {}
     for col_idx, max_degree in enumerate(degree):
         for d in range(1, max_degree + 1):
-            name = f"beta_{col_idx+1}_{d}"
+            name = f"beta_{col_idx + 1}_{d}"
             params[name] = fixed.get((col_idx + 1, d), Parameter())
 
     def _compute(data, **params_from_wrapper):
