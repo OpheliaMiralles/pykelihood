@@ -48,10 +48,10 @@ class Parametrized(object):
         }
 
     def param_mapping(self, only_opt=False):
-        results: "list[str, list[Parametrized]]" = []
+        results: "list[list[Parametrized, list[str]]]" = []
         unique = []
         for q, param_name in zip(
-            (p_ for p in self.params for p_ in p.params), self.flattened_param_dict
+            (p_ for p in self.flattened_params for p_ in p.params), self.flattened_param_dict
         ):
             if not (only_opt and isinstance(q, ConstantParameter)):
                 if q not in unique:

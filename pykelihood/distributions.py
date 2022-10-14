@@ -21,7 +21,7 @@ from scipy.stats import (
 from pykelihood import kernels
 from pykelihood.generic_types import Obs
 from pykelihood.metrics import opposite_log_likelihood
-from pykelihood.parameters import ConstantParameter, Parametrized
+from pykelihood.parameters import ConstantParameter, Parametrized, ensure_parametrized
 from pykelihood.utils import ifnone
 
 T = TypeVar("T")
@@ -127,7 +127,7 @@ class Distribution(Parametrized):
                 if name_fixed_param.startswith(param_name):
                     # this name is being processed, no need to keep it
                     to_remove.add(name_fixed_param)
-                    replacement = ConstantParameter(value_fixed_param)
+                    replacement = ensure_parametrized(value_fixed_param, constant=True)
                     if name_fixed_param == param_name:
                         out_dict[param_name] = replacement
                     else:

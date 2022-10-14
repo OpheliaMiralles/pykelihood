@@ -134,14 +134,10 @@ class Profiler(object):
         """
         estimates = []
         profiles = self.profiles
-        if self.single_profiling_param is not None:
-            params = [self.single_profiling_param]
-        else:
-            params = profiles.keys()
+        params = list(profiles.keys())
         for param in params:
             columns = [
-                n[0] for (v, n) in self.optimum[0].param_mapping() if n[0] in params
-            ]
+                n[0] for (v, n) in self.optimum[0].param_mapping()]
             result = profiles[param].apply(
                 lambda row: metric(
                     self.distribution.with_params({k: row[k] for k in columns}.values())
