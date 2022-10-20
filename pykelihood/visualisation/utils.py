@@ -9,7 +9,7 @@ import pandas as pd
 matplotlib.rcParams["text.usetex"] = True
 
 from pykelihood.distributions import GEV, Distribution, Exponential, Uniform
-from pykelihood.stats_utils import Profiler
+from pykelihood.profiler import Profiler
 
 warnings.filterwarnings("ignore")
 
