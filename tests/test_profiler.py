@@ -4,7 +4,7 @@ import pytest
 
 from pykelihood import kernels
 from pykelihood.distributions import GEV, Distribution
-from pykelihood.stats_utils import Profiler
+from pykelihood.profiler import Profiler
 
 
 @pytest.fixture(scope="module")

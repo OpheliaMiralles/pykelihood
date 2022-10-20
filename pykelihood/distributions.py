@@ -360,3 +360,65 @@ class GPD(ScipyDistribution):
             "loc": ifnone(loc, self.loc()),
             "scale": ifnone(scale, self.scale()),
         }
+
+
+class TruncatedDistribution(Distribution):
+    params_names = ("distribution",)
+
+    def __init__(
+            self, distribution: Distribution, lower_bound=-np.inf, upper_bound=np.inf
+    ):
+        if upper_bound == lower_bound:
+            raise ValueError("Both bounds are equal.")
+        super(TruncatedDistribution, self).__init__(distribution)
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
+        lower_cdf = self.distribution.cdf(self.lower_bound)
+        upper_cdf = self.distribution.cdf(self.upper_bound)
+        self._normalizer = upper_cdf - lower_cdf
+
+    def _build_instance(self, **new_params):
+        distribution = new_params.pop("distribution")
+        if new_params:
+            raise ValueError(f"Unexpected arguments: {new_params}")
+        return type(self)(distribution, self.lower_bound, self.upper_bound)
+
+    def _valid_indices(self, x: np.ndarray):
+        return (self.lower_bound <= x) & (x <= self.upper_bound)
+
+    def _apply_constraints(self, x):
+        return x[self._valid_indices(x)]
+
+    def fit_instance(self, *args, **kwargs):
+        kwargs.update(lower_bound=self.lower_bound, upper_bound=self.upper_bound)
+        return super().fit_instance(*args, **kwargs)
+
+    def rvs(self, size: int, *args, **kwargs):
+        u = Uniform(
+            self.distribution.cdf(self.lower_bound),
+            self.distribution.cdf(self.upper_bound),
+        )
+        return self.distribution.inverse_cdf(u.rvs(size, *args, **kwargs))
+
+    def pdf(self, x: Obs):
+        return np.where(
+            self._valid_indices(x),
+            self.distribution.pdf(x) / self._normalizer,
+            0.0,
+        )
+
+    def cdf(self, x: Obs):
+        right_range_x = (
+                                self.distribution.cdf(x) - self.distribution.cdf(self.lower_bound)
+                        ) / self._normalizer
+        return np.where(self._valid_indices(x), right_range_x, 0.0)
+
+    def isf(self, q: Obs):
+        return self.distribution.isf(
+            self.distribution.isf(self.upper_bound) + q * self._normalizer
+        )
+
+    def ppf(self, q: Obs):
+        return self.distribution.ppf(
+            self.distribution.cdf(self.lower_bound) + q * self._normalizer
+        )
