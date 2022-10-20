@@ -9,25 +9,28 @@ import numpy as np
 import pandas as pd
 from scipy.stats import chi2, f
 
-from pykelihood.cached_property import cached_property
 from pykelihood.distributions import Distribution, Normal
-from pykelihood.metrics import (
-    opposite_log_likelihood,
-)
+from pykelihood.metrics import opposite_log_likelihood
+
+try:
+    from functools import cached_property
+except ImportError:
+    from cached_property import cached_property
+
 
 warnings.filterwarnings("ignore")
 
 
 class Profiler(object):
     def __init__(
-            self,
-            distribution: Distribution,
-            data: pd.Series,
-            score_function: Callable = opposite_log_likelihood,
-            name: str = "Standard",
-            inference_confidence: float = 0.99,
-            single_profiling_param=None,
-            biv=False,
+        self,
+        distribution: Distribution,
+        data: pd.Series,
+        score_function: Callable = opposite_log_likelihood,
+        name: str = "Standard",
+        inference_confidence: float = 0.99,
+        single_profiling_param=None,
+        biv=False,
     ):
         """l
 
@@ -123,7 +126,10 @@ class Profiler(object):
         params = list(profiles.keys())
         for param in params:
             columns = [
-                n[0] for (v, n) in self.optimum[0].param_mapping() if n[0] in self.optimum[0].optimisation_param_dict]
+                n[0]
+                for (v, n) in self.optimum[0].param_mapping()
+                if n[0] in self.optimum[0].optimisation_param_dict
+            ]
             result = profiles[param].apply(
                 lambda row: metric(
                     self.distribution.with_params({k: row[k] for k in columns}.values())
