@@ -30,7 +30,6 @@ class Profiler(object):
         name: str = "Standard",
         inference_confidence: float = 0.99,
         single_profiling_param=None,
-        biv=False,
     ):
         """l
 
@@ -49,7 +48,6 @@ class Profiler(object):
         self.score_function = score_function
         self.inference_confidence = inference_confidence
         self.single_profiling_param = single_profiling_param
-        self.biv = biv
 
     @cached_property
     def standard_mle(self):
@@ -79,7 +77,7 @@ class Profiler(object):
         for name, k in opt.optimisation_param_dict.items():
             if name in params:
                 r = float(k)
-                sigma = np.sqrt(5 * (10 ** math.floor(math.log10(np.abs(r))))) if name != "shape" else 0.25
+                sigma = np.sqrt(5 * (10 ** math.floor(math.log10(np.abs(r)))))
                 range = Normal(r, sigma).ppf(np.linspace(1e-4, 1 - 1e-4, 20))
                 profiles[name] = self.test_profile_likelihood(range, name)
         return profiles
@@ -102,11 +100,8 @@ class Profiler(object):
                     params.append([p.value for p in pl.flattened_params])
             except:
                 pass
-        if not self.biv:
-            chi2_par = {"df": 1}
-            lower_bound = func - chi2.ppf(self.inference_confidence, **chi2_par) / 2
-        else:
-            lower_bound = func - f(2, 2).ppf(self.inference_confidence)
+        chi2_par = {"df": 1}
+        lower_bound = func - chi2.ppf(self.inference_confidence, **chi2_par) / 2
         filtered_params = pd.DataFrame(
             [x + [eval] for x, eval in zip(params, profile_ll) if eval >= lower_bound]
         )
