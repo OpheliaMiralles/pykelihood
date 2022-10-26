@@ -97,7 +97,7 @@ class Parametrized(object):
             params = iter(params)
             mapping = self.param_mapping(only_opt=True)
             new_params = {}
-            for new_param, (param, names) in zip(params, mapping):
+            for (param, names), new_param in zip(mapping, params):
                 new_param_obj = param.with_params([new_param])
                 for name in names:
                     new_params[name] = new_param_obj
