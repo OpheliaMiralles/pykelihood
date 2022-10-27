@@ -126,7 +126,7 @@ class Multivariate:
             except Exception:
                 return np.inf
 
-        res = scipy.optimize.minimize(to_minimize, x0)
+        res = scipy.optimize.minimize(to_minimize, x0, method='Nelder-Mead')
 
         opt_params = res.x
         return self.with_params(opt_params)
