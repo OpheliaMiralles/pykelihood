@@ -25,9 +25,8 @@ Main features include:
 - use any **scipy.stats** distribution, or make your own,
 - fit distributions of arbitrary complexity to your data,
 - add trends of different forms in the parameters of any distribution,
-- condition the likelihood with any form of penalty,
-- profile parameters with a penalised likelihood,
-- fit joint distributions and point processes with self exciting or time dependent intensity,
+- condition the log-likelihood with any form of penalty,
+- profile parameters with a penalised log-likelihood,
 - more to come...
 
 
@@ -149,14 +148,14 @@ Parameter profiling
 *******************
 
 Likelihood based inference relies on parameter estimation. This is why it's important to quantify the sensitivity of a
-chosen model to each of those parameters. The ``stats_utils`` module in ``pykelihood`` includes the ``Likelihood``
+chosen model to each of those parameters. The ``stats_utils`` module in ``pykelihood`` includes the ``Profiler``
 class that allows to link a model to a set of observations by providing goodness of fit metrics and profiles for all
 parameters.
 
->>> from pykelihood.stats_utils import Likelihood
+>>> from pykelihood.profiler import Profiler
 >>> from pykelihood.distributions import GEV
 >>> fitted_gev = GEV.fit(data, loc=kernels.linear(np.linspace(-1, 1, len(data))))
->>> ll = Likelihood(fitted_gev, data, inference_confidence=0.99) # level of confidence for tests
+>>> ll = Profiler(fitted_gev, data, inference_confidence=0.99) # level of confidence for tests
 >>> ll.AIC  # the standard fit is without trend
 {'AIC MLE': -359.73533182968777, 'AIC Standard MLE Fit': 623.9896838880583}
 >>> ll.profiles.keys()
