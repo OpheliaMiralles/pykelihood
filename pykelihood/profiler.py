@@ -75,7 +75,11 @@ class Profiler(object):
         for name, k in opt.optimisation_param_dict.items():
             if name in params:
                 r = float(k)
-                sigma = np.sqrt(5 * (10 ** math.floor(math.log10(np.abs(r)))))
+                sigma = (
+                    np.sqrt(5 * (10 ** math.floor(math.log10(np.abs(r)))))
+                    if name != "shape"
+                    else 0.25
+                )
                 range = Normal(r, sigma).ppf(np.linspace(1e-4, 1 - 1e-4, 20))
                 profiles[name] = self.test_profile_likelihood(range, name)
         return profiles
