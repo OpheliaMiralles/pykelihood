@@ -15,6 +15,10 @@ repos:
       - id: rst-backticks
       - id: rst-directive-colons
       - id: rst-inline-touching-normal
+  - repo: https://github.com/tox-dev/tox-ini-fmt
+    rev: 0.5.2
+    hooks:
+      - id: tox-ini-fmt
   - repo: https://github.com/pycqa/isort
     rev: 5.10.1
     hooks:
