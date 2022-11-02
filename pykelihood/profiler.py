@@ -36,11 +36,9 @@ class Profiler(object):
         :param distribution: distribution on which the inference is based
         :param data: variable of interest
         :param score_function: function used for optimisation
-        :param name: name (optional) of the likelihood if it needs to be compared to other likelihood functions
+        :param name: name (optional) of the profile if it needs to be compared to other score functions
         :param inference_confidence: wanted confidence for intervals
-        :param fit_chi2: whether the results from the likelihood ratio method must be fitted to a chi2
-        or a generic chi2 with degree of freedom 1 is used
-        :param single_profiling_param: parameter that we want to fix to create the profiles based on likelihood
+        :param single_profiling_param: parameter that we want to fix to create the profiles based on the score function
         """
         self.name = name
         self.distribution = distribution
