@@ -152,7 +152,7 @@ Another useful feature of ``pykelihood`` is the ability to customize the log-lik
 >>> data = np.random.normal(0, 1, 1000)
 >>> def lassolike_score(distribution, data):
 ...     return -np.sum(distribution.logpdf(data)) + 5 * np.abs(distribution.loc())
-... 
+...
 >>> std_fit = Normal.fit(data)
 >>> cond_fit = Normal.fit(data, score=lassolike_score)
 >>> std_fit.loc.value

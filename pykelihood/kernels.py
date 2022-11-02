@@ -82,7 +82,7 @@ def linear(X, a, b):
 
 @kernel(a=0.0, b=0.0, c=0.0)
 def polynomial(X, a, b, c):
-    return a + b * X + c * X ** 2
+    return a + b * X + c * X**2
 
 
 @kernel(a=0.0, b=0.0)
@@ -102,7 +102,7 @@ def expo_ratio(X, a, b, c):
 @kernel(mu=0.0, sigma=1.0, scaling=0.0)
 def gaussian(X, mu, sigma, scaling):
     mult = scaling * 1 / (sigma * np.sqrt(2 * np.pi))
-    expo = np.exp(-((X - mu) ** 2) / sigma ** 2)
+    expo = np.exp(-((X - mu) ** 2) / sigma**2)
     return mult * expo
 
 

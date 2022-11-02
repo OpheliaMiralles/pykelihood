@@ -140,7 +140,7 @@ def test_truncated_distribution_fit():
     fitted_all_data = truncated.fit_instance(data)
     fitted_trunc = truncated.fit_instance(trunc_data)
     for p_trunc, p_all in zip(
-            fitted_trunc.flattened_params, fitted_all_data.flattened_params
+        fitted_trunc.flattened_params, fitted_all_data.flattened_params
     ):
         assert p_trunc() == p_all()
 
@@ -152,12 +152,12 @@ def test_distribution_fit_with_shared_params_in_trends():
     """
     x = np.array(np.random.uniform(size=200))
     y = np.array(np.random.normal(size=200))
-    alpha0_init = 0.
+    alpha0_init = 0.0
     alpha = pkl.parameters.Parameter(alpha0_init)
     n = Normal.fit(y, loc=linear(x=x, b=alpha), scale=linear(x=x, b=alpha))
     alpha1 = n.loc.b
     alpha2 = n.scale.b
-    assert (alpha1 == alpha2)
+    assert alpha1 == alpha2
 
 
 def test_fit_instance_fixing_shared_params_in_trends():
@@ -166,10 +166,12 @@ def test_fit_instance_fixing_shared_params_in_trends():
     """
     x = np.array(np.random.uniform(size=200))
     y = np.array(np.random.normal(size=200))
-    alpha0_init = 0.
+    alpha0_init = 0.0
     alpha = Parameter(alpha0_init)
     n = Normal.fit(y, loc=linear(x=x, b=alpha), scale=linear(x=x, b=alpha))
-    fixed_alpha = ConstantParameter(n.loc.b.value)  # should be equal to fit.scale.a as per problem1
+    fixed_alpha = ConstantParameter(
+        n.loc.b.value
+    )  # should be equal to fit.scale.a as per problem1
     fit_with_fixed_alpha = n.fit_instance(data=y, loc_b=fixed_alpha)
-    assert (isinstance(fit_with_fixed_alpha.scale.b, ConstantParameter))
-    assert (fit_with_fixed_alpha.scale.b.value == fixed_alpha.value)
+    assert isinstance(fit_with_fixed_alpha.scale.b, ConstantParameter)
+    assert fit_with_fixed_alpha.scale.b.value == fixed_alpha.value
