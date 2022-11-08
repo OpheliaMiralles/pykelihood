@@ -56,10 +56,7 @@ class Profiler(object):
 
     @cached_property
     def optimum(self):
-        x0 = self.distribution.optimisation_params
-        estimate = self.distribution.fit_instance(
-            self.data, score=self.score_function, x0=x0
-        )
+        estimate = self.distribution.fit_instance(self.data, score=self.score_function)
         func = -self.score_function(estimate, self.data)
         func = func if isinstance(func, float) else func[0]
         return (estimate, func)
