@@ -187,7 +187,17 @@ class AvoidAbstractMixin(object):
 class ScipyDistribution(Distribution, AvoidAbstractMixin):
     base_module: Any
 
-    def _wrapper(self, f, x, _is_rvs=True, **extra_args):
+    def rvs(self, size=None, random_state=None, **kwargs):
+        base_rvs = getattr(self.base_module, "rvs")
+        params = {p: kwargs.pop(p) for p in self.params_names if p in kwargs}
+        return base_rvs(
+            **self._to_scipy_args(**params),
+            size=size,
+            random_state=random_state,
+            **kwargs,
+        )
+
+    def _wrapper(self, f, x, **extra_args):
         params = {}
         other_args = {}
         for key, value in extra_args.items():
@@ -195,9 +205,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
                 params[key] = value
             else:
                 other_args[key] = value
-        if not _is_rvs:
-            return f(x, **self._to_scipy_args(**params), **other_args)
-        return f(**self._to_scipy_args(**params), size=x, **other_args)
+        return f(x, **self._to_scipy_args(**params), **other_args)
 
     def __getattr__(self, item):
         if item not in (
@@ -209,11 +217,10 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
             "isf",
             "sf",
             "logsf",
-            "rvs",
         ):
             return super(ScipyDistribution, self).__getattr__(item)
         f = getattr(self.base_module, item)
-        g = partial(self._wrapper, f, _is_rvs=(item == "rvs"))
+        g = partial(self._wrapper, f)
         # g = _correct_trends(g)
         self.__dict__[item] = g
         return g
