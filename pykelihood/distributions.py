@@ -187,7 +187,17 @@ class AvoidAbstractMixin(object):
 class ScipyDistribution(Distribution, AvoidAbstractMixin):
     base_module: Any
 
-    def _wrapper(self, f, x, _is_rvs=True, **extra_args):
+    def rvs(self, size=None, random_state=None, **kwargs):
+        base_rvs = getattr(self.base_module, "rvs")
+        params = {p: kwargs.pop(p) for p in self.params_names if p in kwargs}
+        return base_rvs(
+            **self._to_scipy_args(**params),
+            size=size,
+            random_state=random_state,
+            **kwargs,
+        )
+
+    def _wrapper(self, f, x, **extra_args):
         params = {}
         other_args = {}
         for key, value in extra_args.items():
@@ -195,9 +205,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
                 params[key] = value
             else:
                 other_args[key] = value
-        if not _is_rvs:
-            return f(x, **self._to_scipy_args(**params), **other_args)
-        return f(**self._to_scipy_args(**params), size=x, **other_args)
+        return f(x, **self._to_scipy_args(**params), **other_args)
 
     def __getattr__(self, item):
         if item not in (
@@ -209,11 +217,10 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
             "isf",
             "sf",
             "logsf",
-            "rvs",
         ):
             return super(ScipyDistribution, self).__getattr__(item)
         f = getattr(self.base_module, item)
-        g = partial(self._wrapper, f, _is_rvs=(item == "rvs"))
+        g = partial(self._wrapper, f)
         # g = _correct_trends(g)
         self.__dict__[item] = g
         return g
@@ -347,6 +354,7 @@ class GEV(ScipyDistribution):
             "scale": ifnone(scale, self.scale()),
         }
 
+
 class GPD(ScipyDistribution):
     params_names = ("loc", "scale", "shape")
     base_module = genpareto
@@ -366,7 +374,7 @@ class TruncatedDistribution(Distribution):
     params_names = ("distribution",)
 
     def __init__(
-            self, distribution: Distribution, lower_bound=-np.inf, upper_bound=np.inf
+        self, distribution: Distribution, lower_bound=-np.inf, upper_bound=np.inf
     ):
         if upper_bound == lower_bound:
             raise ValueError("Both bounds are equal.")
@@ -409,8 +417,8 @@ class TruncatedDistribution(Distribution):
 
     def cdf(self, x: Obs):
         right_range_x = (
-                                self.distribution.cdf(x) - self.distribution.cdf(self.lower_bound)
-                        ) / self._normalizer
+            self.distribution.cdf(x) - self.distribution.cdf(self.lower_bound)
+        ) / self._normalizer
         return np.where(self._valid_indices(x), right_range_x, 0.0)
 
     def isf(self, q: Obs):

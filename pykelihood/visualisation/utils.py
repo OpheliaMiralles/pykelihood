@@ -43,7 +43,7 @@ def get_quantiles_and_confidence_intervals(
     min_max = []
     levels = np.linspace(0.01, 0.99, 100)
     empirical = pd.Series(data).quantile(levels)
-    theoretical = fit.inverse_cdf(levels)
+    theoretical = ll.optimum[0].inverse_cdf(levels)
     for level in levels:
         metric = lambda x: x.inverse_cdf(level)
         CI = ll.confidence_interval(metric)

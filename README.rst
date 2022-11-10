@@ -25,9 +25,8 @@ Main features include:
 - use any **scipy.stats** distribution, or make your own,
 - fit distributions of arbitrary complexity to your data,
 - add trends of different forms in the parameters of any distribution,
-- condition the likelihood with any form of penalty,
-- profile parameters with a penalised likelihood,
-- fit joint distributions and point processes with self exciting or time dependent intensity,
+- condition the log-likelihood with any form of penalty,
+- profile parameters with a penalised log-likelihood,
 - more to come...
 
 
@@ -145,18 +144,34 @@ then we find all the values we expected: *-1* was the value on the first day, *0
 (*2 / 365 = 0.05*), and there was a noise with std deviation *0.001*.
 
 
+Fitting with penalties
+**********************
+
+Another useful feature of ``pykelihood`` is the ability to customize the log-likelihood function with penalties, conditioning methods, stability conditions, etc. Most statistics-related packages offer to fit data using the standard opposite log-likelihood function, or in the best case, preselected models. To our knowledge, ``pykelihood`` is the only Python package allowing to easily customize the log-likelihood function to fit data.
+
+>>> data = np.random.normal(0, 1, 1000)
+>>> def lassolike_score(distribution, data):
+...     return -np.sum(distribution.logpdf(data)) + 5 * np.abs(distribution.loc())
+...
+>>> std_fit = Normal.fit(data)
+>>> cond_fit = Normal.fit(data, score=lassolike_score)
+>>> std_fit.loc.value
+-0.010891307380632494
+>>> cond_fit.loc.value
+-0.006210406541824357
+
 Parameter profiling
 *******************
 
 Likelihood based inference relies on parameter estimation. This is why it's important to quantify the sensitivity of a
-chosen model to each of those parameters. The ``stats_utils`` module in ``pykelihood`` includes the ``Likelihood``
+chosen model to each of those parameters. The ``stats_utils`` module in ``pykelihood`` includes the ``Profiler``
 class that allows to link a model to a set of observations by providing goodness of fit metrics and profiles for all
 parameters.
 
->>> from pykelihood.stats_utils import Likelihood
+>>> from pykelihood.profiler import Profiler
 >>> from pykelihood.distributions import GEV
 >>> fitted_gev = GEV.fit(data, loc=kernels.linear(np.linspace(-1, 1, len(data))))
->>> ll = Likelihood(fitted_gev, data, inference_confidence=0.99) # level of confidence for tests
+>>> ll = Profiler(fitted_gev, data, inference_confidence=0.99) # level of confidence for tests
 >>> ll.AIC  # the standard fit is without trend
 {'AIC MLE': -359.73533182968777, 'AIC Standard MLE Fit': 623.9896838880583}
 >>> ll.profiles.keys()
