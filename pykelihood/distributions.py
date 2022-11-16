@@ -347,6 +347,7 @@ class GEV(ScipyDistribution):
             "scale": ifnone(scale, self.scale()),
         }
 
+
 class GPD(ScipyDistribution):
     params_names = ("loc", "scale", "shape")
     base_module = genpareto
@@ -366,7 +367,7 @@ class TruncatedDistribution(Distribution):
     params_names = ("distribution",)
 
     def __init__(
-            self, distribution: Distribution, lower_bound=-np.inf, upper_bound=np.inf
+        self, distribution: Distribution, lower_bound=-np.inf, upper_bound=np.inf
     ):
         if upper_bound == lower_bound:
             raise ValueError("Both bounds are equal.")
@@ -409,8 +410,8 @@ class TruncatedDistribution(Distribution):
 
     def cdf(self, x: Obs):
         right_range_x = (
-                                self.distribution.cdf(x) - self.distribution.cdf(self.lower_bound)
-                        ) / self._normalizer
+            self.distribution.cdf(x) - self.distribution.cdf(self.lower_bound)
+        ) / self._normalizer
         return np.where(self._valid_indices(x), right_range_x, 0.0)
 
     def isf(self, q: Obs):
