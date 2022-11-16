@@ -36,11 +36,9 @@ class Profiler(object):
         :param distribution: distribution on which the inference is based
         :param data: variable of interest
         :param score_function: function used for optimisation
-        :param name: name (optional) of the likelihood if it needs to be compared to other likelihood functions
+        :param name: name (optional) of the profile if it needs to be compared to other score functions
         :param inference_confidence: wanted confidence for intervals
-        :param fit_chi2: whether the results from the likelihood ratio method must be fitted to a chi2
-        or a generic chi2 with degree of freedom 1 is used
-        :param single_profiling_param: parameter that we want to fix to create the profiles based on likelihood
+        :param single_profiling_param: parameter that we want to fix to create the profiles based on the score function
         """
         self.name = name
         self.distribution = distribution
@@ -58,10 +56,7 @@ class Profiler(object):
 
     @cached_property
     def optimum(self):
-        x0 = self.distribution.optimisation_params
-        estimate = self.distribution.fit_instance(
-            self.data, score=self.score_function, x0=x0
-        )
+        estimate = self.distribution.fit_instance(self.data, score=self.score_function)
         func = -self.score_function(estimate, self.data)
         func = func if isinstance(func, float) else func[0]
         return (estimate, func)
@@ -77,7 +72,11 @@ class Profiler(object):
         for name, k in opt.optimisation_param_dict.items():
             if name in params:
                 r = float(k)
-                sigma = np.sqrt(5 * (10 ** math.floor(math.log10(np.abs(r)))))
+                sigma = (
+                    np.sqrt(5 * (10 ** math.floor(math.log10(np.abs(r)))))
+                    if name != "shape"
+                    else 0.25
+                )
                 range = Normal(r, sigma).ppf(np.linspace(1e-4, 1 - 1e-4, 20))
                 profiles[name] = self.test_profile_likelihood(range, name)
         return profiles
