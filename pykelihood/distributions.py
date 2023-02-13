@@ -17,7 +17,6 @@ from scipy.stats import (
     uniform,
 )
 
-from pykelihood import kernels
 from pykelihood.generic_types import Obs
 from pykelihood.metrics import opposite_log_likelihood
 from pykelihood.parameters import ConstantParameter, Parametrized, ensure_parametrized
@@ -161,27 +160,6 @@ class AvoidAbstractMixin(object):
         ):
             x = self.__getattr__(item)
         return x
-
-
-# def _correct_trends(f):
-#     @wraps(f)
-#     def g(*args, **kwargs):
-#         res = f(*args, **kwargs)
-#         res = np.array(res)
-#         # if res is a matrix, then we only want the diagonal
-#         try:
-#             x, y = res.shape
-#         except ValueError:
-#             # only 1 dimension
-#             return res
-#         else:
-#             if x == 1 or y == 1:
-#                 return res.flatten()
-#             if x != y:
-#                 raise ValueError("Unexpected size of arguments")
-#             return np.diag(res)
-#
-#     return g
 
 
 class ScipyDistribution(Distribution, AvoidAbstractMixin):
