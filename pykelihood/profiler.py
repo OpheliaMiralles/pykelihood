@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import bisect
 import math
 import warnings
+from collections.abc import Sequence
 from itertools import count
-from typing import Callable
+from typing import Callable, Tuple
 
 import numpy as np
 import pandas as pd
 from scipy.stats import chi2
 
-from pykelihood.distributions import Distribution, Uniform
+from pykelihood.distributions import Distribution
 from pykelihood.metrics import opposite_log_likelihood
 
 try:
@@ -22,13 +24,13 @@ warnings.filterwarnings("ignore")
 
 class Profiler(object):
     def __init__(
-            self,
-            distribution: Distribution,
-            data: pd.Series,
-            score_function: Callable = opposite_log_likelihood,
-            name: str = "Standard",
-            inference_confidence: float = 0.99,
-            single_profiling_param=None,
+        self,
+        distribution: Distribution,
+        data: pd.Series,
+        score_function: Callable = opposite_log_likelihood,
+        name: str = "Standard",
+        inference_confidence: float = 0.99,
+        single_profiling_param=None,
     ):
         """l
 
@@ -71,8 +73,8 @@ class Profiler(object):
         for name, k in opt.optimisation_param_dict.items():
             if name in params:
                 r = float(k)
-                b = (10 ** (math.floor(math.log10(np.abs(r)))))
-                range = Uniform(r - b, 2 * b).ppf(np.linspace(1e-4, 1 - 1e-4, 20))
+                b = 2 * 10 ** (math.floor(math.log10(np.abs(r))) - 1)
+                range = np.linspace(r - b, r + b, 40)
                 profiles[name] = self.test_profile_likelihood(range, name)
         return profiles
 
@@ -102,6 +104,55 @@ class Profiler(object):
         cols = list(opt.flattened_param_dict.keys()) + ["score"]
         filtered_params = filtered_params.rename(columns=dict(zip(count(), cols)))
         return filtered_params
+
+    def confidence_interval_bs(self, param: str, precision=1e-5) -> Tuple[float, float]:
+        opt, func = self.optimum
+        value_threshold = func - chi2.ppf(self.inference_confidence, df=1) / 2
+
+        def is_inside_conf_interval(x: float):
+            new_opt = opt.fit_instance(self.data, score=self.score_function, **{param: x})
+            return -self.score_function(new_opt, self.data) >= value_threshold
+
+        def is_outside_conf_interval(x: float):
+            return not is_inside_conf_interval(x)
+
+        param_value = opt.flattened_param_dict[param].value
+        if is_outside_conf_interval(param_value):
+            return [None, None]
+
+        step = 0.1 * param_value
+        lb = param_value - step
+        ub = param_value + step
+        for _ in range(1000):
+            if is_outside_conf_interval(lb):
+                break
+            lb -= step
+        else:  # nobreak
+            return [None, None]
+        for _ in range(1000):
+            if is_outside_conf_interval(ub):
+                break
+            ub += step
+        else:  # nobreak
+            return [None, None]
+
+        class LazyMappingList(Sequence):
+            def __init__(self, value_mapping, fn: Callable):
+                self.mapping = value_mapping
+                self.fn = fn
+
+            def __len__(self):
+                return len(self.mapping)
+
+            def __getitem__(self, item):
+                return self.fn(self.mapping[item])
+
+        mapping = np.linspace(lb, ub, num=int(1 / precision))
+        search_size = int(step / ((ub - lb) * precision))
+        lb_index = bisect.bisect_left(LazyMappingList(mapping, is_inside_conf_interval), True, lo=0, hi=search_size)
+        ub_index = bisect.bisect_left(LazyMappingList(mapping, is_outside_conf_interval), True, lo=len(mapping) - search_size) - 1
+
+        return mapping[lb_index], mapping[ub_index]
 
     def confidence_interval(self, metric: Callable[[Distribution], float]):
         """
