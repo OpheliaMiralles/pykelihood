@@ -7,16 +7,15 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
-from scipy.stats import chi2, f
+from scipy.stats import chi2
 
-from pykelihood.distributions import Distribution, Normal
+from pykelihood.distributions import Distribution, Uniform
 from pykelihood.metrics import opposite_log_likelihood
 
 try:
     from functools import cached_property
 except ImportError:
     from cached_property import cached_property
-
 
 warnings.filterwarnings("ignore")
 
@@ -72,12 +71,8 @@ class Profiler(object):
         for name, k in opt.optimisation_param_dict.items():
             if name in params:
                 r = float(k)
-                sigma = (
-                    np.sqrt(5 * (10 ** math.floor(math.log10(np.abs(r)))))
-                    if name != "shape"
-                    else 0.25
-                )
-                range = Normal(r, sigma).ppf(np.linspace(1e-4, 1 - 1e-4, 20))
+                b = 10 ** (math.floor(math.log10(np.abs(r))))
+                range = Uniform(r - b, 2 * b).ppf(np.linspace(1e-4, 1 - 1e-4, 20))
                 profiles[name] = self.test_profile_likelihood(range, name)
         return profiles
 
