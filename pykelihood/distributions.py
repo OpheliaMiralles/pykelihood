@@ -108,7 +108,7 @@ class Distribution(Parametrized):
         def to_minimize(x) -> float:
             return score(init.with_params(x), data)
 
-        res = minimize(to_minimize, x0, method="Nelder-Mead", options={'maxiter': 1500})
+        res = minimize(to_minimize, x0, method="Nelder-Mead", options={"maxiter": 1500})
         return init.with_params(res.x)
 
     def _process_fit_params(self, **kwds):
