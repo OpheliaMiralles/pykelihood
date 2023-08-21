@@ -1,5 +1,5 @@
 from itertools import chain
-from typing import Sequence, Type
+from typing import Optional, Sequence, Type
 
 import numpy as np
 import scipy.optimize
@@ -41,8 +41,8 @@ class Copula:
     def logpdf(self, u: Obs):
         return self._base_copulae_instance().pdf(u, log=True)
 
-    def rvs(self, size: int = None) -> np.ndarray:
-        return self._base_copulae_instance().random(size)
+    def rvs(self, size: int = None, random_state: Optional[int] = None) -> np.ndarray:
+        return self._base_copulae_instance().random(size, seed=random_state)
 
     @property
     def params(self):
@@ -96,8 +96,8 @@ class Multivariate:
     def logpdf(self, x: Obs):
         return self._copulae_adapter().pdf(x, log=True)
 
-    def rvs(self, size: int) -> np.ndarray:
-        return self._copulae_adapter().random(size)
+    def rvs(self, size: int, random_state: Optional[int] = None) -> np.ndarray:
+        return self._copulae_adapter().random(size, seed=random_state)
 
     @property
     def params(self):
@@ -126,7 +126,7 @@ class Multivariate:
             except Exception:
                 return np.inf
 
-        res = scipy.optimize.minimize(to_minimize, x0, method='Nelder-Mead')
+        res = scipy.optimize.minimize(to_minimize, x0, method="Nelder-Mead")
 
         opt_params = res.x
         return self.with_params(opt_params)
