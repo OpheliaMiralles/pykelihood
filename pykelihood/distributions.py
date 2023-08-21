@@ -82,9 +82,8 @@ class Distribution(Parametrized):
         cls: Type[SomeDistribution],
         data: Obs,
         x0: Sequence[float] = None,
-        score: Callable[["Distribution", Obs], float] = opposite_log_likelihood,
-        **fixed_values,
-    ) -> SomeDistribution:
+        score: Callable[["Distribution", Obs], float] = opposite_log_likelihood,method='Nelder-Mead',
+        **fixed_values) -> SomeDistribution:
         init_parms = {}
         for k in cls.params_names:
             if k in fixed_values:
@@ -108,8 +107,18 @@ class Distribution(Parametrized):
         def to_minimize(x) -> float:
             return score(init.with_params(x), data)
 
-        res = minimize(to_minimize, x0, method="Nelder-Mead", options={"maxiter": 1500})
-        return init.with_params(res.x)
+        if method == 'L-BFGS-B':
+            res = minimize(to_minimize, [float(x) for x in x0], bounds=[(0,1), (None, None)], method=method,  options={'fatol':1e-8})
+        else:
+            res = minimize(to_minimize, [float(x) for x in x0], method=method, options={'fatol': 1e-8})
+        dist = init.with_params(res.x)
+        if method == 'BFGS':
+            dist.hessinv = res.hess_inv
+            dist.jac = res.jac
+        elif method == 'L-BFGS-B':
+            dist.hessinv = res.hess_inv.todense()
+            dist.jac = res.jac
+        return dist
 
     def _process_fit_params(self, **kwds):
         out_dict = self.param_dict.copy()
@@ -143,11 +152,13 @@ class Distribution(Parametrized):
         self,
         data,
         score=opposite_log_likelihood,
-        x0: Sequence[float] = None,
+        x0: Sequence[float] = None, method='Nelder-Mead',
         **fixed_values,
     ):
         param_dict = self._process_fit_params(**fixed_values)
-        return self.fit(data, score=score, x0=x0, **param_dict)
+        if method != 'Nelder-Mead' and (x0 is None):
+            x0 = self.fit(data, score=score, x0=x0, **param_dict).optimisation_params
+        return self.fit(data, score=score, x0=x0, method=method, **param_dict)
 
 
 class AvoidAbstractMixin(object):
