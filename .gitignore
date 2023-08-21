@@ -3,3 +3,4 @@
 dist/
 poetry.lock
 .DS_Store
+.tox
