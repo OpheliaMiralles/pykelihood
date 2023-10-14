@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2023-10-14
 
 ### Breaking changes
 
@@ -53,6 +53,7 @@ case in mind and aren't generally useful have been removed:
 ### Other
 
 * Add section to README on fitting other score functions than the likelihood
+* Add changelog with all version changes up to this one
 
 ## 0.3.2 - 2021-03-26
 
