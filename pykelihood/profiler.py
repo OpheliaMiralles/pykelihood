@@ -110,7 +110,9 @@ class Profiler(object):
         value_threshold = func - chi2.ppf(self.inference_confidence, df=1) / 2
 
         def is_inside_conf_interval(x: float):
-            new_opt = opt.fit_instance(self.data, score=self.score_function, **{param: x})
+            new_opt = opt.fit_instance(
+                self.data, score=self.score_function, **{param: x}
+            )
             return -self.score_function(new_opt, self.data) >= value_threshold
 
         def is_outside_conf_interval(x: float):
@@ -149,8 +151,20 @@ class Profiler(object):
 
         mapping = np.linspace(lb, ub, num=int(1 / precision))
         search_size = int(step / ((ub - lb) * precision))
-        lb_index = bisect.bisect_left(LazyMappingList(mapping, is_inside_conf_interval), True, lo=0, hi=search_size)
-        ub_index = bisect.bisect_left(LazyMappingList(mapping, is_outside_conf_interval), True, lo=len(mapping) - search_size) - 1
+        lb_index = bisect.bisect_left(
+            LazyMappingList(mapping, is_inside_conf_interval),
+            True,
+            lo=0,
+            hi=search_size,
+        )
+        ub_index = (
+            bisect.bisect_left(
+                LazyMappingList(mapping, is_outside_conf_interval),
+                True,
+                lo=len(mapping) - search_size,
+            )
+            - 1
+        )
 
         return mapping[lb_index], mapping[ub_index]
 
