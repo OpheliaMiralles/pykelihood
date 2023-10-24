@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import bisect
 import math
 import warnings
-from collections.abc import Sequence
 from itertools import count
 from typing import Callable, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy.stats import chi2
 from scipy.optimize import brentq
+from scipy.stats import chi2
 
 from pykelihood.distributions import Distribution
 from pykelihood.metrics import opposite_log_likelihood
@@ -25,13 +23,15 @@ warnings.filterwarnings("ignore")
 
 class Profiler(object):
     def __init__(
-        self,
-        distribution: Distribution,
-        data: pd.Series,
-        score_function: Callable = opposite_log_likelihood,
-        name: str = "Standard",
-        inference_confidence: float = 0.99,
-        single_profiling_param=None,
+            self,
+            distribution: Distribution,
+            data: pd.Series,
+            score_function: Callable = opposite_log_likelihood,
+            name: str = "Standard",
+            inference_confidence: float = 0.99,
+            single_profiling_param=None,
+            optimization_method='Nelder-Mead',
+            x0 = None
     ):
         """l
 
@@ -48,17 +48,19 @@ class Profiler(object):
         self.score_function = score_function
         self.inference_confidence = inference_confidence
         self.single_profiling_param = single_profiling_param
+        self.optimization_method = optimization_method
+        self.x0 = x0
 
     @cached_property
     def standard_mle(self):
-        estimate = self.distribution.fit(self.data)
+        estimate = self.distribution.fit(self.data, method=self.optimization_method)
         ll = -opposite_log_likelihood(estimate, self.data)
         ll = ll if isinstance(ll, float) else ll[0]
         return (estimate, ll)
 
     @cached_property
     def optimum(self):
-        estimate = self.distribution.fit_instance(self.data, score=self.score_function)
+        estimate = self.distribution.fit_instance(self.data, score=self.score_function, x0=self.x0, method=self.optimization_method)
         func = -self.score_function(estimate, self.data)
         func = func if isinstance(func, float) else func[0]
         return (estimate, func)
@@ -174,4 +176,4 @@ class Profiler(object):
         if len(estimates):
             return [np.min(estimates), np.max(estimates)]
         else:
-            return [-np.inf, np.inf]
+            return [None, None]
