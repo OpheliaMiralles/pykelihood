@@ -10,6 +10,7 @@ from typing import Callable, Tuple
 import numpy as np
 import pandas as pd
 from scipy.stats import chi2
+from scipy.optimize import brentq
 
 from pykelihood.distributions import Distribution
 from pykelihood.metrics import opposite_log_likelihood
@@ -107,16 +108,18 @@ class Profiler(object):
 
     def confidence_interval_bs(self, param: str, precision=1e-5) -> Tuple[float, float]:
         opt, func = self.optimum
+        print("optimum x, f(x):", opt, func)
         value_threshold = func - chi2.ppf(self.inference_confidence, df=1) / 2
 
-        def is_inside_conf_interval(x: float):
-            new_opt = opt.fit_instance(
-                self.data, score=self.score_function, **{param: x}
-            )
-            return -self.score_function(new_opt, self.data) >= value_threshold
+        def score(x: float):
+            new_opt = opt.fit_instance(self.data, score=self.score_function, **{param: x})
+            return -self.score_function(new_opt, self.data)
+
+        def delta_to_threshold(x: float):
+            return score(x) - value_threshold
 
         def is_outside_conf_interval(x: float):
-            return not is_inside_conf_interval(x)
+            return score(x) < value_threshold
 
         param_value = opt.flattened_param_dict[param].value
         if is_outside_conf_interval(param_value):
@@ -125,54 +128,31 @@ class Profiler(object):
         step = 0.1 * param_value
         lb = param_value - step
         ub = param_value + step
-        for _ in range(1000):
-            if is_outside_conf_interval(lb):
+        for i in range(1000):
+            s = score(lb)
+            print("lb", i, lb, value_threshold, s)
+            if s < value_threshold:
                 break
             lb -= step
         else:  # nobreak
             return [None, None]
-        for _ in range(1000):
-            if is_outside_conf_interval(ub):
+        for i in range(1000):
+            s = score(ub)
+            print("ub", i, ub, value_threshold, s)
+            if s < value_threshold:
                 break
             ub += step
         else:  # nobreak
             return [None, None]
 
-        class LazyMappingList(Sequence):
-            def __init__(self, value_mapping, fn: Callable):
-                self.mapping = value_mapping
-                self.fn = fn
-
-            def __len__(self):
-                return len(self.mapping)
-
-            def __getitem__(self, item):
-                return self.fn(self.mapping[item])
-
-        mapping = np.linspace(lb, ub, num=int(1 / precision))
-        search_size = int(step / ((ub - lb) * precision))
-        lb_index = bisect.bisect_left(
-            LazyMappingList(mapping, is_inside_conf_interval),
-            True,
-            lo=0,
-            hi=search_size,
-        )
-        ub_index = (
-            bisect.bisect_left(
-                LazyMappingList(mapping, is_outside_conf_interval),
-                True,
-                lo=len(mapping) - search_size,
-            )
-            - 1
-        )
-
-        return mapping[lb_index], mapping[ub_index]
+        lb = brentq(delta_to_threshold, lb, param_value, xtol=precision)
+        ub = brentq(delta_to_threshold, param_value, ub, xtol=precision)
+        return lb, ub
 
     def confidence_interval(self, metric: Callable[[Distribution], float]):
         """
 
-        :param metric: function depending on the distribution: it can be one of the parameter (ex: lambda x: x.shape() for a parameter called "shape"),
-        or a metric relevant to the field of study (ex: the 100-years return level for extreme value analysis by setting lambda x: x.isf(1/100))...
+        :param metric: function depending on the distribution: it should be one of the parameter (ex: lambda x: x.shape() for a parameter called "shape")
         :return: bounds based on parameter profiles for this metric
         """
         estimates = []
