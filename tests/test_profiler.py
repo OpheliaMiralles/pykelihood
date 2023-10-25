@@ -126,17 +126,8 @@ def test_profiles_with_fixed_param(profiler_with_fixed_param):
             )
 
 
-def test_confidence_interval(profiler, profiler_with_single_profiling_param):
-    return_period = 50
+def test_confidence_interval(profiler):
     mle, _ = profiler.optimum
-
-    def metric(distribution):
-        return distribution.isf(1 / return_period)
-
-    estimated_level = metric(mle)
-    CI = profiler.confidence_interval(metric)
-    single_param_CI = profiler_with_single_profiling_param.confidence_interval(metric)
-    assert CI[0] <= estimated_level <= CI[1]
-    assert CI[0] <= single_param_CI[0]
-    # profiling according to only one parameter gives less wide and less reliable confidence intervals
-    assert CI[1] >= single_param_CI[1]
+    CI = profiler.confidence_interval("shape")
+    assert CI[0] <= mle.shape.value
+    assert mle.shape.value <= CI[1]

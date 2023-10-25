@@ -113,9 +113,8 @@ class Profiler(object):
         filtered_params = filtered_params.rename(columns=dict(zip(count(), cols)))
         return filtered_params
 
-    def confidence_interval_bs(self, param: str, precision=1e-5) -> Tuple[float, float]:
+    def confidence_interval(self, param: str, precision=1e-5) -> Tuple[float, float]:
         opt, func = self.optimum
-        print("optimum x, f(x):", opt, func)
         value_threshold = func - chi2.ppf(self.inference_confidence, df=1) / 2
 
         def score(x: float):
@@ -132,55 +131,29 @@ class Profiler(object):
 
         param_value = opt.flattened_param_dict[param].value
         if is_outside_conf_interval(param_value):
-            return [None, None]
+            raise RuntimeError("Optimum is outside its own confidence interval?")
 
-        step = 0.1 * param_value
-        lb = param_value - step
-        ub = param_value + step
-        for i in range(1000):
-            s = score(lb)
-            print("lb", i, lb, value_threshold, s)
-            if s < value_threshold:
+        step = 0.1 * abs(param_value)
+        lb_underestimate = param_value - step
+        ub_overestimate = param_value + step
+        for _ in range(1000):
+            if is_outside_conf_interval(lb_underestimate):
                 break
-            lb -= step
+            lb_underestimate -= step
         else:  # nobreak
-            return [None, None]
-        for i in range(1000):
-            s = score(ub)
-            print("ub", i, ub, value_threshold, s)
-            if s < value_threshold:
-                break
-            ub += step
-        else:  # nobreak
-            return [None, None]
+            raise RuntimeError("Unable to find confidence interval lower bound")
 
-        lb = brentq(delta_to_threshold, lb, param_value, xtol=precision)
-        ub = brentq(delta_to_threshold, param_value, ub, xtol=precision)
+        for _ in range(1000):
+            if is_outside_conf_interval(ub_overestimate):
+                break
+            ub_overestimate += step
+        else:  # nobreak
+            raise RuntimeError("Unable to find confidence interval upper bound")
+
+        lb = brentq(delta_to_threshold, lb_underestimate, param_value, xtol=precision)
+        ub = brentq(delta_to_threshold, param_value, ub_overestimate, xtol=precision)
+
         return lb, ub
 
-    def confidence_interval(self, metric: Callable[[Distribution], float]):
-        """
-
-        :param metric: function depending on the distribution: it should be one of the parameter (ex: lambda x: x.shape() for a parameter called "shape")
-        :return: bounds based on parameter profiles for this metric
-        """
-        estimates = []
-        profiles = self.profiles
-        params = list(profiles.keys())
-        for param in params:
-            columns = [
-                n[0]
-                for (v, n) in self.optimum[0].param_mapping()
-                if n[0] in self.optimum[0].optimisation_param_dict
-            ]
-            result = profiles[param].apply(
-                lambda row: metric(
-                    self.distribution.with_params({k: row[k] for k in columns}.values())
-                ),
-                axis=1,
-            )
-            estimates.extend(list(result.values))
-        if len(estimates):
-            return [np.min(estimates), np.max(estimates)]
-        else:
-            return [None, None]
+    # For compatibility
+    confidence_interval_bs = confidence_interval
