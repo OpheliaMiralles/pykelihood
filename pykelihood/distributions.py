@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from functools import partial
-from typing import Any, Callable, Sequence, Type, TypeVar
+from typing import Any, Callable, Dict, Optional, Sequence, Type, TypeVar
 
 import numpy as np
 import scipy.special
@@ -83,7 +83,7 @@ class Distribution(Parametrized):
         data: Obs,
         x0: Sequence[float] = None,
         score: Callable[["Distribution", Obs], float] = opposite_log_likelihood,
-        method="Nelder-Mead",
+        scipy_args: Optional[Dict] = None,
         **fixed_values,
     ) -> SomeDistribution:
         init_parms = {}
@@ -99,24 +99,28 @@ class Distribution(Parametrized):
             if k not in init_parms:
                 init_parms[k] = v
         init = cls(**init_parms)
-        x0 = x0 or [x.value for x in init.optimisation_params]
-        if len(x0) != len(init.optimisation_params):
-            raise ValueError(
-                f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}"
-            )
         data = init._apply_constraints(data)
+
+        if x0 is None:
+            x0 = [x.value for x in init.optimisation_params]
+        else:
+            if len(x0) != len(init.optimisation_params):
+                raise ValueError(
+                    f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}"
+                )
+            x0 = [float(x) for x in x0]
 
         def to_minimize(x) -> float:
             return score(init.with_params(x), data)
 
-        res = minimize(
-            to_minimize,
-            [float(x) for x in x0],
-            method=method,
-            options={"maxiter": 1500, "fatol": 1e-8},
-        )
-        dist = init.with_params(res.x)
-        dist.scipy_res = res
+        minimize_args = {
+            "method": "Nelder-Mead",
+            "options": {"maxiter": 1500, "fatol": 1e-8},
+        }
+        minimize_args.update(scipy_args or {})
+        optimization_result = minimize(to_minimize, x0, **minimize_args)
+        dist = init.with_params(optimization_result.x)
+        dist.fit_result = optimization_result
         return dist
 
     def _process_fit_params(self, **kwds):
@@ -152,13 +156,11 @@ class Distribution(Parametrized):
         data,
         score=opposite_log_likelihood,
         x0: Sequence[float] = None,
-        method="Nelder-Mead",
+        scipy_args: Optional[Dict] = None,
         **fixed_values,
     ):
         param_dict = self._process_fit_params(**fixed_values)
-        if method != "Nelder-Mead" and (x0 is None):
-            x0 = self.fit(data, score=score, x0=x0, **param_dict).optimisation_params
-        return self.fit(data, score=score, x0=x0, method=method, **param_dict)
+        return self.fit(data, score=score, x0=x0, scipy_args=scipy_args, **param_dict)
 
 
 class AvoidAbstractMixin(object):

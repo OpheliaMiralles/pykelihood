@@ -64,7 +64,7 @@ class Profiler(object):
             self.data,
             score=self.score_function,
             x0=self.x0,
-            method=self.optimization_method,
+            scipy_args={"method": self.optimization_method},
         )
         func = -self.score_function(estimate, self.data)
         func = func if isinstance(func, float) else func[0]
