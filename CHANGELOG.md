@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### New features
+
+* The `Distribution.fit` method accepts a `scipy_args` dictionary which is
+  passed to `scipy`'s `minimize` function.
+* The confidence interval computed by the profiler now uses root finding to
+  find the bounds where the likelihood ratio test starts failing. This means
+  confidence intervals can only be computed for the distribution's parameters.
+* Upper bounds on dependencies were removed, improving compatibility with
+  recent versions.
+
 ## 0.4.0 - 2023-10-14
 
 ### Breaking changes
