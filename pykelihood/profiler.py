@@ -23,15 +23,15 @@ warnings.filterwarnings("ignore")
 
 class Profiler(object):
     def __init__(
-            self,
-            distribution: Distribution,
-            data: pd.Series,
-            score_function: Callable = opposite_log_likelihood,
-            name: str = "Standard",
-            inference_confidence: float = 0.99,
-            single_profiling_param=None,
-            optimization_method='Nelder-Mead',
-            x0 = None
+        self,
+        distribution: Distribution,
+        data: pd.Series,
+        score_function: Callable = opposite_log_likelihood,
+        name: str = "Standard",
+        inference_confidence: float = 0.99,
+        single_profiling_param=None,
+        optimization_method="Nelder-Mead",
+        x0=None,
     ):
         """l
 
@@ -60,7 +60,12 @@ class Profiler(object):
 
     @cached_property
     def optimum(self):
-        estimate = self.distribution.fit_instance(self.data, score=self.score_function, x0=self.x0, method=self.optimization_method)
+        estimate = self.distribution.fit_instance(
+            self.data,
+            score=self.score_function,
+            x0=self.x0,
+            method=self.optimization_method,
+        )
         func = -self.score_function(estimate, self.data)
         func = func if isinstance(func, float) else func[0]
         return (estimate, func)
@@ -114,7 +119,9 @@ class Profiler(object):
         value_threshold = func - chi2.ppf(self.inference_confidence, df=1) / 2
 
         def score(x: float):
-            new_opt = opt.fit_instance(self.data, score=self.score_function, **{param: x})
+            new_opt = opt.fit_instance(
+                self.data, score=self.score_function, **{param: x}
+            )
             return -self.score_function(new_opt, self.data)
 
         def delta_to_threshold(x: float):
