@@ -236,7 +236,7 @@ def polynomial_regression(
 
     :param x: the number of dimensions or the data the kernel will be computed on. There will be one parameter for each column.
     :param degree: last exponent computed for the given covariates. Can be a list or np array, but if this is the case, the number of
-    exponents should be equal to the number of columns of x.
+                   exponents should be equal to the number of columns of x.
     :param constraints: fixed values for the parameters of the regression. The following constraints are equivalent:
                         'beta_2_2=2', 'beta_cname_2=2', 'cname_2=2'
                         The last two are valid only if data is given as a dataframe with the second column named 'cname'.
