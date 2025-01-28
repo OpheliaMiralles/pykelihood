@@ -23,24 +23,37 @@ warnings.filterwarnings("ignore")
 
 class Profiler(object):
     def __init__(
-        self,
-        distribution: Distribution,
-        data: pd.Series,
-        score_function: Callable = opposite_log_likelihood,
-        name: str = "Standard",
-        inference_confidence: float = 0.99,
-        single_profiling_param=None,
-        optimization_method="Nelder-Mead",
-        x0=None,
+            self,
+            distribution: Distribution,
+            data: pd.Series,
+            score_function: Callable = opposite_log_likelihood,
+            name: str = "Standard",
+            inference_confidence: float = 0.99,
+            single_profiling_param=None,
+            optimization_method="Nelder-Mead",
+            x0=None,
     ):
-        """l
+        """
+        Initialize the Profiler.
 
-        :param distribution: distribution on which the inference is based
-        :param data: variable of interest
-        :param score_function: function used for optimisation
-        :param name: name (optional) of the profile if it needs to be compared to other score functions
-        :param inference_confidence: wanted confidence for intervals
-        :param single_profiling_param: parameter that we want to fix to create the profiles based on the score function
+        Parameters
+        ----------
+        distribution : Distribution
+            Distribution on which the inference is based.
+        data : pd.Series
+            Variable of interest.
+        score_function : Callable, optional
+            Function used for optimization, by default opposite_log_likelihood.
+        name : str, optional
+            Name of the profile if it needs to be compared to other score functions, by default "Standard".
+        inference_confidence : float, optional
+            Desired confidence for intervals, by default 0.99.
+        single_profiling_param : optional
+            Parameter to fix to create the profiles based on the score function, by default None.
+        optimization_method : str, optional
+            Method used for optimization, by default "Nelder-Mead".
+        x0 : optional
+            Initial guess for the optimization, by default None.
         """
         self.name = name
         self.distribution = distribution
@@ -53,6 +66,14 @@ class Profiler(object):
 
     @cached_property
     def standard_mle(self):
+        """
+        Compute the standard maximum likelihood estimate (MLE) for the distribution.
+
+        Returns
+        -------
+        tuple
+            A tuple containing the estimate and the log-likelihood value.
+        """
         estimate = self.distribution.fit(self.data, method=self.optimization_method)
         ll = -opposite_log_likelihood(estimate, self.data)
         ll = ll if isinstance(ll, float) else ll[0]
@@ -60,6 +81,14 @@ class Profiler(object):
 
     @cached_property
     def optimum(self):
+        """
+        Compute the optimum parameters for the distribution using the score function.
+
+        Returns
+        -------
+        tuple
+            A tuple containing the estimate and the score function value.
+        """
         estimate = self.distribution.fit_instance(
             self.data,
             score=self.score_function,
@@ -72,6 +101,14 @@ class Profiler(object):
 
     @cached_property
     def profiles(self):
+        """
+        Compute the profile likelihoods for the parameters.
+
+        Returns
+        -------
+        dict
+            A dictionary with parameter names as keys and their profile likelihoods as values.
+        """
         profiles = {}
         opt, func = self.optimum
         if self.single_profiling_param is not None:
@@ -87,6 +124,21 @@ class Profiler(object):
         return profiles
 
     def test_profile_likelihood(self, range_for_param, param):
+        """
+        Test the profile likelihood for a given parameter over a specified range.
+
+        Parameters
+        ----------
+        range_for_param : array-like
+            Range of values for the parameter.
+        param : str
+            Name of the parameter.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with the filtered parameters and their scores.
+        """
         opt, func = self.optimum
         profile_ll = []
         params = []
@@ -114,6 +166,21 @@ class Profiler(object):
         return filtered_params
 
     def confidence_interval(self, param: str, precision=1e-5) -> Tuple[float, float]:
+        """
+        Compute the confidence interval for a given parameter.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter.
+        precision : float, optional
+            Precision for the confidence interval calculation, by default 1e-5.
+
+        Returns
+        -------
+        tuple
+            A tuple containing the lower and upper bounds of the confidence interval.
+        """
         opt, func = self.optimum
         value_threshold = func - chi2.ppf(self.inference_confidence, df=1) / 2
 

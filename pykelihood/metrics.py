@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import typing
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable
 
 import numpy as np
-from scipy.special import binom
 
 from pykelihood.generic_types import Obs
 
@@ -13,9 +12,25 @@ if typing.TYPE_CHECKING:
 
 
 def bootstrap(
-    metric: Callable[[Distribution, Obs], float],
-    bootstrap_method: Callable[[Obs], Iterable[Obs]],
+        metric: Callable[[Distribution, Obs], float],
+        bootstrap_method: Callable[[Obs], Iterable[Obs]],
 ):
+    """
+    Bootstrap utility.
+
+    Parameters
+    ----------
+    metric : Callable[[Distribution, Obs], float]
+        ``pykelihood.metrics`` object.
+    bootstrap_method : Callable[[Obs], Iterable[Obs]]
+        Function that can be called on ``Obs`` or sequences of ``Obs``. For example, ``np.random.sample``.
+
+    Returns
+    -------
+    Callable
+        Value of the metric of interest averaged over bootstrapped data.
+    """
+
     def bootstrapped(distribution, data):
         datasets = bootstrap_method(data)
         sizes = [len(d) for d in datasets]
@@ -27,21 +42,77 @@ def bootstrap(
 
 
 def likelihood(distribution: Distribution, data: Obs):
+    """
+    Standard likelihood function.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``, e.g. ``Union[float, Sequence[float]]``.
+
+    Returns
+    -------
+    float
+        Likelihood value.
+    """
     return np.prod(distribution.pdf(data))
 
 
 def log_likelihood(distribution: Distribution, data: Obs):
+    """
+    Log-likelihood function.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        Log-likelihood value.
+    """
     return np.sum(distribution.logpdf(data))
 
 
 def opposite_log_likelihood(distribution: Distribution, data: Obs):
+    """
+    Opposite log-likelihood function.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        Opposite log-likelihood value.
+    """
     return -log_likelihood(distribution, data)
 
 
 def AIC(distribution: Distribution, data: Obs):
     """
-    Akaike Information Criterion: balances the improvement in accuracy of a model with the number of added parameter.
-    :return: AIC score: the lower, the better.
+    Akaike Information Criterion (AIC).
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        AIC score: the lower, the better.
     """
     return 2 * opposite_log_likelihood(distribution, data) + 2 * len(
         distribution.optimisation_params
@@ -50,8 +121,19 @@ def AIC(distribution: Distribution, data: Obs):
 
 def BIC(distribution: Distribution, data: Obs):
     """
-    Bayesian Information Criterion: more info on https://en.wikipedia.org/wiki/Bayesian_information_criterion
-    :return: BIC score: the lower, the better.
+    Bayesian Information Criterion (BIC).
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        BIC score: the lower, the better.
     """
     return len(distribution.optimisation_params) * np.log(
         len(data)
@@ -60,9 +142,24 @@ def BIC(distribution: Distribution, data: Obs):
 
 def crps(distribution: Distribution, data: Obs):
     """
-    Continuous Rank Probability Score: evaluates the continuous proximity of the empirical cumulative distribution function and that of the
-    forecast distribution F.
-    :return: \int_{-\infty}^{\infty}(F(y)-H(t-y))^2dy with H the Heavyside function equal to 0. for t<y, 1/2 for t=y and 1 for t>y.
+    Continuous Rank Probability Score (CRPS).
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        CRPS value.
+
+    Notes
+    -----
+    Evaluates the continuous proximity of the empirical cumulative distribution function and that of the forecast distribution F.
+    \int_{-\infty}^{\infty}(F(y)-H(t-y))^2dy with H the Heavyside function equal to 0. for t<y, 1/2 for t=y and 1 for t>y.
     """
     from scipy import integrate
 
@@ -79,9 +176,30 @@ def crps(distribution: Distribution, data: Obs):
 
 def Brier_score(distribution: Distribution, data: Obs, threshold: float = None):
     """
-    Brier Score: mean squared error between binary forecast and its empirical value.
-    :param threshold: the tail we are interested in predicting correctly.
-    :return: mean of (P(Y>=u)-1_{Y>=u})^2
+    Brier Score.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+    threshold : float, optional
+        The tail we are interested in predicting correctly.
+
+    Returns
+    -------
+    float
+        Mean of (P(Y>=u)-1_{Y>=u})^2.
+
+    Raises
+    ------
+    ValueError
+        If threshold is None.
+
+    Notes
+    -----
+    Mean squared error between binary forecast and its empirical value.
     """
     if threshold is None:
         raise ValueError("This metric requires a input threshold.")
@@ -91,10 +209,31 @@ def Brier_score(distribution: Distribution, data: Obs, threshold: float = None):
 
 def quantile_score(distribution: Distribution, data: Obs, quantile: float = None):
     """
-    Quantile score: probability weighted score evaluating the difference between the predicted quantile and the
-    empirical one.
-    :param quantile: quantile of interest.
-    :return: q*(y-F^{-1}(q)) if y>=F^{-1}(q), (1-q)*(F^{-1}(q)-y) otherwise
+    Quantile score.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+    quantile : float, optional
+        Quantile of interest.
+
+    Returns
+    -------
+    float
+        Quantile score value.
+
+    Raises
+    ------
+    ValueError
+        If quantile is None or not between 0 and 1.
+
+    Notes
+    -----
+    Probability weighted score evaluating the difference between the predicted quantile and the empirical one.
+    q*(y-F^{-1}(q)) if y>=F^{-1}(q), (1-q)*(F^{-1}(q)-y) otherwise.
     """
     if quantile is None:
         raise ValueError("This metric requires a input quantile.")
@@ -109,7 +248,23 @@ def quantile_score(distribution: Distribution, data: Obs, quantile: float = None
 
 def qq_l1_distance(distribution: Distribution, data: Obs):
     """
-    QQ-Plot-like metrics: mean L1 distance between the x=y line and the (theoretical quantiles, empirical quantiles) one.
+    QQ-Plot-like metrics: mean L1 distance.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        Mean L1 distance.
+
+    Notes
+    -----
+    Mean L1 distance between the x=y line and the (theoretical quantiles, empirical quantiles) one.
     Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
     arXiv preprint arXiv:2102.00884.
@@ -121,7 +276,23 @@ def qq_l1_distance(distribution: Distribution, data: Obs):
 
 def qq_l2_distance(distribution: Distribution, data: Obs):
     """
-    QQ-Plot-like metrics: mean L2 distance between the x=y line and the (theoretical quantiles, empirical quantiles) one.
+    QQ-Plot-like metrics: mean L2 distance.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        Mean L2 distance.
+
+    Notes
+    -----
+    Mean L2 distance between the x=y line and the (theoretical quantiles, empirical quantiles) one.
     Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
     arXiv preprint arXiv:2102.00884.
@@ -133,7 +304,23 @@ def qq_l2_distance(distribution: Distribution, data: Obs):
 
 def pp_l1_distance(distribution: Distribution, data: Obs):
     """
-    PP-Plot-like metrics: mean L1 distance between the x=y line and the (theoretical cdf, empirical cdf) one.
+    PP-Plot-like metrics: mean L1 distance.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        Mean L1 distance.
+
+    Notes
+    -----
+    Mean L1 distance between the x=y line and the (theoretical cdf, empirical cdf) one.
     Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
     arXiv preprint arXiv:2102.00884.
@@ -146,7 +333,23 @@ def pp_l1_distance(distribution: Distribution, data: Obs):
 
 def pp_l2_distance(distribution: Distribution, data: Obs):
     """
-    PP-Plot-like metrics: mean L2 distance between the x=y line and the (theoretical cdf, empirical cdf) one.
+    PP-Plot-like metrics: mean L2 distance.
+
+    Parameters
+    ----------
+    distribution : Distribution
+        ``pykelihood.Distribution`` object.
+    data : Obs
+        Data of type ``Obs``.
+
+    Returns
+    -------
+    float
+        Mean L2 distance.
+
+    Notes
+    -----
+    Mean L2 distance between the x=y line and the (theoretical cdf, empirical cdf) one.
     Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
     arXiv preprint arXiv:2102.00884.

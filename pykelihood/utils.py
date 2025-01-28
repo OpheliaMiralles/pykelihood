@@ -1,43 +1,66 @@
-from typing import Dict, Iterable, MutableSequence
+import numpy as np
+from typing import Any, Dict, Optional, Tuple, TypeVar
+
+T = TypeVar("T")
 
 
-def ifnone(x, default):
-    if x is None:
-        return default
-    return x
+def ifnone(x: Optional[T], default: T) -> T:
+    """
+    Return `default` if `x` is None, otherwise return `x`.
+
+    Parameters
+    ----------
+    x : Optional[T]
+        The value to check.
+    default : T
+        The default value to return if `x` is None.
+
+    Returns
+    -------
+    T
+        `x` if it is not None, otherwise `default`.
+    """
+    return default if x is None else x
 
 
-def to_tuple(x):
-    if isinstance(x, str):
-        return (x,)
-    return tuple(x)
+def flatten_dict(d: Dict[str, Any], parent_key: str = "", sep: str = "_") -> Dict[str, Any]:
+    """
+    Flatten a nested dictionary.
 
+    Parameters
+    ----------
+    d : Dict[str, Any]
+        The dictionary to flatten.
+    parent_key : str, optional
+        The base key to use for the flattened keys, by default "".
+    sep : str, optional
+        The separator to use between keys, by default "_".
 
-def flatten_dict(dict: Dict):
-    res_dict = {}
-    for k, v in dict.items():
-        if not isinstance(v, Dict):
-            res_dict[to_tuple(k)] = v
+    Returns
+    -------
+    Dict[str, Any]
+        The flattened dictionary.
+    """
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
         else:
-            new_dict = flatten_dict(v)
-            for k_, v_ in new_dict.items():
-                res_dict[to_tuple(k) + to_tuple(k_)] = v_
-    return res_dict
+            items.append((new_key, v))
+    return dict(items)
 
 
-def hash_with_series(*args, **kwargs):
-    to_hash = []
-    try:
-        import pandas as pd
-    except ImportError:
-        pd = None
-    for v in args:
-        if pd is not None and isinstance(v, pd.Series):
-            v = tuple(v.values)
-        elif isinstance(v, MutableSequence) or isinstance(v, Iterable):
-            v = tuple(v)
-        to_hash.append(v)
-    for k, v in kwargs.items():
-        v = hash_with_series(v)
-        to_hash.append((k, v))
-    return hash(tuple(to_hash))
+def count() -> int:
+    """
+    Generate an infinite sequence of integers starting from 0.
+
+    Yields
+    ------
+    int
+        The next integer in the sequence.
+    """
+    i = 0
+    while True:
+        yield i
+        i += 1
