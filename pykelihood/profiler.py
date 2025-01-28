@@ -23,15 +23,15 @@ warnings.filterwarnings("ignore")
 
 class Profiler(object):
     def __init__(
-            self,
-            distribution: Distribution,
-            data: pd.Series,
-            score_function: Callable = opposite_log_likelihood,
-            name: str = "Standard",
-            inference_confidence: float = 0.99,
-            single_profiling_param=None,
-            optimization_method="Nelder-Mead",
-            x0=None,
+        self,
+        distribution: Distribution,
+        data: pd.Series,
+        score_function: Callable = opposite_log_likelihood,
+        name: str = "Standard",
+        inference_confidence: float = 0.99,
+        single_profiling_param=None,
+        optimization_method="Nelder-Mead",
+        x0=None,
     ):
         """
         Initialize the Profiler.

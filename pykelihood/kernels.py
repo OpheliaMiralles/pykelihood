@@ -25,6 +25,7 @@ class Kernel(ParametrizedFunction):
     """
 
     def __init__(self, f, x=None, fname=None, **params):
+        """Function of one covariate with parameters."""
         fname = fname or f.__qualname__
         super(Kernel, self).__init__(f, fname=fname, **params)
         self._validate(x)
@@ -318,7 +319,7 @@ def gaussian(X, mu, sigma, scaling):
         Gaussian kernel output.
     """
     mult = scaling * 1 / (sigma * np.sqrt(2 * np.pi))
-    expo = np.exp(-((X - mu) ** 2) / (2 * sigma ** 2))
+    expo = np.exp(-((X - mu) ** 2) / sigma**2)
     return mult * expo
 
 
@@ -380,37 +381,7 @@ def hawkes_with_exp_kernel(X, mu, alpha, theta):
     )
 
 
-def hawkes_exp_with_event_times(t: float, tau: np.ndarray, mu: float, alpha: float, theta: float) -> float:
-    """
-    Computes the Hawkes process exponential kernel with given event times.
-
-    Parameters
-    ----------
-    t : float
-        The current time at which the kernel is evaluated.
-    tau : np.ndarray
-        An array of event times.
-    mu : float
-        The base intensity of the Hawkes process.
-    alpha : float
-        The self-excitation parameter, which controls the contribution of past events to the intensity.
-    theta : float
-        The decay rate of the exponential kernel.
-
-    Returns
-    -------
-    float
-        The intensity value of the Hawkes process at time `t`.
-
-    Notes
-    -----
-    The intensity function is defined as:
-    .. math::
-
-        \lambda(t) = \mu + \alpha \theta \sum_{\tau_i < t} \exp(-\theta (t - \tau_i))
-
-    where `tau` is the sequence of event times up to `t`.
-    """
+def hawkes2(t, tau, mu, alpha, theta):
     return mu + alpha * theta * np.sum(
         (np.exp(-theta * (t - tau[i]))) for i in range(len(tau)) if tau[i] < t
     )
@@ -422,7 +393,7 @@ Sophisticated kernels with multiple covariates
 
 
 def linear_regression(
-        x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
+    x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
 ) -> Kernel:
     """
     Linear regression of the columns in the data.
@@ -457,7 +428,7 @@ def linear_regression(
     fixed = {}
     for p_name, p_value in constraints.items():
         if p_name.startswith("beta_"):
-            p_name = p_name[len("beta_"):]
+            p_name = p_name[len("beta_") :]
         if isinstance(x, pd.DataFrame) and p_name in x.columns:
             index = tuple(x.columns).index(p_name) + 1
         else:
@@ -483,7 +454,7 @@ def linear_regression(
 
 
 def exponential_linear_regression(
-        x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
+    x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
 ) -> Kernel:
     """
     Exponential of a linear sum of the columns in the data.
@@ -518,7 +489,7 @@ def exponential_linear_regression(
     fixed = {}
     for p_name, p_value in constraints.items():
         if p_name.startswith("beta_"):
-            p_name = p_name[len("beta_"):]
+            p_name = p_name[len("beta_") :]
         if isinstance(x, pd.DataFrame) and p_name in x.columns:
             index = tuple(x.columns).index(p_name) + 1
         else:
@@ -545,9 +516,9 @@ def exponential_linear_regression(
 
 
 def polynomial_regression(
-        x: Union[pd.DataFrame, np.ndarray],
-        degree: Union[int, Sequence] = 2,
-        **constraints,
+    x: Union[pd.DataFrame, np.ndarray],
+    degree: Union[int, Sequence] = 2,
+    **constraints,
 ) -> Kernel:
     """
     Polynomial regression in the columns of the data.
@@ -583,13 +554,13 @@ def polynomial_regression(
         degree = [degree] * ndim
     else:
         assert (
-                len(degree) == ndim
+            len(degree) == ndim
         ), "The number of degrees is different than the number of covariates."
     ncols = sum(degree)
     fixed = {}
     for p_name, p_value in constraints.items():
         if p_name.startswith("beta_"):
-            p_name = p_name[len("beta_"):]
+            p_name = p_name[len("beta_") :]
         match = re.match(r"^(.+)_(\d+)$", p_name)
         if match:
             column, deg = match.groups()

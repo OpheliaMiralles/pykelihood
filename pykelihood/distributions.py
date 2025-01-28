@@ -64,23 +64,23 @@ class Distribution(Parametrized):
 
     @abstractmethod
     def rvs(self, size: int, *args, **kwargs) -> np.ndarray:
-        pass
+        return NotImplemented
 
     @abstractmethod
     def cdf(self, x: Obs):
-        pass
+        return NotImplemented
 
     @abstractmethod
     def isf(self, q: Obs):
-        pass
+        return NotImplemented
 
     @abstractmethod
     def ppf(self, q: Obs):
-        pass
+        return NotImplemented
 
     @abstractmethod
     def pdf(self, x: Obs):
-        pass
+        return NotImplemented
 
     @classmethod
     def param_dict_to_vec(cls, x: dict):
@@ -145,6 +145,7 @@ class Distribution(Parametrized):
                     init_parms[k] = v
                 else:
                     init_parms[k] = ConstantParameter(v)
+        # Add keyword arguments useful for object creation
         for k, v in fixed_values.items():
             if k not in init_parms:
                 init_parms[k] = v
@@ -185,6 +186,7 @@ class Distribution(Parametrized):
         for param_name in out_dict:
             for name_fixed_param, value_fixed_param in all_fixed_params.items():
                 if name_fixed_param.startswith(param_name):
+                    # this name is being processed, no need to keep it
                     to_remove.add(name_fixed_param)
                     replacement = ensure_parametrized(value_fixed_param, constant=True)
                     if name_fixed_param == param_name:
@@ -194,6 +196,7 @@ class Distribution(Parametrized):
                         old_param = out_dict[param_name]
                         new_param = old_param.with_params(**{sub_name: replacement})
                         out_dict[param_name] = new_param
+        # other non-parameter kw arguments
         for name, value in kwds.items():
             if name not in to_remove:
                 out_dict[name] = value
@@ -230,6 +233,7 @@ class Distribution(Parametrized):
         """
         param_dict = self._process_fit_params(**fixed_values)
         return self.fit(data, score=score, x0=x0, scipy_args=scipy_args, **param_dict)
+
 
 class AvoidAbstractMixin(object):
     """
@@ -303,6 +307,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
         self.__dict__[item] = g
         return g
 
+
 class Uniform(ScipyDistribution):
     """
     Uniform distribution.
@@ -337,6 +342,7 @@ class Uniform(ScipyDistribution):
             Dictionary of scipy arguments.
         """
         return {"loc": ifnone(loc, self.loc()), "scale": ifnone(scale, self.scale())}
+
 
 class Exponential(ScipyDistribution):
     """
@@ -374,6 +380,7 @@ class Exponential(ScipyDistribution):
         if rate is not None:
             rate = 1 / rate
         return {"loc": ifnone(loc, self.loc()), "scale": ifnone(rate, 1 / self.rate())}
+
 
 class Gamma(ScipyDistribution):
     """
@@ -462,6 +469,7 @@ class Pareto(ScipyDistribution):
             "scale": ifnone(scale, self.scale()),
         }
 
+
 class Beta(ScipyDistribution):
     """
     Beta distribution.
@@ -546,6 +554,7 @@ class Normal(ScipyDistribution):
         """
         return {"loc": ifnone(loc, self.loc()), "scale": ifnone(scale, self.scale())}
 
+
 class LogNormal(ScipyDistribution):
     """
     LogNormal distribution.
@@ -580,6 +589,7 @@ class LogNormal(ScipyDistribution):
             Dictionary of scipy arguments.
         """
         return {"s": ifnone(scale, self.scale()), "loc": ifnone(loc, self.loc())}
+
 
 class GEV(ScipyDistribution):
     """
@@ -678,6 +688,7 @@ class GEV(ScipyDistribution):
             "scale": ifnone(scale, self.scale()),
         }
 
+
 class GPD(ScipyDistribution):
     """
     Generalized Pareto Distribution (GPD).
@@ -720,6 +731,7 @@ class GPD(ScipyDistribution):
             "loc": ifnone(loc, self.loc()),
             "scale": ifnone(scale, self.scale()),
         }
+
 
 class TruncatedDistribution(Distribution):
     """
