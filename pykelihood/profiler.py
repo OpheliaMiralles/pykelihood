@@ -12,11 +12,8 @@ from scipy.stats import chi2
 
 from pykelihood.distributions import Distribution
 from pykelihood.metrics import opposite_log_likelihood
+from functools import cached_property
 
-try:
-    from functools import cached_property
-except ImportError:
-    from cached_property import cached_property
 
 warnings.filterwarnings("ignore")
 
@@ -224,3 +221,4 @@ class Profiler(object):
 
     # For compatibility
     confidence_interval_bs = confidence_interval
+
