@@ -1,7 +1,7 @@
 import re
+from functools import wraps
 from itertools import count
 from typing import Collection, Sequence, Union
-from functools import wraps
 
 import numpy as np
 import pandas as pd
