@@ -15,10 +15,27 @@ warnings.filterwarnings("ignore")
 
 
 def get_quantiles_and_confidence_intervals_uniform_scale(
-    fit: Distribution,
-    data: Union[pd.DataFrame, np.array, pd.Series],
-    ci_confidence=0.99,
+        fit: Distribution,
+        data: Union[pd.DataFrame, np.array, pd.Series],
+        ci_confidence=0.99,
 ):
+    """
+    Get quantiles and confidence intervals on a uniform scale.
+
+    Parameters
+    ----------
+    fit : Distribution
+        The fitted distribution.
+    data : Union[pd.DataFrame, np.array, pd.Series]
+        The data to analyze.
+    ci_confidence : float, optional
+        Confidence level for the intervals, by default 0.99.
+
+    Returns
+    -------
+    tuple
+        Theoretical quantiles, empirical quantiles, lower bounds, and upper bounds.
+    """
     ll = Profiler(fit, data, inference_confidence=ci_confidence)
     min_max = []
     levels = np.linspace(0.01, 0.99, 100)
@@ -35,10 +52,27 @@ def get_quantiles_and_confidence_intervals_uniform_scale(
 
 
 def get_quantiles_and_confidence_intervals(
-    fit: Distribution,
-    data: Union[pd.DataFrame, np.array, pd.Series],
-    ci_confidence=0.99,
+        fit: Distribution,
+        data: Union[pd.DataFrame, np.array, pd.Series],
+        ci_confidence=0.99,
 ):
+    """
+    Get quantiles and confidence intervals.
+
+    Parameters
+    ----------
+    fit : Distribution
+        The fitted distribution.
+    data : Union[pd.DataFrame, np.array, pd.Series]
+        The data to analyze.
+    ci_confidence : float, optional
+        Confidence level for the intervals, by default 0.99.
+
+    Returns
+    -------
+    tuple
+        Theoretical quantiles, empirical quantiles, lower bounds, and upper bounds.
+    """
     ll = Profiler(fit, data, inference_confidence=ci_confidence)
     min_max = []
     levels = np.linspace(0.01, 0.99, 100)
@@ -55,13 +89,36 @@ def get_quantiles_and_confidence_intervals(
 
 
 def pp_plot(
-    fit: Distribution,
-    data: Union[pd.DataFrame, np.array, pd.Series],
-    ax=plt.gca(),
-    path_to_figure: str = None,
-    figure_name="pp_plot",
-    ci_confidence=0.99,
+        fit: Distribution,
+        data: Union[pd.DataFrame, np.array, pd.Series],
+        ax=plt.gca(),
+        path_to_figure: str = None,
+        figure_name="pp_plot",
+        ci_confidence=0.99,
 ):
+    """
+    Create a PP plot.
+
+    Parameters
+    ----------
+    fit : Distribution
+        The fitted distribution.
+    data : Union[pd.DataFrame, np.array, pd.Series]
+        The data to plot.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot on, by default plt.gca().
+    path_to_figure : str, optional
+        Path to save the figure, by default None.
+    figure_name : str, optional
+        Name of the figure file, by default "pp_plot".
+    ci_confidence : float, optional
+        Confidence level for the intervals, by default 0.99.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes with the plot.
+    """
     (
         theoretical,
         empirical,
@@ -83,13 +140,36 @@ def pp_plot(
 
 
 def qq_plot(
-    fit: Distribution,
-    data: Union[pd.DataFrame, np.array, pd.Series],
-    ax=plt.gca(),
-    path_to_figure: str = None,
-    figure_name="qq_plot",
-    ci_confidence=0.99,
+        fit: Distribution,
+        data: Union[pd.DataFrame, np.array, pd.Series],
+        ax=plt.gca(),
+        path_to_figure: str = None,
+        figure_name="qq_plot",
+        ci_confidence=0.99,
 ):
+    """
+    Create a QQ plot.
+
+    Parameters
+    ----------
+    fit : Distribution
+        The fitted distribution.
+    data : Union[pd.DataFrame, np.array, pd.Series]
+        The data to plot.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot on, by default plt.gca().
+    path_to_figure : str, optional
+        Path to save the figure, by default None.
+    figure_name : str, optional
+        Name of the figure file, by default "qq_plot".
+    ci_confidence : float, optional
+        Confidence level for the intervals, by default 0.99.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes with the plot.
+    """
     (
         theoretical,
         empirical,
@@ -113,13 +193,36 @@ def qq_plot(
 
 
 def qq_plot_exponential_scale(
-    fit: Distribution,
-    data: Union[pd.DataFrame, np.array, pd.Series],
-    ax=plt.gca(),
-    path_to_figure: str = None,
-    figure_name="qq_plot",
-    ci_confidence=0.99,
+        fit: Distribution,
+        data: Union[pd.DataFrame, np.array, pd.Series],
+        ax=plt.gca(),
+        path_to_figure: str = None,
+        figure_name="qq_plot",
+        ci_confidence=0.99,
 ):
+    """
+    Create a QQ plot on an exponential scale.
+
+    Parameters
+    ----------
+    fit : Distribution
+        The fitted distribution.
+    data : Union[pd.DataFrame, np.array, pd.Series]
+        The data to plot.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot on, by default plt.gca().
+    path_to_figure : str, optional
+        Path to save the figure, by default None.
+    figure_name : str, optional
+        Name of the figure file, by default "qq_plot".
+    ci_confidence : float, optional
+        Confidence level for the intervals, by default 0.99.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes with the plot.
+    """
     (
         theoretical,
         empirical,
@@ -146,13 +249,36 @@ def qq_plot_exponential_scale(
 
 
 def qq_plot_frechet_scale(
-    fit: Distribution,
-    data: Union[pd.DataFrame, np.array, pd.Series],
-    ax=plt.gca(),
-    path_to_figure: str = None,
-    figure_name="qq_plot",
-    ci_confidence=0.99,
+        fit: Distribution,
+        data: Union[pd.DataFrame, np.array, pd.Series],
+        ax=plt.gca(),
+        path_to_figure: str = None,
+        figure_name="qq_plot",
+        ci_confidence=0.99,
 ):
+    """
+    Create a QQ plot on a Fréchet scale.
+
+    Parameters
+    ----------
+    fit : Distribution
+        The fitted distribution.
+    data : Union[pd.DataFrame, np.array, pd.Series]
+        The data to plot.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot on, by default plt.gca().
+    path_to_figure : str, optional
+        Path to save the figure, by default None.
+    figure_name : str, optional
+        Name of the figure file, by default "qq_plot".
+    ci_confidence : float, optional
+        Confidence level for the intervals, by default 0.99.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes with the plot.
+    """
     (
         theoretical,
         empirical,

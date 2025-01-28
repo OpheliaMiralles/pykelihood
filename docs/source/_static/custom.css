@@ -1,0 +1,33 @@
+/* Change the font family */
+body {
+    font-family: "Tahoma", sans-serif;
+    color: #333333
+}
+/* Optional: Customize specific parts like headers */
+h1 {color: #8B0000;
+    font-weight: bold;}
+h5 {color: #8fcbe4}
+h4 {color: #76bddc}
+h3 {color: #5a9cc7}
+h2 {color: #285c83}
+
+.navbar-brand img {
+    height: auto;
+    max-width: 300px; /
+}
+.bd-search .fa-magnifying-glass {
+    display: none;
+}
+.search-button__kbd-shortcut {
+    border-radius: 4px;
+    font-size: 0.5em;
+}
+.toctree-l1 .reference {
+    color: #8B0000; /* Replace #FF5733 with your desired color */
+}
+.sidebar-primary-item a {color: #285c83}
+
+html[data-theme="dark"] {
+    background-color: black;
+    --pst-color-on-background: #222832;
+}

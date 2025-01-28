@@ -1,22 +1,11 @@
-Welcome to pykelihood's documentation!
-======================================
-
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 4
+   :hidden:
 
-.. autosummary::
-   :recursive:
-   :toctree: generated
+   user_guide
+   modules
 
-   pykelihood.distributions
-   pykelihood.kernels
-   pykelihood.metrics
-   pykelihood.parameters
 
-Indices and tables
-==================
+.. include:: ../../README.rst
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+
