@@ -15,9 +15,9 @@ warnings.filterwarnings("ignore")
 
 
 def get_quantiles_and_confidence_intervals_uniform_scale(
-        fit: Distribution,
-        data: Union[pd.DataFrame, np.array, pd.Series],
-        ci_confidence=0.99,
+    fit: Distribution,
+    data: Union[pd.DataFrame, np.array, pd.Series],
+    ci_confidence=0.99,
 ):
     """
     Get quantiles and confidence intervals on a uniform scale.
@@ -52,9 +52,9 @@ def get_quantiles_and_confidence_intervals_uniform_scale(
 
 
 def get_quantiles_and_confidence_intervals(
-        fit: Distribution,
-        data: Union[pd.DataFrame, np.array, pd.Series],
-        ci_confidence=0.99,
+    fit: Distribution,
+    data: Union[pd.DataFrame, np.array, pd.Series],
+    ci_confidence=0.99,
 ):
     """
     Get quantiles and confidence intervals.
@@ -89,12 +89,12 @@ def get_quantiles_and_confidence_intervals(
 
 
 def pp_plot(
-        fit: Distribution,
-        data: Union[pd.DataFrame, np.array, pd.Series],
-        ax=plt.gca(),
-        path_to_figure: str = None,
-        figure_name="pp_plot",
-        ci_confidence=0.99,
+    fit: Distribution,
+    data: Union[pd.DataFrame, np.array, pd.Series],
+    ax=plt.gca(),
+    path_to_figure: str = None,
+    figure_name="pp_plot",
+    ci_confidence=0.99,
 ):
     """
     Create a PP plot.
@@ -140,12 +140,12 @@ def pp_plot(
 
 
 def qq_plot(
-        fit: Distribution,
-        data: Union[pd.DataFrame, np.array, pd.Series],
-        ax=plt.gca(),
-        path_to_figure: str = None,
-        figure_name="qq_plot",
-        ci_confidence=0.99,
+    fit: Distribution,
+    data: Union[pd.DataFrame, np.array, pd.Series],
+    ax=plt.gca(),
+    path_to_figure: str = None,
+    figure_name="qq_plot",
+    ci_confidence=0.99,
 ):
     """
     Create a QQ plot.
@@ -193,12 +193,12 @@ def qq_plot(
 
 
 def qq_plot_exponential_scale(
-        fit: Distribution,
-        data: Union[pd.DataFrame, np.array, pd.Series],
-        ax=plt.gca(),
-        path_to_figure: str = None,
-        figure_name="qq_plot",
-        ci_confidence=0.99,
+    fit: Distribution,
+    data: Union[pd.DataFrame, np.array, pd.Series],
+    ax=plt.gca(),
+    path_to_figure: str = None,
+    figure_name="qq_plot",
+    ci_confidence=0.99,
 ):
     """
     Create a QQ plot on an exponential scale.
@@ -249,12 +249,12 @@ def qq_plot_exponential_scale(
 
 
 def qq_plot_frechet_scale(
-        fit: Distribution,
-        data: Union[pd.DataFrame, np.array, pd.Series],
-        ax=plt.gca(),
-        path_to_figure: str = None,
-        figure_name="qq_plot",
-        ci_confidence=0.99,
+    fit: Distribution,
+    data: Union[pd.DataFrame, np.array, pd.Series],
+    ax=plt.gca(),
+    path_to_figure: str = None,
+    figure_name="qq_plot",
+    ci_confidence=0.99,
 ):
     """
     Create a QQ plot on a Fréchet scale.

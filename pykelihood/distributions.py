@@ -59,28 +59,29 @@ class Distribution(Parametrized):
     fit_instance(data, score=opposite_log_likelihood, x0: Sequence[float] = None, scipy_args: Optional[Dict] = None, **fixed_values)
         Fit the instance to the data.
     """
+
     def __hash__(self):
         return (self.__class__.__name__,) + self.params
 
     @abstractmethod
     def rvs(self, size: int, *args, **kwargs) -> np.ndarray:
-        pass
+        return NotImplemented
 
     @abstractmethod
     def cdf(self, x: Obs):
-        pass
+        return NotImplemented
 
     @abstractmethod
     def isf(self, q: Obs):
-        pass
+        return NotImplemented
 
     @abstractmethod
     def ppf(self, q: Obs):
-        pass
+        return NotImplemented
 
     @abstractmethod
     def pdf(self, x: Obs):
-        pass
+        return NotImplemented
 
     @classmethod
     def param_dict_to_vec(cls, x: dict):
@@ -145,6 +146,7 @@ class Distribution(Parametrized):
                     init_parms[k] = v
                 else:
                     init_parms[k] = ConstantParameter(v)
+        # Add keyword arguments useful for object creation
         for k, v in fixed_values.items():
             if k not in init_parms:
                 init_parms[k] = v
@@ -185,6 +187,7 @@ class Distribution(Parametrized):
         for param_name in out_dict:
             for name_fixed_param, value_fixed_param in all_fixed_params.items():
                 if name_fixed_param.startswith(param_name):
+                    # this name is being processed, no need to keep it
                     to_remove.add(name_fixed_param)
                     replacement = ensure_parametrized(value_fixed_param, constant=True)
                     if name_fixed_param == param_name:
@@ -194,6 +197,7 @@ class Distribution(Parametrized):
                         old_param = out_dict[param_name]
                         new_param = old_param.with_params(**{sub_name: replacement})
                         out_dict[param_name] = new_param
+        # other non-parameter kw arguments
         for name, value in kwds.items():
             if name not in to_remove:
                 out_dict[name] = value
@@ -231,6 +235,7 @@ class Distribution(Parametrized):
         param_dict = self._process_fit_params(**fixed_values)
         return self.fit(data, score=score, x0=x0, scipy_args=scipy_args, **param_dict)
 
+
 class AvoidAbstractMixin(object):
     """
     Mixin to avoid abstract methods.
@@ -240,6 +245,7 @@ class AvoidAbstractMixin(object):
     __getattribute__(item)
         Get the attribute, avoiding abstract methods.
     """
+
     def __getattribute__(self, item):
         x = object.__getattribute__(self, item)
         if (
@@ -264,6 +270,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
     __getattr__(item)
         Get the attribute, wrapping scipy functions.
     """
+
     base_module: Any
 
     def rvs(self, size=None, random_state=None, **kwargs):
@@ -303,6 +310,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
         self.__dict__[item] = g
         return g
 
+
 class Uniform(ScipyDistribution):
     """
     Uniform distribution.
@@ -314,6 +322,7 @@ class Uniform(ScipyDistribution):
     scale : float, optional
         Scale parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale")
     base_module = uniform
 
@@ -338,6 +347,7 @@ class Uniform(ScipyDistribution):
         """
         return {"loc": ifnone(loc, self.loc()), "scale": ifnone(scale, self.scale())}
 
+
 class Exponential(ScipyDistribution):
     """
     Exponential distribution.
@@ -349,6 +359,7 @@ class Exponential(ScipyDistribution):
     rate : float, optional
         Rate parameter, by default 1.0.
     """
+
     params_names = ("loc", "rate")
     base_module = expon
 
@@ -375,6 +386,7 @@ class Exponential(ScipyDistribution):
             rate = 1 / rate
         return {"loc": ifnone(loc, self.loc()), "scale": ifnone(rate, 1 / self.rate())}
 
+
 class Gamma(ScipyDistribution):
     """
     Gamma distribution.
@@ -388,6 +400,7 @@ class Gamma(ScipyDistribution):
     shape : float, optional
         Shape parameter, by default 0.0.
     """
+
     params_names = ("loc", "scale", "shape")
     base_module = gamma
 
@@ -432,6 +445,7 @@ class Pareto(ScipyDistribution):
     alpha : float, optional
         Shape parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale", "alpha")
     base_module = pareto
 
@@ -462,6 +476,7 @@ class Pareto(ScipyDistribution):
             "scale": ifnone(scale, self.scale()),
         }
 
+
 class Beta(ScipyDistribution):
     """
     Beta distribution.
@@ -477,6 +492,7 @@ class Beta(ScipyDistribution):
     beta : float, optional
         Beta parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale", "alpha", "beta")
     base_module = beta
 
@@ -522,6 +538,7 @@ class Normal(ScipyDistribution):
     scale : float, optional
         Scale parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale")
     base_module = norm
 
@@ -546,6 +563,7 @@ class Normal(ScipyDistribution):
         """
         return {"loc": ifnone(loc, self.loc()), "scale": ifnone(scale, self.scale())}
 
+
 class LogNormal(ScipyDistribution):
     """
     LogNormal distribution.
@@ -557,6 +575,7 @@ class LogNormal(ScipyDistribution):
     scale : float, optional
         Scale parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale")
     base_module = lognorm
 
@@ -581,6 +600,7 @@ class LogNormal(ScipyDistribution):
         """
         return {"s": ifnone(scale, self.scale()), "loc": ifnone(loc, self.loc())}
 
+
 class GEV(ScipyDistribution):
     """
     Generalized Extreme Value (GEV) distribution.
@@ -600,6 +620,7 @@ class GEV(ScipyDistribution):
     have parameters `c`, `loc`, `scale` but `loc`, `scale` and `shape` where shape
     is `-c`.
     """
+
     params_names = ("loc", "scale", "shape")
     base_module = genextreme
 
@@ -678,6 +699,7 @@ class GEV(ScipyDistribution):
             "scale": ifnone(scale, self.scale()),
         }
 
+
 class GPD(ScipyDistribution):
     """
     Generalized Pareto Distribution (GPD).
@@ -691,6 +713,7 @@ class GPD(ScipyDistribution):
     shape : float, optional
         Shape parameter, by default 0.0.
     """
+
     params_names = ("loc", "scale", "shape")
     base_module = genpareto
 
@@ -721,6 +744,7 @@ class GPD(ScipyDistribution):
             "scale": ifnone(scale, self.scale()),
         }
 
+
 class TruncatedDistribution(Distribution):
     """
     Truncated distribution.
@@ -739,6 +763,7 @@ class TruncatedDistribution(Distribution):
     ValueError
         If the lower and upper bounds are equal.
     """
+
     params_names = ("distribution",)
 
     def __init__(

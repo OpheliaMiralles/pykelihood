@@ -1,5 +1,5 @@
-import numpy as np
-from typing import Any, Dict, Optional, Tuple, TypeVar
+from collections.abc import Iterable, MutableSequence
+from typing import Dict, Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -23,7 +23,13 @@ def ifnone(x: Optional[T], default: T) -> T:
     return default if x is None else x
 
 
-def flatten_dict(d: Dict[str, Any], parent_key: str = "", sep: str = "_") -> Dict[str, Any]:
+def to_tuple(x):
+    if isinstance(x, str):
+        return (x,)
+    return tuple(x)
+
+
+def flatten_dict(dict: Dict):
     """
     Flatten a nested dictionary.
 
@@ -41,26 +47,30 @@ def flatten_dict(d: Dict[str, Any], parent_key: str = "", sep: str = "_") -> Dic
     Dict[str, Any]
         The flattened dictionary.
     """
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
+    res_dict = {}
+    for k, v in dict.items():
+        if not isinstance(v, Dict):
+            res_dict[to_tuple(k)] = v
         else:
-            items.append((new_key, v))
-    return dict(items)
+            new_dict = flatten_dict(v)
+            for k_, v_ in new_dict.items():
+                res_dict[to_tuple(k) + to_tuple(k_)] = v_
+    return res_dict
 
 
-def count() -> int:
-    """
-    Generate an infinite sequence of integers starting from 0.
-
-    Yields
-    ------
-    int
-        The next integer in the sequence.
-    """
-    i = 0
-    while True:
-        yield i
-        i += 1
+def hash_with_series(*args, **kwargs):
+    to_hash = []
+    try:
+        import pandas as pd
+    except ImportError:
+        pd = None
+    for v in args:
+        if pd is not None and isinstance(v, pd.Series):
+            v = tuple(v.values)
+        elif isinstance(v, MutableSequence) or isinstance(v, Iterable):
+            v = tuple(v)
+        to_hash.append(v)
+    for k, v in kwargs.items():
+        v = hash_with_series(v)
+        to_hash.append((k, v))
+    return hash(tuple(to_hash))

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import typing
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Sequence
 
 import numpy as np
+from scipy.special import binom
 
 from pykelihood.generic_types import Obs
 
@@ -12,8 +13,8 @@ if typing.TYPE_CHECKING:
 
 
 def bootstrap(
-        metric: Callable[[Distribution, Obs], float],
-        bootstrap_method: Callable[[Obs], Iterable[Obs]],
+    metric: Callable[[Distribution, Obs], float],
+    bootstrap_method: Callable[[Obs], Iterable[Obs]],
 ):
     """
     Bootstrap utility.

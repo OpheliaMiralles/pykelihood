@@ -28,4 +28,3 @@ Or you can also generate random values according to this distribution:
 >>> n.rvs(10)
 array([ 3.31370986,  5.02699468, -0.3573229 ,  1.00460378, -3.26044871,
         1.86362711, -0.84192901,  0.81132182, -2.03266978,  1.48079944])
-

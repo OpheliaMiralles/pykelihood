@@ -8,4 +8,3 @@ User guide
    user_guide/trend_fitting
    user_guide/penalty_fitting
    user_guide/profiler
-

@@ -34,6 +34,7 @@ class Parametrized(object):
     """
     Base class for parametrized objects.
     """
+
     params_names: Tuple[str]
 
     def __init__(self, *params: Union[Parametrized, Any]):
@@ -144,8 +145,8 @@ class Parametrized(object):
         results: "list[list[Parametrized, list[str]]]" = []
         unique = []
         for q, param_name in zip(
-                (p_ for p in self.flattened_params for p_ in p.params),
-                self.flattened_param_dict,
+            (p_ for p in self.flattened_params for p_ in p.params),
+            self.flattened_param_dict,
         ):
             if not (only_opt and isinstance(q, ConstantParameter)):
                 if q not in unique:
@@ -256,20 +257,25 @@ class Parametrized(object):
                 for name in names:
                     new_params[name] = new_param_obj
             return self.with_params(**new_params)
+            # for p_name, param in self.param_dict.items():
+            #     new_params[p_name] = param.with_params(params)
         else:
             new_params = {}
             for p_name, param in self.param_dict.items():
                 this_param_values = {}
                 for name, value in named_params.items():
+                    # check if this value is for this parameter
                     if name == p_name:
                         new_params[name] = value
+                        # no need to look further
                         break
                     elif name.startswith(p_name + "_"):
-                        remaining = name[len(p_name + "_"):]
+                        remaining = name[len(p_name + "_") :]
                         this_param_values[remaining] = value
-                else:
+                else:  # nobreak
                     if this_param_values:
                         new_params[p_name] = param.with_params(**this_param_values)
+            # use current values if none were given
             new_params = ChainMap(new_params, self.param_dict)
         return self._build_instance(**new_params)
 
@@ -473,6 +479,7 @@ class ConstantParameter(Parameter):
         Tuple
             Empty tuple.
         """
+        # do not show up in the params
         return ()
 
 
