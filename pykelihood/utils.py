@@ -1,5 +1,4 @@
-from collections.abc import MutableSequence, Iterable
-
+from collections.abc import Iterable, MutableSequence
 from typing import Dict, Optional, TypeVar
 
 T = TypeVar("T")

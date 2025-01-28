@@ -26,4 +26,3 @@ The ``kernels`` module is flexible and can be adapted by users to support any ki
 be optimised for, and *X* is some covariate used to fit the data. If we assume the data were daily observations,
 then we find all the values we expected: *-1* was the value on the first day, *0.05* was the daily increment
 (*2 / 365 = 0.05*), and there was a noise with std deviation *0.001*.
-

@@ -34,6 +34,7 @@ class Parametrized(object):
     """
     Base class for parametrized objects.
     """
+
     params_names: Tuple[str]
 
     def __init__(self, *params: Union[Parametrized, Any]):

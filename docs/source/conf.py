@@ -42,6 +42,6 @@ html_context = {
     "github_repo": "pykelihood",
 }
 html_sidebars = {
-   '**': ['globaltoc.html', 'sourcelink.html'],
-   'using/windows': ['windows-sidebar.html'],
+    "**": ["globaltoc.html", "sourcelink.html"],
+    "using/windows": ["windows-sidebar.html"],
 }

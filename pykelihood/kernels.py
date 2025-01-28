@@ -231,7 +231,7 @@ def polynomial(X, a, b, c):
     array-like
         Output of the polynomial kernel.
     """
-    return a + b * X + c * X ** 2
+    return a + b * X + c * X**2
 
 
 @kernel(a=0.0, b=0.0)
@@ -620,9 +620,11 @@ def categories_qualitative(x: Collection, fixed_values: dict = None) -> Kernel:
     fixed_values = {str(k): v for k, v in (fixed_values or {}).items()}
     parameter = (Parameter() for _ in count())  # generate parameters on demand
     params = {
-        value: next(parameter)
-        if value not in fixed_values
-        else ensure_parametrized(fixed_values[value], constant=True)
+        value: (
+            next(parameter)
+            if value not in fixed_values
+            else ensure_parametrized(fixed_values[value], constant=True)
+        )
         for value in unique_values
     }
 

@@ -59,6 +59,7 @@ class Distribution(Parametrized):
     fit_instance(data, score=opposite_log_likelihood, x0: Sequence[float] = None, scipy_args: Optional[Dict] = None, **fixed_values)
         Fit the instance to the data.
     """
+
     def __hash__(self):
         return (self.__class__.__name__,) + self.params
 
@@ -244,6 +245,7 @@ class AvoidAbstractMixin(object):
     __getattribute__(item)
         Get the attribute, avoiding abstract methods.
     """
+
     def __getattribute__(self, item):
         x = object.__getattribute__(self, item)
         if (
@@ -268,6 +270,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
     __getattr__(item)
         Get the attribute, wrapping scipy functions.
     """
+
     base_module: Any
 
     def rvs(self, size=None, random_state=None, **kwargs):
@@ -319,6 +322,7 @@ class Uniform(ScipyDistribution):
     scale : float, optional
         Scale parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale")
     base_module = uniform
 
@@ -355,6 +359,7 @@ class Exponential(ScipyDistribution):
     rate : float, optional
         Rate parameter, by default 1.0.
     """
+
     params_names = ("loc", "rate")
     base_module = expon
 
@@ -395,6 +400,7 @@ class Gamma(ScipyDistribution):
     shape : float, optional
         Shape parameter, by default 0.0.
     """
+
     params_names = ("loc", "scale", "shape")
     base_module = gamma
 
@@ -439,6 +445,7 @@ class Pareto(ScipyDistribution):
     alpha : float, optional
         Shape parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale", "alpha")
     base_module = pareto
 
@@ -485,6 +492,7 @@ class Beta(ScipyDistribution):
     beta : float, optional
         Beta parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale", "alpha", "beta")
     base_module = beta
 
@@ -530,6 +538,7 @@ class Normal(ScipyDistribution):
     scale : float, optional
         Scale parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale")
     base_module = norm
 
@@ -566,6 +575,7 @@ class LogNormal(ScipyDistribution):
     scale : float, optional
         Scale parameter, by default 1.0.
     """
+
     params_names = ("loc", "scale")
     base_module = lognorm
 
@@ -610,6 +620,7 @@ class GEV(ScipyDistribution):
     have parameters `c`, `loc`, `scale` but `loc`, `scale` and `shape` where shape
     is `-c`.
     """
+
     params_names = ("loc", "scale", "shape")
     base_module = genextreme
 
@@ -702,6 +713,7 @@ class GPD(ScipyDistribution):
     shape : float, optional
         Shape parameter, by default 0.0.
     """
+
     params_names = ("loc", "scale", "shape")
     base_module = genpareto
 
@@ -751,6 +763,7 @@ class TruncatedDistribution(Distribution):
     ValueError
         If the lower and upper bounds are equal.
     """
+
     params_names = ("distribution",)
 
     def __init__(
