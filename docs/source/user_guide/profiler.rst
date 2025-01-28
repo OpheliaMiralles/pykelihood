@@ -34,7 +34,7 @@ of the parameter space. It can be provided with a ``precision`` argument, defaul
 For example, if the parameter of interest is the location of the GEV distribution, the profile likelihood-based associated
 confidence interval is computed using the following syntax:
 
->>> profiler.confidence_interval_bs("loc", precision=1e-3)
+>>> profiler.confidence_interval("loc", precision=1e-3)
 
 from which the output would be an array containing the lower and upper bound for the corresponding confidence interval (using the level defined as a parameter of the ``Profiler`` object).
 

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import typing
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable
 
 import numpy as np
-from scipy.special import binom
 
 from pykelihood.generic_types import Obs
 

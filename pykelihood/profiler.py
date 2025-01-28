@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import warnings
+from functools import cached_property
 from itertools import count
 from typing import Callable, Tuple
 
@@ -12,11 +13,6 @@ from scipy.stats import chi2
 
 from pykelihood.distributions import Distribution
 from pykelihood.metrics import opposite_log_likelihood
-
-try:
-    from functools import cached_property
-except ImportError:
-    from cached_property import cached_property
 
 warnings.filterwarnings("ignore")
 

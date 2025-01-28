@@ -1,4 +1,5 @@
 import re
+from functools import wraps
 from itertools import count
 from typing import Collection, Sequence, Union
 
@@ -160,6 +161,7 @@ def kernel(**param_defaults):
     """
 
     def wrapper(f):
+        @wraps(f)
         def wrapped(x, **param_values) -> Kernel:
             final_params = {}
             for p_name, default_value in param_defaults.items():
@@ -235,7 +237,7 @@ def polynomial(X, a, b, c):
 
 
 @kernel(a=0.0, b=0.0)
-def expo(X, a, b):
+def exponential(X, a, b):
     """
     Exponential kernel function.
 
@@ -263,8 +265,8 @@ def expo(X, a, b):
 
 
 @kernel(a=0.0, b=1.0, c=1.0)
-def expo_ratio(X, a, b, c):
-    """
+def exponential_ratio(X, a, b, c):
+    r"""
     Exponential ratio kernel function.
 
     .. math::
@@ -294,7 +296,7 @@ def expo_ratio(X, a, b, c):
 
 @kernel(mu=0.0, sigma=1.0, scaling=0.0)
 def gaussian(X, mu, sigma, scaling):
-    """
+    r"""
     Gaussian kernel function.
 
     .. math::
@@ -353,7 +355,7 @@ def trigonometric(X, a, b, c):
 
 @kernel(mu=0.0, alpha=0.0, theta=1.0)
 def hawkes_with_exp_kernel(X, mu, alpha, theta):
-    """
+    r"""
     Hawkes process with exponential kernel.
 
     .. math::
@@ -381,7 +383,37 @@ def hawkes_with_exp_kernel(X, mu, alpha, theta):
     )
 
 
-def hawkes2(t, tau, mu, alpha, theta):
+def hawkes_exp_with_event_times(t, tau, mu, alpha, theta):
+    r"""
+    Computes the Hawkes process exponential kernel with given event times.
+
+    Parameters
+    ----------
+    t : float
+        The current time at which the kernel is evaluated.
+    tau : np.ndarray
+        An array of event times.
+    mu : float
+        The base intensity of the Hawkes process.
+    alpha : float
+        The self-excitation parameter, which controls the contribution of past events to the intensity.
+    theta : float
+        The decay rate of the exponential kernel.
+
+    Returns
+    -------
+    float
+        The intensity value of the Hawkes process at time `t`.
+
+    Notes
+    -----
+    The intensity function is defined as:
+
+    .. math::
+        \lambda(t) = \mu + \alpha \theta \sum_{\tau_i < t} \exp(-\theta (t - \tau_i))
+
+    where `tau` is the sequence of event times up to `t`.
+    """
     return mu + alpha * theta * np.sum(
         (np.exp(-theta * (t - tau[i]))) for i in range(len(tau)) if tau[i] < t
     )
@@ -395,7 +427,7 @@ Sophisticated kernels with multiple covariates
 def linear_regression(
     x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
 ) -> Kernel:
-    """
+    r"""
     Linear regression of the columns in the data.
 
     .. math::
@@ -419,7 +451,7 @@ def linear_regression(
     Returns
     -------
     float
-        The exponential of the linear sum computed from the input data.
+        The linear sum computed from the input data.
     """
     if len(x.shape) > 1:
         ndim = x.shape[1]
@@ -456,12 +488,12 @@ def linear_regression(
 def exponential_linear_regression(
     x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
 ) -> Kernel:
-    """
+    r"""
     Exponential of a linear sum of the columns in the data.
 
     .. math::
 
-        y = \exp(\beta_0 + \sum_{i=1}^{n} \beta_i x_i)
+        y = \exp\left(\beta_0 + \sum_{i=1}^{n} \beta_i x_i\right)
 
     Parameters
     ----------
@@ -520,7 +552,7 @@ def polynomial_regression(
     degree: Union[int, Sequence] = 2,
     **constraints,
 ) -> Kernel:
-    """
+    r"""
     Polynomial regression in the columns of the data.
 
     .. math::
