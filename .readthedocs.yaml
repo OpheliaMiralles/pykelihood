@@ -1,8 +1,4 @@
 version: 2
 
 sphinx:
-  configuration: docs/conf.py  
-
-python:
-  install:
-    - requirements: requirements.txt
+  configuration: docs/conf.py
