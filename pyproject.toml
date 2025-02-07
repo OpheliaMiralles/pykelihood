@@ -24,6 +24,7 @@ sphinx = "5.0"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
 pre-commit = "^2.10.0"
+tox = "^3.27.0"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = "5.0"
