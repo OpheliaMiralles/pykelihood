@@ -46,65 +46,44 @@ For detailed documentation, please visit the `official documentation <https://py
 Installation
 ------------
 
-Using pip
+From PyPI
 ------------------
 
 .. code-block:: console
 
     pip install pykelihood
 
-
-From sources
-------------
-
-.. code-block:: console
-
-    git clone https://www.github.com/OpheliaMiralles/pykelihood
-
-or
-
-.. code-block:: console
-
-    gh repo clone OpheliaMiralles/pykelihood
-
-
 ------------
 Contributing
 ------------
 
-`Poetry <http://python-poetry.org>`_ is used to manage ``pykelihood``'s dependencies and build system. To install
-Poetry, you can refer to the `installation instructions <https://python-poetry.org/docs/#installation>`_, but it boils
-down to running:
-
-.. code::
-
-    curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
-
-
+`UV <https://docs.astral.sh/uv/>`_ is used to manage ``pykelihood``'s dependencies and build system. To install
+UV, you can refer to the `installation instructions <https://docs.astral.sh/uv/getting-started/installation/>`_.
 
 To configure your environment to work on pykelihood, run:
 
 .. code-block::
 
-    git clone https://www.github.com/OpheliaMiralles/pykelihood  # or any other clone method
+    git clone https://www.github.com/OpheliaMiralles/pykelihood
     cd pykelihood
-    poetry install
+    uv sync
 
-This will create a virtual environment for the project and install the required dependencies. To activate the virtual
-environment, be sure to run :code:`poetry shell` prior to executing any code.
+This will create a virtual environment for the project and install the required dependencies.
 
-We also use the `pre-commit <https://pre-commit.com>`_ library which adds git hooks to the repository. These must be installed with:
+We also use the `pre-commit <https://pre-commit.com>`_ tool which manages git hooks for the repository. It can be installed
+with:
 
-.. code::
+.. code-block::
+
+   uv sync --group tools
+
+Then, to install the hooks, run:
+
+.. code-block::
 
    pre-commit install
-
-Some parts of the code base use the `matplotlib <https://matplotlib.org/>`_ and
-`hawkeslib <https://hawkeslib.readthedocs.io/en/latest/index.html>`_ package, but are for now not required to run most
-of the code, including the tests.
 
 Tests
 -----
 
-Tests are run using `pytest <https://docs.pytest.org/en/stable/>`_. To run all tests, navigate to the root folder or the
-``tests`` folder and type :code:`pytest`.
+Tests are run using `pytest <https://docs.pytest.org/en/stable/>`_. To run all tests, navigate to the root folder and type :code:`pytest`.
