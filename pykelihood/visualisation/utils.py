@@ -40,7 +40,10 @@ def get_quantiles_and_confidence_intervals_uniform_scale(
     min_max = []
     levels = np.linspace(0.01, 0.99, 100)
     for level in levels:
-        metric = lambda x: pd.Series(x.cdf(data)).quantile(level)
+
+        def metric(x):
+            return pd.Series(x.cdf(data)).quantile(level)
+
         CI = ll.confidence_interval(metric)
         min_max.append(CI)
     min_max = pd.DataFrame(
@@ -79,7 +82,10 @@ def get_quantiles_and_confidence_intervals(
     empirical = pd.Series(data).quantile(levels)
     theoretical = ll.optimum[0].inverse_cdf(levels)
     for level in levels:
-        metric = lambda x: x.inverse_cdf(level)
+
+        def metric(x):
+            return x.inverse_cdf(level)
+
         CI = ll.confidence_interval(metric)
         min_max.append(CI)
     min_max = pd.DataFrame(
@@ -127,7 +133,7 @@ def pp_plot(
     ) = get_quantiles_and_confidence_intervals_uniform_scale(fit, data, ci_confidence)
     n = len(data)
     ax.scatter(theoretical, empirical, s=5, color="navy")
-    ax.plot(theoretical, theoretical, label=f"$x=y$", color="navy")
+    ax.plot(theoretical, theoretical, label="$x=y$", color="navy")
     ax.fill_between(theoretical, lower_bound, upper_bound, alpha=0.2, color="navy")
     ax.legend()
     ax.set_xlabel(f"Theoretical quantiles ({n} observations)")
@@ -178,7 +184,7 @@ def qq_plot(
     ) = get_quantiles_and_confidence_intervals(fit, data, ci_confidence)
     n = len(data)
     ax.scatter(theoretical, empirical, s=5, color="navy")
-    ax.plot(theoretical, theoretical, label=f"$x=y$", color="navy")
+    ax.plot(theoretical, theoretical, label="$x=y$", color="navy")
     ax.fill_betweenx(
         y=empirical, x1=lower_bound, x2=upper_bound, alpha=0.2, color="navy"
     )
@@ -236,7 +242,7 @@ def qq_plot_exponential_scale(
     ub_exp = unit_exp.inverse_cdf(upper_bound)
     n = len(data)
     ax.scatter(theo_exp, empi_exp, s=5, color="navy")
-    ax.plot(theo_exp, theo_exp, label=f"$x=y$", color="navy")
+    ax.plot(theo_exp, theo_exp, label="$x=y$", color="navy")
     ax.fill_betweenx(y=empi_exp, x1=lb_exp, x2=ub_exp, alpha=0.2, color="navy")
     ax.legend()
     ax.set_xlabel(f"Theoretical unit Exponential quantiles ({n} observations)")
@@ -292,7 +298,7 @@ def qq_plot_frechet_scale(
     ub_fr = unit_frechet.inverse_cdf(upper_bound)
     n = len(data)
     ax.scatter(theo_fr, empi_fr, s=5, color="navy")
-    ax.plot(theo_fr, theo_fr, label=f"$x=y$", color="navy")
+    ax.plot(theo_fr, theo_fr, label="$x=y$", color="navy")
     ax.fill_betweenx(y=empi_fr, x1=lb_fr, x2=ub_fr, alpha=0.2, color="navy")
     ax.legend()
     ax.set_xlabel(r"Theoretical unit Fr\'echet quantiles ({} observations)".format(n))
