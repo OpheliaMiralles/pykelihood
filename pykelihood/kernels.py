@@ -585,9 +585,9 @@ def polynomial_regression(
         assert degree > 0, "This model considers positive power laws only."
         degree = [degree] * ndim
     else:
-        assert (
-            len(degree) == ndim
-        ), "The number of degrees is different than the number of covariates."
+        assert len(degree) == ndim, (
+            "The number of degrees is different than the number of covariates."
+        )
     ncols = sum(degree)
     fixed = {}
     for p_name, p_value in constraints.items():
