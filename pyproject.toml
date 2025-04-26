@@ -31,9 +31,8 @@ test = [
     "pytest-xdist"
 ]
 tools = [
-    "black",
-    "isort",
-    "pre-commit"
+    "pre-commit",
+    "ruff",
 ]
 docs = [
     "sphinx==5.0",
@@ -48,6 +47,3 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.isort]
-profile = "black"
