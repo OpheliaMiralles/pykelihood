@@ -1,37 +1,53 @@
-[tool.poetry]
+[project]
 name = "pykelihood"
 version = "0.4.1"
 description = "Intuitive syntax for complex statistical model fitting and parameter sensitivity analysis."
-authors = ["Ophélia Miralles <ophelia.miralles@epfl.ch>"]
-license = "MIT"
+authors = [{ name = "Ophélia Miralles", email = "ophelia.miralles@epfl.ch" }]
+requires-python = ">=3.9"
 readme = "README.rst"
-repository = "https://github.com/OpheliaMiralles/pykelihood"
+license = "MIT"
 classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
     "Development Status :: 3 - Alpha",
 ]
+dependencies = [
+    "numpy>=1.20",
+    "scipy>=1.12",
+    "pandas>=2.2"
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-numpy = "<2"
-scipy = "1.12"
-pandas = "2.2"
-cached-property = {version = ">=1.5.2", python = "<3.8"}
-pyyaml = "6.0"
-sphinx = "5.0"
+[project.optional-dependencies]
+plots = [
+    "matplotlib>=3.7",
+]
 
-[tool.poetry.dev-dependencies]
-pytest = "^6.2.2"
-pre-commit = "^2.10.0"
+[project.urls]
+Repository = "https://github.com/OpheliaMiralles/pykelihood"
 
-[tool.poetry.group.docs.dependencies]
-sphinx = "5.0"
-pydata-sphinx-theme = "0.13.3"
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-xdist"
+]
+tools = [
+    "black",
+    "isort",
+    "pre-commit"
+]
+docs = [
+    "sphinx==5.0",
+    "pydata-sphinx-theme==0.13.3"
+]
+dev = [
+    "pykelihood[plots]",
+    { include-group = "test" },
+    { include-group = "docs" }
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.isort]
 profile = "black"
