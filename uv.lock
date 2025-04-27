@@ -992,6 +992,18 @@ wheels = [
 ]
 
 [[package]]
+name = "optype"
+version = "0.9.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version >= '3.10' and python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/88/3c/9d59b0167458b839273ad0c4fc5f62f787058d8f5aed7f71294963a99471/optype-0.9.3.tar.gz", hash = "sha256:5f09d74127d316053b26971ce441a4df01f3a01943601d3712dd6f34cdfbaf48", size = 96143, upload_time = "2025-03-31T17:00:08.392Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/73/d8/ac50e2982bdc2d3595dc2bfe3c7e5a0574b5e407ad82d70b5f3707009671/optype-0.9.3-py3-none-any.whl", hash = "sha256:2935c033265938d66cc4198b0aca865572e635094e60e6e79522852f029d9e8d", size = 84357, upload_time = "2025-03-31T17:00:06.464Z" },
+]
+
+[[package]]
 name = "packaging"
 version = "25.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1226,10 +1238,13 @@ plots = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pre-commit" },
     { name = "pydata-sphinx-theme" },
     { name = "pykelihood", extra = ["plots"] },
     { name = "pytest" },
     { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "scipy-stubs", marker = "python_full_version >= '3.10'" },
     { name = "sphinx" },
 ]
 docs = [
@@ -1243,6 +1258,9 @@ test = [
 tools = [
     { name = "pre-commit" },
     { name = "ruff" },
+]
+types = [
+    { name = "scipy-stubs", marker = "python_full_version >= '3.10'" },
 ]
 
 [package.metadata]
@@ -1256,10 +1274,13 @@ provides-extras = ["plots"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pre-commit" },
     { name = "pydata-sphinx-theme", specifier = "==0.13.3" },
     { name = "pykelihood", extras = ["plots"] },
     { name = "pytest" },
     { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "scipy-stubs", marker = "python_full_version >= '3.10'" },
     { name = "sphinx", specifier = "==5.0" },
 ]
 docs = [
@@ -1274,6 +1295,7 @@ tools = [
     { name = "pre-commit" },
     { name = "ruff" },
 ]
+types = [{ name = "scipy-stubs", marker = "python_full_version >= '3.10'" }]
 
 [[package]]
 name = "pyparsing"
@@ -1525,6 +1547,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/03/f3/e699e19cabe96bbac5189c04aaa970718f0105cff03d458dc5e2b6bd1e8c/scipy-1.15.2-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:bae43364d600fdc3ac327db99659dcb79e6e7ecd279a75fe1266669d9a652828", size = 36545159, upload_time = "2025-02-17T00:34:26.724Z" },
     { url = "https://files.pythonhosted.org/packages/af/f5/ab3838e56fe5cc22383d6fcf2336e48c8fe33e944b9037fbf6cbdf5a11f8/scipy-1.15.2-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:f031846580d9acccd0044efd1a90e6f4df3a6e12b4b6bd694a7bc03a89892b28", size = 39136566, upload_time = "2025-02-17T00:34:34.512Z" },
     { url = "https://files.pythonhosted.org/packages/0a/c8/b3f566db71461cabd4b2d5b39bcc24a7e1c119535c8361f81426be39bb47/scipy-1.15.2-cp313-cp313t-win_amd64.whl", hash = "sha256:fe8a9eb875d430d81755472c5ba75e84acc980e4a8f6204d402849234d3017db", size = 40477705, upload_time = "2025-02-17T00:34:43.619Z" },
+]
+
+[[package]]
+name = "scipy-stubs"
+version = "1.15.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "optype", marker = "python_full_version >= '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/61/ee/0c3e93545b53d3b22e662fbe251c3e61c2b14742f296f36708eff4a2898c/scipy_stubs-1.15.2.2.tar.gz", hash = "sha256:0137d907d75381d2eda4f6af5b1d3211759cb193a0eadf5195716fb0b01ca3cb", size = 275755, upload_time = "2025-04-07T20:59:18.482Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2b/1a/3eba813584e398d589e1d4e0dac0cf822ce9e25b28cb2d1f0012d137c968/scipy_stubs-1.15.2.2-py3-none-any.whl", hash = "sha256:f02fe66124b58bce5f0897ecd48d0e79226a999cc4e6984a9472520c20b8e4b6", size = 459133, upload_time = "2025-04-07T20:59:16.664Z" },
 ]
 
 [[package]]

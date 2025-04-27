@@ -30,6 +30,7 @@ test = [
     "pytest",
     "pytest-xdist"
 ]
+types = ["scipy-stubs; python_version >= '3.10'"]
 tools = [
     "pre-commit",
     "ruff",
@@ -41,6 +42,8 @@ docs = [
 dev = [
     "pykelihood[plots]",
     { include-group = "test" },
+    { include-group = "types" },
+    { include-group = "tools" },
     { include-group = "docs" }
 ]
 
