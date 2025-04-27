@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import typing
-from typing import Callable, Iterable
+from collections.abc import Iterable
+from typing import Callable
 
 import numpy as np
 
@@ -141,7 +142,7 @@ def BIC(distribution: Distribution, data: Obs):
 
 
 def crps(distribution: Distribution, data: Obs):
-    """
+    r"""
     Continuous Rank Probability Score (CRPS).
 
     Parameters

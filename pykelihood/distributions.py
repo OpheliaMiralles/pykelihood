@@ -1,6 +1,7 @@
 from abc import abstractmethod
+from collections.abc import Sequence
 from functools import partial
-from typing import Any, Callable, Dict, Optional, Sequence, Type, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 import numpy as np
 import scipy.special
@@ -110,11 +111,11 @@ class Distribution(Parametrized):
 
     @classmethod
     def fit(
-        cls: Type[SomeDistribution],
+        cls: type[SomeDistribution],
         data: Obs,
         x0: Sequence[float] = None,
         score: Callable[["Distribution", Obs], float] = opposite_log_likelihood,
-        scipy_args: Optional[Dict] = None,
+        scipy_args: Optional[dict] = None,
         **fixed_values,
     ) -> SomeDistribution:
         """
@@ -208,7 +209,7 @@ class Distribution(Parametrized):
         data,
         score=opposite_log_likelihood,
         x0: Sequence[float] = None,
-        scipy_args: Optional[Dict] = None,
+        scipy_args: Optional[dict] = None,
         **fixed_values,
     ):
         """
@@ -236,7 +237,7 @@ class Distribution(Parametrized):
         return self.fit(data, score=score, x0=x0, scipy_args=scipy_args, **param_dict)
 
 
-class AvoidAbstractMixin(object):
+class AvoidAbstractMixin:
     """
     Mixin to avoid abstract methods.
 
@@ -304,7 +305,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
             "sf",
             "logsf",
         ):
-            return super(ScipyDistribution, self).__getattr__(item)
+            return super().__getattr__(item)
         f = getattr(self.base_module, item)
         g = partial(self._wrapper, f)
         self.__dict__[item] = g
@@ -327,7 +328,7 @@ class Uniform(ScipyDistribution):
     base_module = uniform
 
     def __init__(self, loc=0.0, scale=1.0):
-        super(Uniform, self).__init__(loc, scale)
+        super().__init__(loc, scale)
 
     def _to_scipy_args(self, loc=None, scale=None):
         """
@@ -364,7 +365,7 @@ class Exponential(ScipyDistribution):
     base_module = expon
 
     def __init__(self, loc=0.0, rate=1.0):
-        super(Exponential, self).__init__(loc, rate)
+        super().__init__(loc, rate)
 
     def _to_scipy_args(self, loc=None, rate=None):
         """
@@ -405,7 +406,7 @@ class Gamma(ScipyDistribution):
     base_module = gamma
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
-        super(Gamma, self).__init__(loc, scale, shape)
+        super().__init__(loc, scale, shape)
 
     def _to_scipy_args(self, loc=None, scale=None, shape=None):
         """
@@ -450,7 +451,7 @@ class Pareto(ScipyDistribution):
     base_module = pareto
 
     def __init__(self, loc=0.0, scale=1.0, alpha=1.0):
-        super(Pareto, self).__init__(loc, scale, alpha)
+        super().__init__(loc, scale, alpha)
 
     def _to_scipy_args(self, loc=None, scale=None, alpha=None):
         """
@@ -497,7 +498,7 @@ class Beta(ScipyDistribution):
     base_module = beta
 
     def __init__(self, loc=0.0, scale=1.0, alpha=2.0, beta=1.0):
-        super(Beta, self).__init__(loc, scale, alpha, beta)
+        super().__init__(loc, scale, alpha, beta)
 
     def _to_scipy_args(self, loc=None, scale=None, alpha=None, beta=None):
         """
@@ -543,7 +544,7 @@ class Normal(ScipyDistribution):
     base_module = norm
 
     def __init__(self, loc=0.0, scale=1.0):
-        super(Normal, self).__init__(loc, scale)
+        super().__init__(loc, scale)
 
     def _to_scipy_args(self, loc=None, scale=None):
         """
@@ -580,7 +581,7 @@ class LogNormal(ScipyDistribution):
     base_module = lognorm
 
     def __init__(self, loc=0.0, scale=1.0):
-        super(LogNormal, self).__init__(loc, scale)
+        super().__init__(loc, scale)
 
     def _to_scipy_args(self, loc=None, scale=None):
         """
@@ -625,7 +626,7 @@ class GEV(ScipyDistribution):
     base_module = genextreme
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
-        super(GEV, self).__init__(loc, scale, shape)
+        super().__init__(loc, scale, shape)
 
     def lb_shape(self, data):
         """
@@ -718,7 +719,7 @@ class GPD(ScipyDistribution):
     base_module = genpareto
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
-        super(GPD, self).__init__(loc, scale, shape)
+        super().__init__(loc, scale, shape)
 
     def _to_scipy_args(self, loc=None, scale=None, shape=None):
         """
@@ -771,7 +772,7 @@ class TruncatedDistribution(Distribution):
     ):
         if upper_bound == lower_bound:
             raise ValueError("Both bounds are equal.")
-        super(TruncatedDistribution, self).__init__(distribution)
+        super().__init__(distribution)
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         lower_cdf = self.distribution.cdf(self.lower_bound)

@@ -4,7 +4,7 @@ import math
 import warnings
 from functools import cached_property
 from itertools import count
-from typing import Callable, Tuple
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ from pykelihood.metrics import opposite_log_likelihood
 warnings.filterwarnings("ignore")
 
 
-class Profiler(object):
+class Profiler:
     def __init__(
         self,
         distribution: Distribution,
@@ -139,19 +139,16 @@ class Profiler(object):
         profile_ll = []
         params = []
         for x in range_for_param:
-            try:
-                pl = opt.fit_instance(
-                    self.data,
-                    score=self.score_function,
-                    **{param: x},
-                )
-                pl_value = -self.score_function(pl, self.data)
-                pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
-                if np.isfinite(pl_value):
-                    profile_ll.append(pl_value)
-                    params.append([p.value for p in pl.flattened_params])
-            except:
-                pass
+            pl = opt.fit_instance(
+                self.data,
+                score=self.score_function,
+                **{param: x},
+            )
+            pl_value = -self.score_function(pl, self.data)
+            pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
+            if np.isfinite(pl_value):
+                profile_ll.append(pl_value)
+                params.append([p.value for p in pl.flattened_params])
         chi2_par = {"df": 1}
         lower_bound = func - chi2.ppf(self.inference_confidence, **chi2_par) / 2
         filtered_params = pd.DataFrame(
@@ -161,7 +158,7 @@ class Profiler(object):
         filtered_params = filtered_params.rename(columns=dict(zip(count(), cols)))
         return filtered_params
 
-    def confidence_interval(self, param: str, precision=1e-5) -> Tuple[float, float]:
+    def confidence_interval(self, param: str, precision=1e-5) -> tuple[float, float]:
         """
         Compute the confidence interval for a given parameter.
 

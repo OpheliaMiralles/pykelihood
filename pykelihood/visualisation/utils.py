@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-matplotlib.rcParams["text.usetex"] = True
-
 from pykelihood.distributions import GEV, Distribution, Exponential, Uniform
 from pykelihood.profiler import Profiler
+
+matplotlib.rcParams["text.usetex"] = True
 
 warnings.filterwarnings("ignore")
 
@@ -301,7 +301,7 @@ def qq_plot_frechet_scale(
     ax.plot(theo_fr, theo_fr, label="$x=y$", color="navy")
     ax.fill_betweenx(y=empi_fr, x1=lb_fr, x2=ub_fr, alpha=0.2, color="navy")
     ax.legend()
-    ax.set_xlabel(r"Theoretical unit Fr\'echet quantiles ({} observations)".format(n))
+    ax.set_xlabel(rf"Theoretical unit Fr\'echet quantiles ({n} observations)")
     ax.set_ylabel("Empirical quantiles")
     ax.set_title(r"QQ Plot: Unit Fr\'echet Scale")
     plt.tight_layout()
