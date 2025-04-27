@@ -113,8 +113,8 @@ class Profiler(object):
             params = [n[0] for (v, n) in opt.param_mapping()]
         for name, k in opt.optimisation_param_dict.items():
             if name in params:
-                r = float(k)
-                b = 2 * 10 ** (math.floor(math.log10(np.abs(r))) - 1)
+                r = k.value
+                b = 2 * 10 ** (np.floor(np.log10(np.abs(r))) - 1)
                 range = np.linspace(r - b, r + b, 40)
                 profiles[name] = self.test_profile_likelihood(range, name)
         return profiles

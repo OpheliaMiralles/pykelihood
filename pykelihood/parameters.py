@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections import ChainMap
 from typing import Any, Callable, Dict, Iterable, Tuple, TypeVar, Union
 
+import numpy as np
+import numpy.typing as npt
+
 from pykelihood.utils import flatten_dict
 
 _T = TypeVar("_T")
@@ -310,16 +313,16 @@ class Parameter(Parametrized):
     Class for a single parameter.
     """
 
-    def __init__(self, value=0.0):
+    def __init__(self, value: npt.ArrayLike) -> None:
         """
         Initialize the `Parameter` object.
 
         Parameters
         ----------
-        value : float, optional
-            Initial value of the parameter, by default 0.0.
+        value : float or ndarray
+            Initial value of the parameter
         """
-        self._value = value
+        self._value = np.asarray(value, dtype=np.float64)
 
     @property
     def params(self):
@@ -387,13 +390,13 @@ class Parameter(Parametrized):
         return type(self)(param)
 
     @property
-    def value(self):
+    def value(self) -> npt.NDArray[np.float64]:
         """
         Get the value of the parameter.
 
         Returns
         -------
-        float
+        ndarray
             The value.
         """
         return self._value
@@ -435,17 +438,6 @@ class Parameter(Parametrized):
             Always raised.
         """
         raise AttributeError
-
-    def __float__(self):
-        """
-        Convert the parameter to a float.
-
-        Returns
-        -------
-        float
-            The value.
-        """
-        return float(self.value)
 
 
 class ConstantParameter(Parameter):
