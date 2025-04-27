@@ -77,7 +77,7 @@ def test_profiles(profiler):
         # if the likelihood is very concave in one of the parameter, moving slightly away from the MLE can engender a too big deviation from the optimal likelihood value
         if len(profiles[key]):
             # the max likelihood estimate should provide the biggest likelihood for the same set of data and the same assumed distribution structure
-            assert pd.Series((profiles[key]["score"] <= profiler_opt)).all()
+            assert pd.Series(profiles[key]["score"] <= profiler_opt).all()
             # a profile is a combination of the parameters of the distribution obtained by fixing one parameter (the one that is being profiled) and
             # fitting the MLE for the sample data and the likelihood value: it should provide a complete view of the fit and therefore contains all
             # of the parameters, even the ones that do not intervene in the optimisation at all
@@ -117,7 +117,7 @@ def test_profiles_with_fixed_param(profiler_with_fixed_param):
     assert len(profiles) == len(mle.optimisation_params)
     for key in profiles:
         if len(profiles[key]):
-            assert pd.Series((profiles[key]["score"] <= profiler_opt)).all()
+            assert pd.Series(profiles[key]["score"] <= profiler_opt).all()
             assert len(profiles[key].columns) == len(mle.flattened_params) + 1
             assert (
                 profiles[key][key].min()

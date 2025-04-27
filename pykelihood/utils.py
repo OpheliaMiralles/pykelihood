@@ -1,5 +1,4 @@
-from collections.abc import Iterable, MutableSequence
-from typing import Dict, Optional, TypeVar
+from typing import Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -29,7 +28,7 @@ def to_tuple(x):
     return tuple(x)
 
 
-def flatten_dict(dict: Dict):
+def flatten_dict(d: dict):
     """
     Flatten a nested dictionary.
 
@@ -48,29 +47,11 @@ def flatten_dict(dict: Dict):
         The flattened dictionary.
     """
     res_dict = {}
-    for k, v in dict.items():
-        if not isinstance(v, Dict):
+    for k, v in d.items():
+        if not isinstance(v, dict):
             res_dict[to_tuple(k)] = v
         else:
             new_dict = flatten_dict(v)
             for k_, v_ in new_dict.items():
                 res_dict[to_tuple(k) + to_tuple(k_)] = v_
     return res_dict
-
-
-def hash_with_series(*args, **kwargs):
-    to_hash = []
-    try:
-        import pandas as pd
-    except ImportError:
-        pd = None
-    for v in args:
-        if pd is not None and isinstance(v, pd.Series):
-            v = tuple(v.values)
-        elif isinstance(v, MutableSequence) or isinstance(v, Iterable):
-            v = tuple(v)
-        to_hash.append(v)
-    for k, v in kwargs.items():
-        v = hash_with_series(v)
-        to_hash.append((k, v))
-    return hash(tuple(to_hash))

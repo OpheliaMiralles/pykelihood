@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from typing import Any, Callable, Dict, Iterable, Tuple, TypeVar, Union
+from collections.abc import Iterable
+from typing import Any, Callable, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -33,14 +34,14 @@ def ensure_parametrized(x: Any, constant=False) -> Parametrized:
     return cls(x)
 
 
-class Parametrized(object):
+class Parametrized:
     """
     Base class for parametrized objects.
     """
 
-    params_names: Tuple[str]
+    params_names: tuple[str]
 
-    def __init__(self, *params: Union[Parametrized, Any]):
+    def __init__(self, *params: Parametrized | Any):
         """
         Initialize the `Parametrized` object.
 
@@ -68,7 +69,7 @@ class Parametrized(object):
         return type(self)(**new_params)
 
     @property
-    def params(self) -> Tuple[Parametrized]:
+    def params(self) -> tuple[Parametrized]:
         """
         Get parameters in their parametrized format, e.g. how they were defined.
 
@@ -80,7 +81,7 @@ class Parametrized(object):
         return self._params
 
     @property
-    def param_dict(self) -> Dict[str, Parametrized]:
+    def param_dict(self) -> dict[str, Parametrized]:
         """
         Get a dictionary of parameter names and their values.
 
@@ -92,7 +93,7 @@ class Parametrized(object):
         return dict(zip(self.params_names, self.params))
 
     @property
-    def flattened_params(self) -> Tuple[Parametrized]:
+    def flattened_params(self) -> tuple[Parametrized]:
         """
         Get a horizontal view of all parameters in the final state of their
         respective tree of dependence.
@@ -105,7 +106,7 @@ class Parametrized(object):
         return tuple(p_ for p in self.params for p_ in p.params)
 
     @property
-    def flattened_param_dict(self) -> Dict[str, Parametrized]:
+    def flattened_param_dict(self) -> dict[str, Parametrized]:
         """
         Get a dictionary of flattened parameter names and their values.
 
@@ -145,7 +146,7 @@ class Parametrized(object):
         list
             The parameter mapping.
         """
-        results: "list[list[Parametrized, list[str]]]" = []
+        results: list[list[Parametrized, list[str]]] = []
         unique = []
         for q, param_name in zip(
             (p_ for p in self.flattened_params for p_ in p.params),
@@ -162,7 +163,7 @@ class Parametrized(object):
         return results
 
     @property
-    def optimisation_params(self) -> Tuple[Parametrized]:
+    def optimisation_params(self) -> tuple[Parametrized]:
         """
         Get all parameters used in the optimization.
 
@@ -178,7 +179,7 @@ class Parametrized(object):
         return unique
 
     @property
-    def optimisation_param_dict(self) -> Dict[str, Parametrized]:
+    def optimisation_param_dict(self) -> dict[str, Parametrized]:
         """
         Get a dictionary of optimization parameter names and their values.
 
@@ -493,7 +494,7 @@ class ParametrizedFunction(Parametrized):
         params : Parametrized
             Parameters for the function.
         """
-        super(ParametrizedFunction, self).__init__(*params.values())
+        super().__init__(*params.values())
         self.params_names = tuple(params.keys())
         self.f = f
         self.fname = fname or f.__qualname__
@@ -537,7 +538,7 @@ class ParametrizedFunction(Parametrized):
             If the parameter is not found.
         """
         try:
-            return super(ParametrizedFunction, self).__getattr__(param)
+            return super().__getattr__(param)
         except AttributeError:
             raise AttributeError(f"No parameter {param} in {self.fname}")
 

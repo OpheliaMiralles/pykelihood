@@ -1,7 +1,8 @@
 import re
+from collections.abc import Collection, Sequence
 from functools import wraps
 from itertools import count
-from typing import Collection, Sequence, Union
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -28,7 +29,7 @@ class Kernel(ParametrizedFunction):
     def __init__(self, f, x=None, fname=None, **params):
         """Function of one covariate with parameters."""
         fname = fname or f.__qualname__
-        super(Kernel, self).__init__(f, fname=fname, **params)
+        super().__init__(f, fname=fname, **params)
         self._validate(x)
         self.x = x
 
@@ -104,7 +105,7 @@ class constant(Kernel):
     """
 
     def __init__(self, value=0.0):
-        super(constant, self).__init__(self._call, fname="constant", value=value)
+        super().__init__(self._call, fname="constant", value=value)
 
     def _build_instance(self, value):
         return constant(value)
@@ -184,7 +185,7 @@ Simple kernels with one covariate
 
 @kernel(a=0.0, b=0.0)
 def linear(X, a, b):
-    """
+    r"""
     Linear kernel function.
 
     .. math::
@@ -210,7 +211,7 @@ def linear(X, a, b):
 
 @kernel(a=0.0, b=0.0, c=0.0)
 def polynomial(X, a, b, c):
-    """
+    r"""
     Polynomial kernel function.
 
     .. math::
@@ -238,7 +239,7 @@ def polynomial(X, a, b, c):
 
 @kernel(a=0.0, b=0.0)
 def exponential(X, a, b):
-    """
+    r"""
     Exponential kernel function.
 
     .. math::
@@ -327,7 +328,7 @@ def gaussian(X, mu, sigma, scaling):
 
 @kernel(a=0.0, b=0.0, c=0.0)
 def trigonometric(X, a, b, c):
-    """
+    r"""
     Trigonometric kernel function.
 
     .. math::
