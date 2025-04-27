@@ -9,13 +9,13 @@ def test_parameter():
 
 
 def test_parameter_with_params():
-    p = parameters.Parameter()
+    p = parameters.Parameter(1)
     assert p.with_params([5.0])() == 5.0
 
 
 def test_flattened_params():
-    p1 = parameters.Parameter()
-    p2 = parameters.ConstantParameter()
+    p1 = parameters.Parameter(1)
+    p2 = parameters.ConstantParameter(2)
     a = parameters.Parametrized(p1, 2)
     a.params_names = ("x", "m")
     repr(a)
@@ -28,8 +28,8 @@ def test_flattened_params():
 
 
 def test_flattened_params_with_embedded_constant():
-    p1 = parameters.Parameter()
-    p2 = parameters.ConstantParameter()
+    p1 = parameters.Parameter(1)
+    p2 = parameters.ConstantParameter(2)
     a = parameters.Parametrized(p1, p2)
     a.params_names = ("x", "m")
     b = parameters.Parametrized(a)
@@ -61,7 +61,7 @@ class TestParametrizedFunction:
         assert modf(2) == 4
 
     def test_attr_access(self, func):
-        p = parameters.Parameter()
+        p = parameters.Parameter(1)
         f = parameters.ParametrizedFunction(func, p=p)
         assert f.p is p
 
@@ -73,7 +73,7 @@ class TestParametrizedFunction:
     def test_func_name(self, func):
         p = parameters.Parameter(1.0)
         f = parameters.ParametrizedFunction(func, fname="myfunc", p=p)
-        assert repr(f) == "myfunc(p=1.0)"
+        assert repr(f) == "myfunc(p=array(1.))"
 
 
 class TestInnerParameters:

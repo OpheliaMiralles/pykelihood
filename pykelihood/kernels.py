@@ -474,7 +474,8 @@ def linear_regression(
 
     param_indices = range(0 if add_intercept else 1, ndim + 1)
     params = {
-        f"beta_{i}": Parameter() if i not in fixed else fixed[i] for i in param_indices
+        f"beta_{i}": Parameter(0.0) if i not in fixed else fixed[i]
+        for i in param_indices
     }
 
     def _compute(data, **params_from_wrapper):
@@ -535,11 +536,12 @@ def exponential_linear_regression(
 
     param_indices = range(0 if add_intercept else 1, ndim + 1)
     params = {
-        f"beta_{i}": Parameter() if i not in fixed else fixed[i] for i in param_indices
+        f"beta_{i}": Parameter(0.0) if i not in fixed else fixed[i]
+        for i in param_indices
     }
 
     def _compute(data, **params_from_wrapper):
-        sorted_params = [params_from_wrapper[k] for k in params]
+        sorted_params = np.stack([params_from_wrapper[k] for k in params])
         return np.exp((sorted_params * data).sum(axis=1))
 
     return Kernel(
@@ -605,7 +607,7 @@ def polynomial_regression(
     for col_idx, max_degree in enumerate(degree):
         for d in range(1, max_degree + 1):
             name = f"beta_{col_idx + 1}_{d}"
-            params[name] = fixed.get((col_idx + 1, d), Parameter())
+            params[name] = fixed.get((col_idx + 1, d), Parameter(0.0))
 
     def _compute(data, **params_from_wrapper):
         data = np.array(data)
@@ -650,7 +652,7 @@ def categories_qualitative(x: Collection, fixed_values: dict = None) -> Kernel:
     """
     unique_values = sorted(set(map(str, x)))
     fixed_values = {str(k): v for k, v in (fixed_values or {}).items()}
-    parameter = (Parameter() for _ in count())  # generate parameters on demand
+    parameter = (Parameter(0.0) for _ in count())  # generate parameters on demand
     params = {
         value: (
             next(parameter)
