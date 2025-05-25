@@ -8,13 +8,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  UV_LOCKED: true
+  UV_NO_MANAGED_PYTHON: true
+
 jobs:
   tests:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.9", "3.13"]
+        python: ["3.9", "3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - name: Setup python ${{ matrix.python }}
@@ -23,6 +27,6 @@ jobs:
           python-version: ${{ matrix.python }}
       - uses: astral-sh/setup-uv@v5
       - name: Install dependencies
-        run: uv sync --locked --all-extras --dev
+        run: uv sync --all-extras --dev
       - name: Run tests
         run: uv run pytest .
