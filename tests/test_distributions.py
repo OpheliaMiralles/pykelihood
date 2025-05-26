@@ -175,3 +175,22 @@ def test_fit_instance_fixing_shared_params_in_trends():
     fit_with_fixed_alpha = n.fit_instance(data=y, loc_b=fixed_alpha)
     assert isinstance(fit_with_fixed_alpha.scale.b, ConstantParameter)
     assert fit_with_fixed_alpha.scale.b.value == fixed_alpha.value
+
+
+def test_fitted_distribution():
+    n = Normal()
+    data = n.rvs(10000)
+    fitted = n.fit(data)
+    assert isinstance(fitted, Normal)
+    assert fitted.loc() == approx(0.0)
+    assert fitted.scale() == approx(1.0)
+
+
+def test_fitted_distribution_confidence_interval():
+    n = Normal()
+    data = n.rvs(10000)
+    fitted = n.fit(data)
+    ci = fitted.confidence_interval("loc")
+    assert len(ci) == 2
+    assert ci[0] < ci[1]
+    assert ci[0] <= fitted.loc() <= ci[1]
