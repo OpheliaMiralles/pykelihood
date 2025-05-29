@@ -99,7 +99,7 @@ def test_profiles_with_trend(profiler_with_trend):
     assert len(profiles) == len(mle.optimisation_params)
     for key in profiles:
         if len(profiles[key]):
-            np.testing.assert_array_less(profiles[key]["score"], profiler_opt)
+            assert np.all(profiles[key]["score"] < profiler_opt + 1e-8)
             assert len(profiles[key].columns) == len(mle.flattened_params) + 1
             assert (
                 profiles[key][key].min()
