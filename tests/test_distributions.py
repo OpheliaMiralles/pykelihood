@@ -181,9 +181,8 @@ def test_fitted_distribution():
     n = Normal()
     data = n.rvs(10000)
     fitted = n.fit(data)
-    assert isinstance(fitted, Normal)
-    assert fitted.loc() == approx(0.0)
-    assert fitted.scale() == approx(1.0)
+    assert fitted.loc.value == approx(0.0)
+    assert fitted.scale.value == approx(1.0)
 
 
 def test_fitted_distribution_confidence_interval():
@@ -193,4 +192,4 @@ def test_fitted_distribution_confidence_interval():
     ci = fitted.confidence_interval("loc")
     assert len(ci) == 2
     assert ci[0] < ci[1]
-    assert ci[0] <= fitted.loc() <= ci[1]
+    assert ci[0] <= fitted.loc.value <= ci[1]

@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 from abc import abstractmethod
 from collections.abc import Sequence
-from functools import partial
-from typing import Any, Callable, Optional, TypeVar
 from dataclasses import dataclass
+from functools import partial
+from typing import Any, Callable, Generic, TypeVar
 
 import numpy as np
 import scipy.special
-from scipy.optimize import minimize, OptimizeResult
+from scipy.optimize import OptimizeResult, minimize
 from scipy.stats import (
     beta,
     expon,
@@ -114,11 +116,11 @@ class Distribution(Parametrized):
     def fit(
         cls: type[SomeDistribution],
         data: Obs,
-        x0: Sequence[float] = None,
-        score: Callable[["Distribution", Obs], float] = opposite_log_likelihood,
-        scipy_args: Optional[dict] = None,
+        x0: Sequence[float] | None = None,
+        score: Callable[[Distribution, Obs], float] = opposite_log_likelihood,
+        scipy_args: dict | None = None,
         **fixed_values,
-    ) -> SomeDistribution:
+    ) -> FitResult[SomeDistribution]:
         """
         Fit the distribution to the data.
 
@@ -175,25 +177,7 @@ class Distribution(Parametrized):
         optimization_result = minimize(to_minimize, x0, **minimize_args)
         dist = init.with_params(optimization_result.x)
 
-        # Approach 1:
-        # Dynamically create a new class that inherits from the original class
-        # and the FittedDistributionMixin.
-        # This allows us to extend the returned distribution with additional
-        # functionality such as confidence intervals.
-        cls_name = "Fitted" + cls.__name__
-        res_cls = type(cls_name, (cls, FittedDistributionMixin), {})
-        res = res_cls(**dist.param_dict)
-        res.data = data
-        res.score_fn = score
-        res.optimization_result = optimization_result
-        return res
-        # Approach 2:
-        # Return a FitResult object that contains the fitted distribution,
-        # data, score function, initial parameters, and optimization results.
-        # The downside is that the returned object is not a distribution
-        # instance, but rather a container for the fit results, and thus
-        # can't be used directly as a distribution.
-        # return FitResult(dist, data, score, x0=x0, optimize_results=optimization_result)
+        return FitResult(dist, data, score, x0=x0, optimize_result=optimization_result)
 
     def _process_fit_params(self, **kwds):
         out_dict = self.param_dict.copy()
@@ -228,7 +212,7 @@ class Distribution(Parametrized):
         data,
         score=opposite_log_likelihood,
         x0: Sequence[float] = None,
-        scipy_args: Optional[dict] = None,
+        scipy_args: dict | None = None,
         **fixed_values,
     ):
         """
@@ -256,34 +240,11 @@ class Distribution(Parametrized):
         return self.fit(data, score=score, x0=x0, scipy_args=scipy_args, **param_dict)
 
 
-class FittedDistributionMixin(Distribution):
-    data: Obs
-    score_fn: Callable[[Distribution, Obs], float]
-    optimization_result: OptimizeResult
-
-    def confidence_interval(
-        self, param: str, alpha: float = 0.05, precision: float = 1e-5
-    ):
-        if param not in self.params_names:
-            raise ValueError(f"Parameter {param} not found in fitted distribution.")
-
-        from pykelihood.profiler import Profiler
-
-        profiler = Profiler(
-            self,
-            self.data,
-            self.score_fn,
-            single_profiling_param=param,
-            inference_confidence=alpha,
-        )
-        return profiler.confidence_interval(param, precision=precision)
-
-
 @dataclass
-class FitResult:
-    fitted: Distribution
+class FitResult(Generic[T]):
+    fitted: T
     data: Obs
-    score_fn: Callable[[Distribution, Obs], float]
+    score_fn: Callable[[T, Obs], float]
     x0: Sequence[float]
     optimize_result: OptimizeResult
 
@@ -318,6 +279,10 @@ class FitResult:
             inference_confidence=alpha,
         )
         return profiler.confidence_interval(param, precision=precision)
+
+    # TODO: implement explicit wrappers and use this only for dynamic attributes (e.g. param names)
+    def __getattr__(self, item: str):
+        return getattr(self.fitted, item)
 
 
 class AvoidAbstractMixin:

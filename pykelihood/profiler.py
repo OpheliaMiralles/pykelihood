@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import warnings
 from functools import cached_property
 from itertools import count
