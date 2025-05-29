@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar
 
 import numpy as np
 import scipy.special
@@ -25,6 +25,10 @@ from pykelihood.generic_types import Obs
 from pykelihood.metrics import opposite_log_likelihood
 from pykelihood.parameters import ConstantParameter, Parametrized, ensure_parametrized
 from pykelihood.utils import ifnone
+
+if TYPE_CHECKING:
+    from typing import Self
+
 
 T = TypeVar("T")
 SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
@@ -139,8 +143,7 @@ class Distribution(Parametrized):
 
         Returns
         -------
-        SomeDistribution
-            Fitted distribution.
+        The result of the fit
         """
         init_parms = {}
         for k in cls.params_names:
@@ -209,12 +212,12 @@ class Distribution(Parametrized):
 
     def fit_instance(
         self,
-        data,
+        data: Obs,
         score=opposite_log_likelihood,
-        x0: Sequence[float] = None,
+        x0: Sequence[float] | None = None,
         scipy_args: dict | None = None,
         **fixed_values,
-    ):
+    ) -> FitResult[Self]:
         """
         Fit the instance to the data.
 
@@ -250,7 +253,7 @@ class FitResult(Generic[T]):
 
     def confidence_interval(
         self, param: str, alpha: float = 0.05, precision: float = 1e-5
-    ):
+    ) -> tuple[float, float]:
         """
         Calculate the confidence interval for a parameter.
 
