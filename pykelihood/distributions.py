@@ -124,7 +124,7 @@ class Distribution(Parametrized):
         score: Callable[[Distribution, Obs], float] = opposite_log_likelihood,
         scipy_args: dict | None = None,
         **fixed_values,
-    ) -> FitResult[SomeDistribution]:
+    ) -> Fit[SomeDistribution]:
         """
         Fit the distribution to the data.
 
@@ -180,7 +180,7 @@ class Distribution(Parametrized):
         optimization_result = minimize(to_minimize, x0, **minimize_args)
         dist = init.with_params(optimization_result.x)
 
-        return FitResult(dist, data, score, x0=x0, optimize_result=optimization_result)
+        return Fit(dist, data, score, x0=x0, optimize_result=optimization_result)
 
     def _process_fit_params(self, **kwds):
         out_dict = self.param_dict.copy()
@@ -217,7 +217,7 @@ class Distribution(Parametrized):
         x0: Sequence[float] | None = None,
         scipy_args: dict | None = None,
         **fixed_values,
-    ) -> FitResult[Self]:
+    ) -> Fit[Self]:
         """
         Fit the instance to the data.
 
@@ -244,7 +244,7 @@ class Distribution(Parametrized):
 
 
 @dataclass
-class FitResult(Generic[T]):
+class Fit(Generic[T]):
     fitted: T
     data: Obs
     score_fn: Callable[[T, Obs], float]
