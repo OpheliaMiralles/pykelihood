@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 from abc import abstractmethod
 from collections.abc import Sequence
+from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar
 
 import numpy as np
 import scipy.special
-from scipy.optimize import minimize
+from scipy.optimize import OptimizeResult, minimize
 from scipy.stats import (
     beta,
     expon,
@@ -22,6 +25,10 @@ from pykelihood.generic_types import Obs
 from pykelihood.metrics import opposite_log_likelihood
 from pykelihood.parameters import ConstantParameter, Parametrized, ensure_parametrized
 from pykelihood.utils import ifnone
+
+if TYPE_CHECKING:
+    from typing import Self
+
 
 T = TypeVar("T")
 SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
@@ -113,11 +120,11 @@ class Distribution(Parametrized):
     def fit(
         cls: type[SomeDistribution],
         data: Obs,
-        x0: Sequence[float] = None,
-        score: Callable[["Distribution", Obs], float] = opposite_log_likelihood,
-        scipy_args: Optional[dict] = None,
+        x0: Sequence[float] | None = None,
+        score: Callable[[Distribution, Obs], float] = opposite_log_likelihood,
+        scipy_args: dict | None = None,
         **fixed_values,
-    ) -> SomeDistribution:
+    ) -> Fit[SomeDistribution]:
         """
         Fit the distribution to the data.
 
@@ -136,8 +143,7 @@ class Distribution(Parametrized):
 
         Returns
         -------
-        SomeDistribution
-            Fitted distribution.
+        The result of the fit
         """
         init_parms = {}
         for k in cls.params_names:
@@ -173,8 +179,8 @@ class Distribution(Parametrized):
         minimize_args.update(scipy_args or {})
         optimization_result = minimize(to_minimize, x0, **minimize_args)
         dist = init.with_params(optimization_result.x)
-        dist.fit_result = optimization_result
-        return dist
+
+        return Fit(dist, data, score, x0=x0, optimize_result=optimization_result)
 
     def _process_fit_params(self, **kwds):
         out_dict = self.param_dict.copy()
@@ -206,12 +212,12 @@ class Distribution(Parametrized):
 
     def fit_instance(
         self,
-        data,
+        data: Obs,
         score=opposite_log_likelihood,
-        x0: Sequence[float] = None,
-        scipy_args: Optional[dict] = None,
+        x0: Sequence[float] | None = None,
+        scipy_args: dict | None = None,
         **fixed_values,
-    ):
+    ) -> Fit[Self]:
         """
         Fit the instance to the data.
 
@@ -235,6 +241,51 @@ class Distribution(Parametrized):
         """
         param_dict = self._process_fit_params(**fixed_values)
         return self.fit(data, score=score, x0=x0, scipy_args=scipy_args, **param_dict)
+
+
+@dataclass
+class Fit(Generic[T]):
+    fitted: T
+    data: Obs
+    score_fn: Callable[[T, Obs], float]
+    x0: Sequence[float]
+    optimize_result: OptimizeResult
+
+    def confidence_interval(
+        self, param: str, alpha: float = 0.05, precision: float = 1e-5
+    ) -> tuple[float, float]:
+        """
+        Calculate the confidence interval for a parameter.
+
+        Parameters
+        ----------
+        param : str
+            Name of the parameter.
+        alpha : float, optional
+            Significance level, by default 0.05.
+
+        Returns
+        -------
+        tuple
+            Lower and upper bounds of the confidence interval.
+        """
+        if param not in self.fitted.params_names:
+            raise ValueError(f"Parameter {param} not found in fitted distribution.")
+
+        from pykelihood.profiler import Profiler
+
+        profiler = Profiler(
+            self.fitted,
+            self.data,
+            self.score_fn,
+            single_profiling_param=param,
+            inference_confidence=alpha,
+        )
+        return profiler.confidence_interval(param, precision=precision)
+
+    # TODO: implement explicit wrappers and use this only for dynamic attributes (e.g. param names)
+    def __getattr__(self, item: str):
+        return getattr(self.fitted, item)
 
 
 class AvoidAbstractMixin:

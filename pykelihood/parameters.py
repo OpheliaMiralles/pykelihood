@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from collections import ChainMap
 from collections.abc import Iterable
-from typing import Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 import numpy as np
 import numpy.typing as npt
 
 from pykelihood.utils import flatten_dict
+
+if TYPE_CHECKING:
+    from typing import Self
 
 _T = TypeVar("_T")
 
@@ -52,7 +55,7 @@ class Parametrized:
         """
         self._params = tuple(ensure_parametrized(p) for p in params)
 
-    def _build_instance(self, **new_params):
+    def _build_instance(self, **new_params) -> Self:
         """
         Build a new instance with the given parameters.
 
@@ -229,7 +232,7 @@ class Parametrized:
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
         return f"{type(self).__name__}({', '.join(args)})"
 
-    def with_params(self, params: Iterable = None, **named_params):
+    def with_params(self, params: Iterable | None = None, **named_params) -> Self:
         """
         Create a new instance of the object with the given parameters.
 

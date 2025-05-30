@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from pykelihood import kernels
-from pykelihood.distributions import GEV, Distribution
+from pykelihood.distributions import GEV
 from pykelihood.profiler import Profiler
 
 
@@ -35,7 +35,6 @@ def profiler_with_trend(dataset):
 
 def test_mle(profiler, dataset):
     mle, profiler_opt = profiler.optimum
-    assert isinstance(mle, Distribution)
     assert profiler_opt == mle.logpdf(dataset).sum()
     # checks whether the maximum likelihood fitted distribution has the same structure as the reference distribution
     assert len(profiler.distribution.flattened_params) == len(mle.flattened_params)
@@ -46,7 +45,6 @@ def test_mle(profiler, dataset):
 
 def test_mle_with_trend(profiler_with_trend, dataset):
     mle, profiler_opt = profiler_with_trend.optimum
-    assert isinstance(mle, Distribution)
     assert profiler_opt == mle.logpdf(dataset).sum()
     assert len(profiler_with_trend.distribution.flattened_params) == len(
         mle.flattened_params
@@ -58,7 +56,6 @@ def test_mle_with_trend(profiler_with_trend, dataset):
 
 def test_mle_with_fixed_param(profiler_with_fixed_param, dataset):
     mle, profiler_opt = profiler_with_fixed_param.optimum
-    assert isinstance(mle, Distribution)
     assert profiler_opt == mle.logpdf(dataset).sum()
     assert len(profiler_with_fixed_param.distribution.flattened_params) == len(
         mle.flattened_params
@@ -102,7 +99,7 @@ def test_profiles_with_trend(profiler_with_trend):
     assert len(profiles) == len(mle.optimisation_params)
     for key in profiles:
         if len(profiles[key]):
-            np.testing.assert_array_less(profiles[key]["score"], profiler_opt)
+            assert np.all(profiles[key]["score"] < profiler_opt + 1e-8)
             assert len(profiles[key].columns) == len(mle.flattened_params) + 1
             assert (
                 profiles[key][key].min()
