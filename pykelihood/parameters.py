@@ -42,7 +42,7 @@ class Parametrized:
     Base class for parametrized objects.
     """
 
-    params_names: tuple[str]
+    params_names: tuple[str, ...]
 
     def __init__(self, *params: Parametrized | Any):
         """
