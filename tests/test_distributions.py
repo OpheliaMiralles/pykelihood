@@ -179,7 +179,7 @@ def test_fit_instance_fixing_shared_params_in_trends():
 
 def test_fitted_distribution():
     n = Normal()
-    data = n.rvs(10000)
+    data = n.rvs(1000)
     fitted = n.fit(data)
     assert fitted.loc.value == approx(0.0)
     assert fitted.scale.value == approx(1.0)
@@ -187,7 +187,7 @@ def test_fitted_distribution():
 
 def test_fitted_distribution_confidence_interval():
     n = Normal()
-    data = n.rvs(10000)
+    data = n.rvs(1000)
     fitted = n.fit(data)
     ci = fitted.confidence_interval("loc")
     assert len(ci) == 2

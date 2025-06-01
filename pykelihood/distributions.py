@@ -717,7 +717,7 @@ def _wrap_scipy_distribution(
         super(type(self), self).__init__(loc, scale, *args)
 
     def _to_scipy_args(self, **kwargs):
-        return {k: kwargs.get(k, getattr(self, k).value) for k in self.params_names}
+        return {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
 
     return type(
         clean_dist_name,
