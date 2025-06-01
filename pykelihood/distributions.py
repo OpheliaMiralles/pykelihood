@@ -678,12 +678,18 @@ class GPD(ScipyDistribution):
         }
 
 
+def _name_from_scipy_dist(scipy_dist: stats.rv_continuous) -> str:
+    """Generate a name for the distribution based on the scipy distribution class."""
+    scipy_dist_name = type(scipy_dist).__name__.removesuffix("_gen")
+    return "".join(map(str.capitalize, scipy_dist_name.split("_")))
+
+
 def _wrap_scipy_distribution(
     scipy_dist: stats.rv_continuous,
 ) -> type[ScipyDistribution]:
     """Wrap a scipy distribution class to create a ScipyDistribution subclass."""
     scipy_dist_name = type(scipy_dist).__name__.removesuffix("_gen")
-    clean_dist_name = "".join(map(str.capitalize, scipy_dist_name.split("_")))
+    clean_dist_name = _name_from_scipy_dist(scipy_dist)
     params_names = ("loc", "scale") + tuple(
         scipy_dist.shapes.split(", ") if scipy_dist.shapes else ()
     )
@@ -714,7 +720,7 @@ def _wrap_scipy_distribution(
             if arg not in kwargs:
                 raise ValueError(f"Missing shape parameter: {arg}")
         args = [kwargs[a] for a in shape_args]
-        super(type(self), self).__init__(loc, scale, *args)
+        ScipyDistribution.__init__(self, loc, scale, *args)
 
     def _to_scipy_args(self, **kwargs):
         return {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
@@ -793,6 +799,7 @@ Laplace = _wrap_scipy_distribution(_stats.laplace)
 LaplaceAsymmetric = _wrap_scipy_distribution(_stats.laplace_asymmetric)
 Levy = _wrap_scipy_distribution(_stats.levy)
 LevyL = _wrap_scipy_distribution(_stats.levy_l)
+LevyStable = _wrap_scipy_distribution(_stats.levy_stable)
 Loggamma = _wrap_scipy_distribution(_stats.loggamma)
 Logistic = _wrap_scipy_distribution(_stats.logistic)
 Loglaplace = _wrap_scipy_distribution(_stats.loglaplace)
