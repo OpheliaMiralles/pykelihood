@@ -214,7 +214,7 @@ def test_scipy_distributions_coverage():
 
 
 def test_distributions_naming_from_scipy():
-    special_cases = {"Normal": "Norm"}
+    special_cases = {"Normal": "Norm", "Trapz": "Trapezoid"}
     for defined_name, dist_class in vars(distributions).items():
         if isinstance(dist_class, type) and issubclass(
             dist_class, distributions.Distribution

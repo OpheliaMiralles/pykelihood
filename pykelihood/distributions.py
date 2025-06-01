@@ -7,6 +7,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Callable, Generic, TypeVar
 
 import numpy as np
+from packaging.version import Version
 import scipy.special
 from scipy import stats
 from scipy import stats as _stats
@@ -833,7 +834,7 @@ Skewnorm = _wrap_scipy_distribution(_stats.skewnorm)
 StudentizedRange = _wrap_scipy_distribution(_stats.studentized_range)
 T = _wrap_scipy_distribution(_stats.t)
 Trapezoid = _wrap_scipy_distribution(_stats.trapezoid)
-Trapezoid = _wrap_scipy_distribution(_stats.trapz)
+Trapz = Trapezoid
 Triang = _wrap_scipy_distribution(_stats.triang)
 Truncexpon = _wrap_scipy_distribution(_stats.truncexpon)
 Truncnorm = _wrap_scipy_distribution(_stats.truncnorm)
@@ -847,6 +848,11 @@ Wald = _wrap_scipy_distribution(_stats.wald)
 WeibullMax = _wrap_scipy_distribution(_stats.weibull_max)
 WeibullMin = _wrap_scipy_distribution(_stats.weibull_min)
 Wrapcauchy = _wrap_scipy_distribution(_stats.wrapcauchy)
+
+if Version(scipy.__version__) >= Version("1.15.0"):
+    DparetoLognorm = _wrap_scipy_distribution(_stats.dpareto_lognorm)
+    Landau = _wrap_scipy_distribution(_stats.landau)
+    Irwinhall = _wrap_scipy_distribution(_stats.irwinhall)
 
 
 class TruncatedDistribution(Distribution):
