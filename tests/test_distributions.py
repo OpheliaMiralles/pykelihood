@@ -214,12 +214,22 @@ def test_scipy_distributions_coverage():
 
 
 def test_distributions_naming_from_scipy():
-    special_cases = {"Normal": "Norm", "Trapz": "Trapezoid"}
+    special_cases = {
+        # this one is our own alias
+        "Normal": "Norm",
+        # in these cases the SciPy class names do not match the name of the distribution
+        "Trapz": "Trapezoid",
+        "Loguniform": "Reciprocal",
+        "VonmisesLine": "Vonmises",
+    }
+    issues = []
     for defined_name, dist_class in vars(distributions).items():
         if isinstance(dist_class, type) and issubclass(
             dist_class, distributions.Distribution
         ):
             alias = special_cases.get(defined_name, defined_name)
-            assert alias == dist_class.__name__, (
-                f"Distribution class name '{dist_class.__name__}' does not match its defined name '{alias}'"
-            )
+            if alias != dist_class.__name__:
+                issues.append((alias, dist_class.__name__))
+    assert not issues, (
+        f"Distribution class names do not match their defined names: {issues}"
+    )
