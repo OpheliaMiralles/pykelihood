@@ -355,7 +355,7 @@ def trigonometric(X, a, b, c):
 
 
 @kernel(mu=0.0, alpha=0.0, theta=1.0)
-def hawkes_with_exp_kernel(X, mu, alpha, theta):
+def hawkes(X, mu, alpha, theta):
     r"""
     Hawkes process with exponential kernel.
 
@@ -381,42 +381,6 @@ def hawkes_with_exp_kernel(X, mu, alpha, theta):
     """
     return mu + alpha * theta * np.array(
         [np.sum(np.exp(-theta * (X[i] - X[:i]))) for i in range(len(X))]
-    )
-
-
-def hawkes_exp_with_event_times(t, tau, mu, alpha, theta):
-    r"""
-    Computes the Hawkes process exponential kernel with given event times.
-
-    Parameters
-    ----------
-    t : float
-        The current time at which the kernel is evaluated.
-    tau : np.ndarray
-        An array of event times.
-    mu : float
-        The base intensity of the Hawkes process.
-    alpha : float
-        The self-excitation parameter, which controls the contribution of past events to the intensity.
-    theta : float
-        The decay rate of the exponential kernel.
-
-    Returns
-    -------
-    float
-        The intensity value of the Hawkes process at time `t`.
-
-    Notes
-    -----
-    The intensity function is defined as:
-
-    .. math::
-        \lambda(t) = \mu + \alpha \theta \sum_{\tau_i < t} \exp(-\theta (t - \tau_i))
-
-    where `tau` is the sequence of event times up to `t`.
-    """
-    return mu + alpha * theta * np.sum(
-        (np.exp(-theta * (t - tau[i]))) for i in range(len(tau)) if tau[i] < t
     )
 
 
