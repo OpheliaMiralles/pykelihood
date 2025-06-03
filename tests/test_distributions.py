@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from scipy import stats
 
-from pykelihood import kernels, distributions
+from pykelihood import distributions, kernels
 from pykelihood.distributions import (
     GEV,
     Normal,
