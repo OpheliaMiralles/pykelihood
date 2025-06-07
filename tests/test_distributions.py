@@ -1,10 +1,14 @@
 import numpy as np
 import pytest
-from scipy.stats import genextreme
+from scipy import stats
 
-import pykelihood as pkl
-from pykelihood import kernels
-from pykelihood.distributions import GEV, Normal, TruncatedDistribution
+from pykelihood import distributions, kernels
+from pykelihood.distributions import (
+    GEV,
+    Normal,
+    TruncatedDistribution,
+    _name_from_scipy_dist,
+)
 from pykelihood.kernels import linear
 from pykelihood.parameters import ConstantParameter, Parameter
 
@@ -24,7 +28,7 @@ def linear_kernel(dataset):
 class TestGEV:
     def test_fit(self, datasets):
         for ds in datasets:
-            c, loc, scale = genextreme.fit(ds)
+            c, loc, scale = stats.genextreme.fit(ds)
             fit = GEV.fit(ds)
             assert fit.loc() == approx(loc)
             assert fit.scale() == approx(scale)
@@ -153,7 +157,7 @@ def test_distribution_fit_with_shared_params_in_trends():
     x = np.array(np.random.uniform(size=200))
     y = np.array(np.random.normal(size=200))
     alpha0_init = 0.0
-    alpha = pkl.parameters.Parameter(alpha0_init)
+    alpha = Parameter(alpha0_init)
     n = Normal.fit(y, loc=linear(x=x, b=alpha), scale=linear(x=x, b=alpha))
     alpha1 = n.loc.b
     alpha2 = n.scale.b
@@ -179,7 +183,7 @@ def test_fit_instance_fixing_shared_params_in_trends():
 
 def test_fitted_distribution():
     n = Normal()
-    data = n.rvs(10000)
+    data = n.rvs(1000)
     fitted = n.fit(data)
     assert fitted.loc.value == approx(0.0)
     assert fitted.scale.value == approx(1.0)
@@ -187,9 +191,45 @@ def test_fitted_distribution():
 
 def test_fitted_distribution_confidence_interval():
     n = Normal()
-    data = n.rvs(10000)
+    data = n.rvs(1000)
     fitted = n.fit(data)
     ci = fitted.confidence_interval("loc")
     assert len(ci) == 2
     assert ci[0] < ci[1]
     assert ci[0] <= fitted.loc.value <= ci[1]
+
+
+def test_scipy_distributions_coverage():
+    missing = []
+    for name, obj in vars(stats).items():
+        if isinstance(obj, stats.rv_continuous):
+            pykelihood_name = _name_from_scipy_dist(obj)
+            pykelihood_dist = getattr(distributions, pykelihood_name, None)
+            if pykelihood_dist is None:
+                missing.append(name)
+    if missing:
+        raise AssertionError(
+            f"Missing pykelihood distributions for the following scipy distributions: {', '.join(missing)}"
+        )
+
+
+def test_distributions_naming_from_scipy():
+    special_cases = {
+        # this one is our own alias
+        "Normal": "Norm",
+        # in these cases the SciPy class names do not match the name of the distribution
+        "Trapz": "Trapezoid",
+        "Loguniform": "Reciprocal",
+        "VonmisesLine": "Vonmises",
+    }
+    issues = []
+    for defined_name, dist_class in vars(distributions).items():
+        if isinstance(dist_class, type) and issubclass(
+            dist_class, distributions.Distribution
+        ):
+            alias = special_cases.get(defined_name, defined_name)
+            if alias != dist_class.__name__:
+                issues.append((alias, dist_class.__name__))
+    assert not issues, (
+        f"Distribution class names do not match their defined names: {issues}"
+    )
