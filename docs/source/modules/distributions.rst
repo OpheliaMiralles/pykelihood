@@ -7,7 +7,7 @@ The likelihood of the parameterized distribution for a given dataset is optimize
 Pykelihood distributions share methods and arguments with SciPy distributions, though occasionally,
 some parameters have been adjusted (e.g., the GEV distribution) to align with statistical community standards.
 
-.. currentmodule:: pykelihood.distributions
+.. currentmodule:: pykelihood.distributions.base
 
 .. rubric:: Class
 

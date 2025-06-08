@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Callable, Generic, TypeVar
 
+import numpy as np
 from scipy import stats
 from scipy.optimize import OptimizeResult, minimize
 
@@ -15,7 +16,6 @@ from pykelihood.parameters import ConstantParameter, Parametrized, ensure_parame
 
 if TYPE_CHECKING:
     from typing import Self
-
 
 _T = TypeVar("_T")
 SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
