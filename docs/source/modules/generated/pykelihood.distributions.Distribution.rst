@@ -13,11 +13,11 @@ Distribution
    :no-inherited-members:
    :no-special-members:
 
-
+  
    .. HACK -- the point here is that we don't want this to appear in the output, but the autosummary should still generate the pages.
       .. autosummary::
          :toctree:
-
+      
          Distribution.__call__
          Distribution.cdf
          Distribution.fit
@@ -34,16 +34,16 @@ Distribution
          Distribution.rvs
          Distribution.sf
          Distribution.with_params
-
+      
          Distribution.__call__
+  
 
-
-
-
+  
+  
    .. HACK -- the point here is that we don't want this to appear in the output, but the autosummary should still generate the pages.
       .. autosummary::
          :toctree:
-
+      
          Distribution.flattened_param_dict
          Distribution.flattened_params
          Distribution.optimisation_param_dict
@@ -51,3 +51,5 @@ Distribution
          Distribution.param_dict
          Distribution.params
          Distribution.params_names
+  
+  
