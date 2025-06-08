@@ -17,14 +17,15 @@ def bootstrap(
     bootstrap_method: Callable[[Obs], Iterable[Obs]],
 ):
     """
-    Bootstrap utility.
+    Bootstrap utility. Flexible enough to be used with any metric and bootstrap method.
 
     Parameters
     ----------
     metric : Callable[[Distribution, Obs], float]
         ``pykelihood.metrics`` object.
     bootstrap_method : Callable[[Obs], Iterable[Obs]]
-        Function that can be called on ``Obs`` or sequences of ``Obs``. For example, ``np.random.sample``.
+        Function that can be called on ``Obs`` or sequences of ``Obs``.
+        For example, ``np.random.sample``.
 
     Returns
     -------
@@ -52,11 +53,6 @@ def likelihood(distribution: Distribution, data: Obs):
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``, e.g. ``Union[float, Sequence[float]]``.
-
-    Returns
-    -------
-    float
-        Likelihood value.
     """
     return np.prod(distribution.pdf(data))
 
@@ -71,11 +67,6 @@ def log_likelihood(distribution: Distribution, data: Obs):
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``.
-
-    Returns
-    -------
-    float
-        Log-likelihood value.
     """
     return np.sum(distribution.logpdf(data))
 
@@ -90,11 +81,6 @@ def opposite_log_likelihood(distribution: Distribution, data: Obs):
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``.
-
-    Returns
-    -------
-    float
-        Opposite log-likelihood value.
     """
     return -log_likelihood(distribution, data)
 
@@ -145,22 +131,23 @@ def crps(distribution: Distribution, data: Obs):
     r"""
     Continuous Rank Probability Score (CRPS).
 
+    Evaluates the continuous proximity of the empirical cumulative distribution function
+    and that of the fitted distribution :math:`F`.
+
+    .. math::
+
+        CRPS = \int_{-\infty}^{\infty}(F(t)-\frac{1}{N}\sum_{i=1}^N H(t,y_i))^2dt,
+
+    where :math:`F` is the cumulative distribution function of the fitted distribution and
+    with H the Heavyside function equal to 0 for :math:`t<y`, 1/2 for :math:`t=y`
+    and 1 for :math:`t>y`.
+
     Parameters
     ----------
     distribution : Distribution
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``.
-
-    Returns
-    -------
-    float
-        CRPS value.
-
-    Notes
-    -----
-    Evaluates the continuous proximity of the empirical cumulative distribution function and that of the forecast distribution F.
-    \int_{-\infty}^{\infty}(F(y)-H(t-y))^2dy with H the Heavyside function equal to 0. for t<y, 1/2 for t=y and 1 for t>y.
     """
     from scipy import integrate
 
@@ -176,8 +163,20 @@ def crps(distribution: Distribution, data: Obs):
 
 
 def Brier_score(distribution: Distribution, data: Obs, threshold: float = None):
-    """
+    r"""
     Brier Score.
+
+    Represents the mean squared error between observed
+    exceedance of a threshold :math:`u` and the value of the fitted survival
+    function at :math:`u`.
+
+    .. math::
+
+         BS = \frac{1}{N}\sum_{i=1}^{N}(\bar{F}(u)-1_{y_i\geq u})^2,
+
+    where :math:`\bar{F}` is the fitted survival function
+    and :math:`1_{y_i\geq u}` is the indicator function that the observed value
+    is above threshold :math:`u`.
 
     Parameters
     ----------
@@ -188,19 +187,10 @@ def Brier_score(distribution: Distribution, data: Obs, threshold: float = None):
     threshold : float, optional
         The tail we are interested in predicting correctly.
 
-    Returns
-    -------
-    float
-        Mean of (P(Y>=u)-1_{Y>=u})^2.
-
     Raises
     ------
     ValueError
         If threshold is None.
-
-    Notes
-    -----
-    Mean squared error between binary forecast and its empirical value.
     """
     if threshold is None:
         raise ValueError("This metric requires a input threshold.")
@@ -208,9 +198,22 @@ def Brier_score(distribution: Distribution, data: Obs, threshold: float = None):
     return np.mean((p_threshold - (data >= threshold).astype(float)) ** 2)
 
 
-def quantile_score(distribution: Distribution, data: Obs, quantile: float = None):
-    """
+def quantile_score(distribution: Distribution, data: Obs, quantile: float):
+    r"""
     Quantile score.
+
+    Probability weighted score evaluating the difference
+    between the fitted quantile and the observed one.
+
+    .. math::
+
+        QS = \begin{cases}
+         q \cdot (y - F^{-1}(q)) & \text{if } y \geq F^{-1}(q), \\
+        (1 - q) \cdot (F^{-1}(q) - y) & \text{otherwise},
+        \end{cases}
+
+    where :math:`F^{-1}(q)` is the fitted inverse cumulative distribution
+    function at quantile :math:`q`.
 
     Parameters
     ----------
@@ -218,27 +221,15 @@ def quantile_score(distribution: Distribution, data: Obs, quantile: float = None
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``.
-    quantile : float, optional
+    quantile : float
         Quantile of interest.
-
-    Returns
-    -------
-    float
-        Quantile score value.
 
     Raises
     ------
     ValueError
-        If quantile is None or not between 0 and 1.
-
-    Notes
-    -----
-    Probability weighted score evaluating the difference between the predicted quantile and the empirical one.
-    q*(y-F^{-1}(q)) if y>=F^{-1}(q), (1-q)*(F^{-1}(q)-y) otherwise.
+        If quantile is not between 0 and 1.
     """
-    if quantile is None:
-        raise ValueError("This metric requires a input quantile.")
-    elif (quantile < 0) or (quantile > 1):
+    if (quantile < 0) or (quantile > 1):
         raise ValueError("The quantile should be between 0 and 1.")
 
     def rho(x):
@@ -249,7 +240,14 @@ def quantile_score(distribution: Distribution, data: Obs, quantile: float = None
 
 def qq_l1_distance(distribution: Distribution, data: Obs):
     """
-    QQ-Plot-like metrics: mean L1 distance.
+    QQ-Plot-like metric: mean L1 distance.
+
+    Mean L1 distance between the $x=y$ line and the one defined by
+    $x=$fitted quantiles, $y=$observed quantiles.
+
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
+    arXiv preprint arXiv:2102.00884.
 
     Parameters
     ----------
@@ -257,18 +255,6 @@ def qq_l1_distance(distribution: Distribution, data: Obs):
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``.
-
-    Returns
-    -------
-    float
-        Mean L1 distance.
-
-    Notes
-    -----
-    Mean L1 distance between the x=y line and the (theoretical quantiles, empirical quantiles) one.
-    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
-    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
-    arXiv preprint arXiv:2102.00884.
     """
     levels = np.linspace(1e-4, 1.0 - 1e-4, 100)
     empirical_quantile = np.quantile(data, levels)
@@ -277,7 +263,14 @@ def qq_l1_distance(distribution: Distribution, data: Obs):
 
 def qq_l2_distance(distribution: Distribution, data: Obs):
     """
-    QQ-Plot-like metrics: mean L2 distance.
+    QQ-Plot-like metric: mean L2 distance.
+
+    Mean L2 distance between the $x=y$ line and the one defined by
+    $x=$fitted quantiles, $y=$observed quantiles.
+
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
+    arXiv preprint arXiv:2102.00884.
 
     Parameters
     ----------
@@ -285,18 +278,6 @@ def qq_l2_distance(distribution: Distribution, data: Obs):
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``.
-
-    Returns
-    -------
-    float
-        Mean L2 distance.
-
-    Notes
-    -----
-    Mean L2 distance between the x=y line and the (theoretical quantiles, empirical quantiles) one.
-    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
-    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
-    arXiv preprint arXiv:2102.00884.
     """
     levels = np.linspace(1e-4, 1.0 - 1e-4, 100)
     empirical_quantile = np.quantile(data, levels)
@@ -305,7 +286,13 @@ def qq_l2_distance(distribution: Distribution, data: Obs):
 
 def pp_l1_distance(distribution: Distribution, data: Obs):
     """
-    PP-Plot-like metrics: mean L1 distance.
+    PP-Plot-like metric: mean L1 distance.
+
+    Mean L1 distance between the $x=y$ line and the one defined by
+    $x=$fitted cdf, $y=$observed cdf.
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
+    arXiv preprint arXiv:2102.00884.
 
     Parameters
     ----------
@@ -313,18 +300,6 @@ def pp_l1_distance(distribution: Distribution, data: Obs):
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``.
-
-    Returns
-    -------
-    float
-        Mean L1 distance.
-
-    Notes
-    -----
-    Mean L1 distance between the x=y line and the (theoretical cdf, empirical cdf) one.
-    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
-    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
-    arXiv preprint arXiv:2102.00884.
     """
     levels = np.linspace(1e-4, 1.0 - 1e-4, 100)
     empirical_cdf = np.quantile(distribution.cdf(data), levels)
@@ -334,7 +309,13 @@ def pp_l1_distance(distribution: Distribution, data: Obs):
 
 def pp_l2_distance(distribution: Distribution, data: Obs):
     """
-    PP-Plot-like metrics: mean L2 distance.
+    PP-Plot-like metric: mean L2 distance.
+
+    Mean L2 distance between the x=y line the one defined by
+    $x=$fitted cdf, $y=$observed cdf.
+    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
+    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
+    arXiv preprint arXiv:2102.00884.
 
     Parameters
     ----------
@@ -342,18 +323,6 @@ def pp_l2_distance(distribution: Distribution, data: Obs):
         ``pykelihood.Distribution`` object.
     data : Obs
         Data of type ``Obs``.
-
-    Returns
-    -------
-    float
-        Mean L2 distance.
-
-    Notes
-    -----
-    Mean L2 distance between the x=y line and the (theoretical cdf, empirical cdf) one.
-    Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
-    Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
-    arXiv preprint arXiv:2102.00884.
     """
     levels = np.linspace(1e-4, 1.0 - 1e-4, 100)
     empirical_cdf = np.quantile(distribution.cdf(data), levels)

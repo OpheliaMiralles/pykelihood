@@ -1,9 +1,7 @@
-/* Change the font family */
 body {
     font-family: "Tahoma", sans-serif;
     color: #333333
 }
-/* Optional: Customize specific parts like headers */
 h1 {color: #8B0000;
     font-weight: bold;}
 h5 {color: #8fcbe4}
@@ -13,7 +11,7 @@ h2 {color: #285c83}
 
 .navbar-brand img {
     height: auto;
-    max-width: 300px; /
+    max-width: 300px;
 }
 .bd-search .fa-magnifying-glass {
     display: none;
@@ -23,11 +21,57 @@ h2 {color: #285c83}
     font-size: 0.5em;
 }
 .toctree-l1 .reference {
-    color: #8B0000; /* Replace #FF5733 with your desired color */
+    color: #8B0000;
 }
-.sidebar-primary-item a {color: #285c83}
+.toctree-l2 .reference {
+    font-weight: bold;
+    color: #333333;
+}
+.toctree-l3 .reference {
+    font-weight: normal;
+    color: #5a9cc7;
+}
+.toctree-l4 .reference {
+    font-weight: normal;
+    color: #8fcbe4;
+}
 
+.sidebar-primary-item a {color: #285c83}
 html[data-theme="dark"] {
-    background-color: black;
+    background-color: #333333;
     --pst-color-on-background: #222832;
+}
+.sig {
+    font-weight: bold;
+    background-color: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    display: block !important;
+    margin-bottom: 0.5em;
+}
+.py.class.class .sig {
+    background-color: #e6f3fa;
+    padding: 0.5em;
+    border-radius: 5px;
+    display: inline-block;
+    margin-bottom: 1em;
+}
+.py.function .sig-param {
+    font-weight: bold;
+    color: #333333;
+}
+.py.class .sig-param .default_value,
+.py.function .sig-param .default_value,
+.py.class.method .sig-param .default_value {
+    color: gray;
+    font-weight: normal;
+    font-style: italic;
+}
+dl.py.property .sig-name {
+    font-weight: bold;
+    color: #007acc;
+}
+dl.py.method .sig-name {
+    font-weight: bold;
+    color: #8B0000;
 }
