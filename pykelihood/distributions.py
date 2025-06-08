@@ -7,7 +7,6 @@ from functools import partial
 from typing import TYPE_CHECKING, Callable, Generic, TypeVar
 
 import numpy as np
-import scipy.special
 from scipy.optimize import OptimizeResult, minimize
 from scipy.stats import _continuous_distns
 

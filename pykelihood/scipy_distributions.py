@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import numpy as np
-from packaging.version import Version
 import scipy.special
+from packaging.version import Version
 from scipy import stats
 from scipy import stats as _stats
 
-from pykelihood.generic_types import Obs
-from pykelihood.utils import ifnone
-from pykelihood.distributions import Distribution
 from pykelihood.distributions import ScipyDistribution
 
 
