@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Callable, Generic, TypeVar
 
-import numpy as np
+from scipy import stats
 from scipy.optimize import OptimizeResult, minimize
-from scipy.stats import _continuous_distns
 
 from pykelihood.generic_types import Obs
 from pykelihood.metrics import opposite_log_likelihood
@@ -309,7 +308,7 @@ class ScipyDistribution(Distribution, AvoidAbstractMixin):
         Get the attribute, wrapping scipy functions.
     """
 
-    _base_module: _continuous_distns.rv_continuous
+    _base_module: stats.rv_continuous
 
     def rvs(self, size=None, random_state=None, **kwargs):
         base_rvs = getattr(self._base_module, "rvs")
