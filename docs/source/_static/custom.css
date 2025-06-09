@@ -25,7 +25,7 @@ h2 {color: #285c83}
 }
 .toctree-l2 .reference {
     font-weight: bold;
-    color: #333333;
+    color: #a6a1a1;
 }
 .toctree-l3 .reference {
     font-weight: normal;
@@ -38,18 +38,10 @@ h2 {color: #285c83}
 
 .sidebar-primary-item a {color: #285c83}
 html[data-theme="dark"] {
-    background-color: #333333;
-    --pst-color-on-background: #222832;
+    background-color: #575555;
+    --pst-color-on-background: #09142f;
 }
-.sig {
-    font-weight: bold;
-    background-color: transparent !important;
-    padding: 0 !important;
-    border-radius: 0 !important;
-    display: block !important;
-    margin-bottom: 0.5em;
-}
-.py.class.class .sig {
+.py.class .sig {
     background-color: #e6f3fa;
     padding: 0.5em;
     border-radius: 5px;
@@ -61,17 +53,22 @@ html[data-theme="dark"] {
     color: #333333;
 }
 .py.class .sig-param .default_value,
-.py.function .sig-param .default_value,
-.py.class.method .sig-param .default_value {
+dl.py.function .sig-param .default_value,
+dl.py.method .sig-param .default_value {
     color: gray;
     font-weight: normal;
     font-style: italic;
 }
+dl.py.property .sig, dl.py.method .sig {
+    background-color: transparent;
+}
 dl.py.property .sig-name {
+    background-color: transparent;
     font-weight: bold;
     color: #007acc;
 }
 dl.py.method .sig-name {
+    background-color: transparent;
     font-weight: bold;
     color: #8B0000;
 }
