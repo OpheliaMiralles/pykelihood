@@ -63,6 +63,8 @@ class Profiler:
     def standard_mle(self):
         """
         Compute the standard maximum likelihood estimate (MLE) for the distribution.
+        Useful when using conditional or complex likelihood functions, to compare with
+        the usual opposite log-likelihood.
 
         Returns
         -------
@@ -97,12 +99,18 @@ class Profiler:
     @cached_property
     def profiles(self):
         """
-        Compute the profile likelihoods for the parameters.
+        Compute the profile likelihood for the parameters defined in __init__.
+        If a single profiling parameter is specified, only that parameter is profiled.
+        If not, all parameters are profiled.
+        Uses `test_profile_likelihood` to compute the profile likelihood.
+
 
         Returns
         -------
         dict
-            A dictionary with parameter names as keys and their profile likelihoods as values.
+            A dictionary with parameter names as keys and a pandas DataFrame as values.
+            The pandas DataFrame contains the parameter values from the profile likelihood
+             optimization (even the non-profiled ones) and their corresponding likelihood value.
         """
         profiles = {}
         opt, func = self.optimum
@@ -120,7 +128,9 @@ class Profiler:
 
     def test_profile_likelihood(self, range_for_param, param):
         """
-        Test the profile likelihood for a given parameter over a specified range.
+        Compute the profile likelihood for a given parameter over a specified range.
+        Then checks whether the profile likelihood is above a threshold based on the likelihood
+        ratio test.
 
         Parameters
         ----------
@@ -160,6 +170,9 @@ class Profiler:
     def confidence_interval(self, param: str, precision=1e-5) -> tuple[float, float]:
         """
         Compute the confidence interval for a given parameter.
+        A binary search method is used to progressively narrow down the interval based on
+        the likelihood and the desired confidence level.
+        Uses the same logic as the `test_profile_likelihood` method.
 
         Parameters
         ----------
