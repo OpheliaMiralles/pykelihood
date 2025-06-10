@@ -1,6 +1,6 @@
 body {
     font-family: "Tahoma", sans-serif;
-    color: #333333
+    color: #a6a1a1
 }
 h1 {color: #8B0000;
     font-weight: bold;}
@@ -42,7 +42,7 @@ html[data-theme="dark"] {
     --pst-color-on-background: #09142f;
 }
 .py.class .sig {
-    background-color: #e6f3fa;
+    background-color: rgba(143, 203, 228, 0.5);
     padding: 0.5em;
     border-radius: 5px;
     display: inline-block;
@@ -50,7 +50,7 @@ html[data-theme="dark"] {
 }
 .py.function .sig-param {
     font-weight: bold;
-    color: #333333;
+    color: #a6a1a1;
 }
 .py.class .sig-param .default_value,
 dl.py.function .sig-param .default_value,
@@ -59,7 +59,7 @@ dl.py.method .sig-param .default_value {
     font-weight: normal;
     font-style: italic;
 }
-dl.py.property .sig, dl.py.method .sig {
+dl.py.function .sig, dl.py.property .sig, dl.py.method .sig {
     background-color: transparent;
 }
 dl.py.property .sig-name {
