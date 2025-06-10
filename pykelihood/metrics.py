@@ -242,8 +242,8 @@ def qq_l1_distance(distribution: Distribution, data: Obs):
     """
     QQ-Plot-like metric: mean L1 distance.
 
-    Mean L1 distance between the $x=y$ line and the one defined by
-    $x=$fitted quantiles, $y=$observed quantiles.
+    Mean L1 distance between the x=y line and the one defined by
+    x=fitted quantiles, y=observed quantiles.
 
     Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
@@ -265,8 +265,8 @@ def qq_l2_distance(distribution: Distribution, data: Obs):
     """
     QQ-Plot-like metric: mean L2 distance.
 
-    Mean L2 distance between the $x=y$ line and the one defined by
-    $x=$fitted quantiles, $y=$observed quantiles.
+    Mean L2 distance between the x=y line and the one defined by
+    x=fitted quantiles, y=observed quantiles.
 
     Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
@@ -288,8 +288,8 @@ def pp_l1_distance(distribution: Distribution, data: Obs):
     """
     PP-Plot-like metric: mean L1 distance.
 
-    Mean L1 distance between the $x=y$ line and the one defined by
-    $x=$fitted cdf, $y=$observed cdf.
+    Mean L1 distance between the x=y line and the one defined by
+    x=fitted cdf, y=observed cdf.
     Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
     arXiv preprint arXiv:2102.00884.
@@ -312,7 +312,7 @@ def pp_l2_distance(distribution: Distribution, data: Obs):
     PP-Plot-like metric: mean L2 distance.
 
     Mean L2 distance between the x=y line the one defined by
-    $x=$fitted cdf, $y=$observed cdf.
+    x=fitted cdf, y=observed cdf.
     Introduced by Varty, Z., Tawn, J. A., Atkinson, P. M., & Bierman, S. (2021).
     Inference for extreme earthquake magnitudes accounting for a time-varying measurement process.
     arXiv preprint arXiv:2102.00884.

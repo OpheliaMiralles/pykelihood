@@ -33,7 +33,6 @@ used directly or as a base for more complex ones.
    ~exponential
    ~exponential_ratio
    ~trigonometric
-   ~hawkes
    ~linear_regression
    ~exponential_linear_regression
    ~polynomial_regression
