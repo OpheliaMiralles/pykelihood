@@ -19,7 +19,7 @@ def _wrap_scipy_distribution(
     """Wrap a scipy distribution class to create a ScipyDistribution subclass."""
     scipy_dist_name = type(scipy_dist).__name__.removesuffix("_gen")
     clean_dist_name = _name_from_scipy_dist(scipy_dist)
-    params_names = ("loc", "scale") + tuple(
+    dist_params_names = ("loc", "scale") + tuple(
         scipy_dist.shapes.split(", ") if scipy_dist.shapes else ()
     )
 
@@ -40,31 +40,31 @@ def _wrap_scipy_distribution(
         Shape parameter. See the SciPy documentation for the {scipy_dist_name} distribution for details.\
         """
 
-    for param in params_names[2:]:
+    for param in dist_params_names[2:]:
         docstring += format_param_docstring(param)
 
-    def __init__(self, loc=0.0, scale=1.0, **kwargs):
-        shape_args = params_names[2:]
-        for arg in shape_args:
-            if arg not in kwargs:
-                raise ValueError(f"Missing shape parameter: {arg}")
-        args = [kwargs[a] for a in shape_args]
-        ScipyDistribution.__init__(self, loc, scale, *args)
+    class Inner(ScipyDistribution):
+        _base_module = scipy_dist
+        params_names = dist_params_names
+        __doc__ = docstring
 
-    def _to_scipy_args(self, **kwargs):
-        return {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
+        def __init__(self, loc=0.0, scale=1.0, **kwargs):
+            assert self.params_names[:2] == ("loc", "scale")
+            shape_args = self.params_names[2:]
+            for arg in shape_args:
+                if arg not in kwargs:
+                    raise ValueError(
+                        f"Missing shape parameter `{arg}` when initializing {type(self).__name__} distribution."
+                    )
+            args = [kwargs[a] for a in shape_args]
+            super().__init__(loc, scale, *args)
 
-    return type(
-        clean_dist_name,
-        (ScipyDistribution,),
-        {
-            "_base_module": scipy_dist,
-            "params_names": params_names,
-            "__init__": __init__,
-            "_to_scipy_args": _to_scipy_args,
-            "__doc__": docstring,
-        },
-    )
+        def _to_scipy_args(self, **kwargs):
+            return {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
+
+    Inner.__name__ = clean_dist_name
+    Inner.__qualname__ = f"{Inner.__module__}.{clean_dist_name}"
+    return Inner
 
 
 Alpha = _wrap_scipy_distribution(stats.alpha)
