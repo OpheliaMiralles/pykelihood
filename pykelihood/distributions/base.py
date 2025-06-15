@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import partial
 from typing import TYPE_CHECKING, Callable, Generic, TypeVar
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy import stats
 from scipy.optimize import OptimizeResult, minimize
 
@@ -21,7 +21,7 @@ _T = TypeVar("_T")
 SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
 
 
-class Distribution(Parametrized):
+class Distribution(Parametrized, ABC):
     """
     Base class for all distributions.
 
@@ -273,76 +273,42 @@ class Fit(Generic[_T]):
         return getattr(self.fitted, item)
 
 
-class AvoidAbstractMixin:
+class ScipyDistribution(Distribution, ABC):
     """
-    Mixin to avoid abstract methods.
-
-    Methods
-    -------
-    __getattribute__(item)
-        Get the attribute, avoiding abstract methods.
-    """
-
-    def __getattribute__(self, item):
-        x = object.__getattribute__(self, item)
-        if (
-            hasattr(x, "__isabstractmethod__")
-            and x.__isabstractmethod__
-            and hasattr(self, "__getattr__")
-        ):
-            x = self.__getattr__(item)
-        return x
-
-
-class ScipyDistribution(Distribution, AvoidAbstractMixin):
-    """
-    Base class for distributions using scipy.
-
-    Methods
-    -------
-    rvs(size=None, random_state=None, **kwargs)
-        Generate random variates.
-    _wrapper(f, x, **extra_args)
-        Wrapper for scipy functions.
-    __getattr__(item)
-        Get the attribute, wrapping scipy functions.
+    Base class for distributions based on SciPy.
     """
 
     _base_module: stats.rv_continuous
 
+    @abstractmethod
+    def _to_scipy_args(self, **params) -> dict[str, ArrayLike]:
+        raise NotImplementedError
+
     def rvs(self, size=None, random_state=None, **kwargs):
-        base_rvs = getattr(self._base_module, "rvs")
-        params = {p: kwargs.pop(p) for p in self.params_names if p in kwargs}
-        return base_rvs(
-            **self._to_scipy_args(**params),
-            size=size,
-            random_state=random_state,
-            **kwargs,
+        return self._base_module.rvs(
+            **self._to_scipy_args(**kwargs), size=size, random_state=random_state
         )
 
-    def _wrapper(self, f, x, **extra_args):
-        params = {}
-        other_args = {}
-        for key, value in extra_args.items():
-            if key in self.params_names:
-                params[key] = value
-            else:
-                other_args[key] = value
-        return f(x, **self._to_scipy_args(**params), **other_args)
+    def pdf(self, x, **kwargs):
+        return self._base_module.pdf(x, **self._to_scipy_args(**kwargs))
 
-    def __getattr__(self, item):
-        if item not in (
-            "pdf",
-            "logpdf",
-            "cdf",
-            "logcdf",
-            "ppf",
-            "isf",
-            "sf",
-            "logsf",
-        ):
-            return super().__getattr__(item)
-        f = getattr(self._base_module, item)
-        g = partial(self._wrapper, f)
-        self.__dict__[item] = g
-        return g
+    def cdf(self, x, **kwargs):
+        return self._base_module.cdf(x, **self._to_scipy_args(**kwargs))
+
+    def isf(self, q, **kwargs):
+        return self._base_module.isf(q, **self._to_scipy_args(**kwargs))
+
+    def ppf(self, q, **kwargs):
+        return self._base_module.ppf(q, **self._to_scipy_args(**kwargs))
+
+    def sf(self, x, **kwargs):
+        return self._base_module.sf(x, **self._to_scipy_args(**kwargs))
+
+    def logpdf(self, x, **kwargs):
+        return self._base_module.logpdf(x, **self._to_scipy_args(**kwargs))
+
+    def logcdf(self, x, **kwargs):
+        return self._base_module.logcdf(x, **self._to_scipy_args(**kwargs))
+
+    def logsf(self, x, **kwargs):
+        return self._base_module.logsf(x, **self._to_scipy_args(**kwargs))

@@ -3,8 +3,7 @@ from __future__ import annotations
 import numpy as np
 from scipy import stats as _stats
 
-from pykelihood.distributions.base import Distribution
-from pykelihood.distributions.base import ScipyDistribution
+from pykelihood.distributions.base import Distribution, ScipyDistribution
 from pykelihood.generic_types import Obs
 from pykelihood.utils import ifnone
 
