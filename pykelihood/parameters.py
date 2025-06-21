@@ -166,14 +166,13 @@ class Parametrized:
         return results
 
     @property
-    def optimisation_params(self) -> tuple[Parametrized]:
+    def optimisation_params(self) -> tuple[Parameter, ...]:
         """
         Get all parameters used in the optimization.
 
         Returns
         -------
-        Tuple[Parametrized]
-            The optimization parameters.
+        The optimization parameters.
         """
         unique = []
         for q in (p_ for p in self.params for p_ in p.optimisation_params):
@@ -182,13 +181,13 @@ class Parametrized:
         return unique
 
     @property
-    def optimisation_param_dict(self) -> dict[str, Parametrized]:
+    def optimisation_param_dict(self) -> dict[str, Parameter]:
         """
         Get a dictionary of optimization parameter names and their values.
 
         Returns
         -------
-        Dict[str, Parametrized]
+        Dict[str, Parameter]
             The optimization parameter dictionary.
         """
         p_dict = flatten_dict(self._optimisation_param_dict_helper())

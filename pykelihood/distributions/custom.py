@@ -425,7 +425,7 @@ class TruncatedDistribution(Distribution):
         """
         return x[self._valid_indices(x)]
 
-    def fit_instance(self, *args, **kwargs):
+    def fit(self, *args, **kwargs):
         """
         Fit the instance to the data.
 
@@ -442,7 +442,7 @@ class TruncatedDistribution(Distribution):
             The fitted instance.
         """
         kwargs.update(lower_bound=self.lower_bound, upper_bound=self.upper_bound)
-        return super().fit_instance(*args, **kwargs)
+        return super().fit(*args, **kwargs)
 
     def rvs(self, size: int, *args, **kwargs):
         """

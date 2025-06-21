@@ -86,7 +86,7 @@ class Profiler:
         tuple
             A tuple containing the estimate and the score function value.
         """
-        estimate = self.distribution.fit_instance(
+        estimate = self.distribution.fit(
             self.data,
             score=self.score_function,
             x0=self.x0,
@@ -148,11 +148,7 @@ class Profiler:
         profile_ll = []
         params = []
         for x in range_for_param:
-            pl = opt.fit_instance(
-                self.data,
-                score=self.score_function,
-                **{param: x},
-            )
+            pl = opt.fit(self.data, score=self.score_function, **{param: x})
             pl_value = -self.score_function(pl, self.data)
             pl_value = pl_value if isinstance(pl_value, float) else pl_value[0]
             if np.isfinite(pl_value):
@@ -190,9 +186,7 @@ class Profiler:
         value_threshold = func - chi2.ppf(self.inference_confidence, df=1) / 2
 
         def score(x: float):
-            new_opt = opt.fit_instance(
-                self.data, score=self.score_function, **{param: x}
-            )
+            new_opt = opt.fit(self.data, score=self.score_function, **{param: x})
             return -self.score_function(new_opt, self.data)
 
         def delta_to_threshold(x: float):

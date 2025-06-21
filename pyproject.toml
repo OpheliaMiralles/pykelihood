@@ -57,7 +57,3 @@ extend-select = [
     "I", # Import sorting
     "UP",  # PyUpgrade
 ]
-
-[tool.pytest.ini_options]
-durations = 10
-verbose = true

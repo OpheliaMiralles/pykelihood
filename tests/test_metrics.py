@@ -35,7 +35,7 @@ def normal_data():
 
 def test_log_likelihood_is_correct(normal_data):
     ndata = normal_data[:1000]
-    n = Normal(loc=kernels.linear(np.arange(len(ndata)))).fit_instance(ndata)
+    n = Normal(loc=kernels.linear(np.arange(len(ndata)))).fit(ndata)
     actual = log_likelihood(n, ndata)
     expected = sum(
         norm.logpdf(x, loc=loc, scale=n.scale()) for x, loc in zip(ndata, n.loc())
