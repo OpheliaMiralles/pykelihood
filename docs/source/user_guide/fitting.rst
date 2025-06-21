@@ -14,16 +14,15 @@ Let's generate a larger sample from our previous object:
 
 We can fit a ``Normal`` distribution to this data, which will return another ``Normal`` object:
 
->>> Normal.fit(data)
+>>> Normal().fit(data)
 Normal(loc=1.0250822420920338, scale=1.9376400770300832)
 
 As you can see, the values are slightly different from the moments in the data.
 This is due to the fact that the ``fit`` method returns the Maximum Likelihood Estimator (MLE)
-for the data, and is thus the result of an optimisation (using **scipy.optimize**). Custom optimizer and arguments passed
-to ``scipy.optimize.minimize`` can be passed as ``kwargs`` to the ``fit`` method of any distribution.
+for the data, and is thus the result of an optimisation (using **scipy.optimize**).
 
-The syntax ``distribution.fit(data, loc=0)`` can be used to fit the distribution to the data while keeping the ``loc``
-parameter null:
+The syntax ``distribution.fit(data, loc=1)`` can be used to fit the distribution to the data while keeping the ``loc``
+parameter at a fixed value, in this case 1:
 
->>> Normal.fit(data, loc=1)
+>>> Normal().fit(data, loc=1)
 Normal(loc=1.0, scale=1.9377929687500024)

@@ -12,13 +12,13 @@ array([-0.99802364, -0.99503679, -0.98900434, -0.98277981, -0.979487  ,
 
 If we try to fit this without a trend, the resulting distribution will miss out on most of the information.
 
->>> Normal.fit(data)
+>>> Normal().fit(data)
 Normal(loc=-3.6462053656578005e-05, scale=0.5789668679237372)
 
 Fitting a ``Normal`` distribution with a trend in the ``loc`` parameter can be done using the following piece of code:
 
 >>> from pykelihood import kernels
->>> Normal.fit(data, loc=kernels.linear(np.arange(365)))
+>>> Normal().fit(data, loc=kernels.linear(np.arange(365)))
 Normal(loc=linear(a=-1.0000458359290572, b=0.005494714384381866), scale=0.0010055323717468906)
 
 The ``kernels`` module is flexible and can be adapted by users to support any kind of trend.

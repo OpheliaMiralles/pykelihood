@@ -13,11 +13,11 @@ apply a Lasso penalty.
 >>> def lassolike_score(distribution, data):
 ...     return -np.sum(distribution.logpdf(data)) + 5 * np.abs(distribution.loc())
 ...
->>> cond_fit = Normal.fit(data, score=lassolike_score)
+>>> cond_fit = Normal().fit(data, score=lassolike_score)
 
 We then compare a fit using the standard negative log-likelihood function to the use of the Lasso-penalized likelihood.
 
->>> std_fit = Normal.fit(data)
+>>> std_fit = Normal().fit(data)
 >>> std_fit.loc.value
 -0.010891307380632494
 >>> cond_fit.loc.value
