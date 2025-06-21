@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from scipy.optimize import OptimizeResult, minimize
 
 from pykelihood.generic_types import Obs
 from pykelihood.metrics import opposite_log_likelihood
-from pykelihood.parameters import ConstantParameter, Parametrized, ensure_parametrized
+from pykelihood.parameters import Parametrized, ensure_parametrized
 
 if TYPE_CHECKING:
     from typing import Self
@@ -49,8 +50,6 @@ class Distribution(Parametrized, ABC):
         Inverse of the cumulative distribution function.
     fit(data: Obs, x0: Sequence[float] = None, score: Callable[["Distribution", Obs], float] = opposite_log_likelihood, scipy_args: Optional[Dict] = None, **fixed_values) -> SomeDistribution
         Fit the distribution to the data.
-    fit_instance(data, score=opposite_log_likelihood, x0: Sequence[float] = None, scipy_args: Optional[Dict] = None, **fixed_values)
-        Fit the instance to the data.
     """
 
     def __hash__(self):
@@ -101,15 +100,14 @@ class Distribution(Parametrized, ABC):
     def _apply_constraints(self, data):
         return data
 
-    @classmethod
     def fit(
-        cls: type[SomeDistribution],
+        self,
         data: Obs,
         x0: Sequence[float] | None = None,
         score: Callable[[Distribution, Obs], float] = opposite_log_likelihood,
         scipy_args: dict | None = None,
         **fixed_values,
-    ) -> Fit[SomeDistribution]:
+    ) -> Fit[Self]:
         """
         Fit the distribution to the data.
 
@@ -128,25 +126,14 @@ class Distribution(Parametrized, ABC):
 
         Returns
         -------
-        The result of the fit
+        The result of the fit. A new instance is created with the fitted parameters.
         """
-        init_parms = {}
-        for k in cls.params_names:
-            if k in fixed_values:
-                v = fixed_values.pop(k)
-                if isinstance(v, Parametrized):
-                    init_parms[k] = v
-                else:
-                    init_parms[k] = ConstantParameter(v)
-        # Add keyword arguments useful for object creation
-        for k, v in fixed_values.items():
-            if k not in init_parms:
-                init_parms[k] = v
-        init = cls(**init_parms)
+        init_parms = self._process_fit_params(**fixed_values)
+        init = type(self)(**init_parms)
         data = init._apply_constraints(data)
 
         if x0 is None:
-            x0 = [x.value for x in init.optimisation_params]
+            x0 = [x() for x in init.optimisation_params]
         else:
             if len(x0) != len(init.optimisation_params):
                 raise ValueError(
@@ -166,6 +153,14 @@ class Distribution(Parametrized, ABC):
         dist = init.with_params(optimization_result.x)
 
         return Fit(dist, data, score, x0=x0, optimize_result=optimization_result)
+
+    def fit_instance(self, *args, **kwargs):
+        warnings.warn(
+            "fit_instance is deprecated, use fit instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.fit(*args, **kwargs)
 
     def _process_fit_params(self, **kwds):
         out_dict = self.param_dict.copy()
@@ -194,38 +189,6 @@ class Distribution(Parametrized, ABC):
             if name not in to_remove:
                 out_dict[name] = value
         return out_dict
-
-    def fit_instance(
-        self,
-        data: Obs,
-        score=opposite_log_likelihood,
-        x0: Sequence[float] | None = None,
-        scipy_args: dict | None = None,
-        **fixed_values,
-    ) -> Fit[Self]:
-        """
-        Fit the instance to the data.
-
-        Parameters
-        ----------
-        data : Obs
-            Data to fit the instance to.
-        score : Callable[["Distribution", Obs], float], optional
-            Scoring function, by default opposite_log_likelihood.
-        x0 : Sequence[float], optional
-            Initial guess for the parameters, by default None.
-        scipy_args : Optional[Dict], optional
-            Additional arguments for scipy.optimize.minimize, by default None.
-        fixed_values : dict
-            Fixed values for the parameters.
-
-        Returns
-        -------
-        Distribution
-            Fitted instance.
-        """
-        param_dict = self._process_fit_params(**fixed_values)
-        return self.fit(data, score=score, x0=x0, scipy_args=scipy_args, **param_dict)
 
 
 @dataclass

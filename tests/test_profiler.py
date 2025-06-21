@@ -9,25 +9,25 @@ from pykelihood.profiler import Profiler
 
 @pytest.fixture(scope="module")
 def profiler(dataset):
-    fit = GEV.fit(dataset)
+    fit = GEV().fit(dataset)
     return Profiler(fit, dataset)
 
 
 @pytest.fixture(scope="module")
 def profiler_with_single_profiling_param(dataset):
-    fit = GEV.fit(dataset)
+    fit = GEV().fit(dataset)
     return Profiler(fit, dataset, single_profiling_param="shape")
 
 
 @pytest.fixture(scope="module")
 def profiler_with_fixed_param(dataset):
-    fit = GEV.fit(dataset, scale=1.0)
+    fit = GEV().fit(dataset, scale=1.0)
     return Profiler(fit, dataset)
 
 
 @pytest.fixture(scope="module")
 def profiler_with_trend(dataset):
-    fit = GEV.fit(
+    fit = GEV().fit(
         dataset, loc=kernels.linear(np.linspace(1, len(dataset), len(dataset)))
     )
     return Profiler(fit, dataset)

@@ -29,21 +29,22 @@ class TestGEV:
     def test_fit(self, datasets):
         for ds in datasets:
             c, loc, scale = stats.genextreme.fit(ds)
-            fit = GEV.fit(ds)
+            fit = GEV().fit(ds)
             assert fit.loc() == approx(loc)
             assert fit.scale() == approx(scale)
             assert fit.shape() == approx(-c)
 
     def test_fixed_values(self):
         data = np.random.standard_normal(1000)
-        raw = Normal.fit(data)
+        raw = Normal().fit(data)
         assert raw.loc() == approx(0.0)
         assert raw.scale() == approx(1.0)
-        fixed = Normal.fit(data, loc=1.0)
+        fixed = Normal().fit(data, loc=1.0)
         assert fixed.loc() == 1.0
 
 
 def test_cache():
+    """There is no cache anymore, the test is kept as it can still be useful."""
     n = Normal(0, 1)
     np.testing.assert_array_almost_equal(
         n.pdf([-1, 0, 1]), [0.24197072, 0.39894228, 0.24197072]
@@ -87,28 +88,27 @@ def test_named_with_params_partial_assignment():
     assert m.scale() == 3
 
 
-def test_fit_instance(dataset):
-    std_fit = Normal.fit(dataset)
-    instance_fit = Normal(loc=kernels.constant()).fit_instance(dataset)
-    assert std_fit.loc() == approx(instance_fit.loc())
+def test_simple_fit(dataset):
+    std_fit = Normal().fit(dataset)
+    kernel_fit = Normal(loc=kernels.constant()).fit(dataset)
+    assert std_fit.loc() == approx(kernel_fit.loc())
 
 
-def test_fit_instance_fixed_params(dataset):
-    n = Normal().fit_instance(dataset, loc=5)
+def test_fit_fixed_param(dataset):
+    n = Normal().fit(dataset, loc=5)
     assert n.loc() == 5
 
 
-def test_fit_instance_fixed_params_multi_level(dataset, linear_kernel):
+def test_fit_fixed_param_depth_2(dataset, linear_kernel):
     n = Normal(loc=linear_kernel)
-    m = n.fit_instance(dataset, loc_a=5)
+    m = n.fit(dataset, loc_a=5)
     assert m.loc.a() == 5
 
 
-def test_fit_instance_fixed_params_extra_levels(dataset):
+def test_fit_fixed_param_depth_3(dataset):
     covariate = np.arange(len(dataset))
     n = Normal(loc=kernels.linear(covariate, a=kernels.linear(covariate)))
-    n.param_mapping()
-    m = n.fit_instance(dataset, loc_a_a=5)
+    m = n.fit(dataset, loc_a_a=5)
     assert m.loc.a.a() == 5
 
 
@@ -141,8 +141,8 @@ def test_truncated_distribution_fit():
     data = n.rvs(10000)
     trunc_data = data[data >= 0]
     truncated = TruncatedDistribution(Normal(), lower_bound=0)
-    fitted_all_data = truncated.fit_instance(data)
-    fitted_trunc = truncated.fit_instance(trunc_data)
+    fitted_all_data = truncated.fit(data)
+    fitted_trunc = truncated.fit(trunc_data)
     for p_trunc, p_all in zip(
         fitted_trunc.flattened_params, fitted_all_data.flattened_params
     ):
@@ -156,27 +156,27 @@ def test_distribution_fit_with_shared_params_in_trends():
     """
     x = np.array(np.random.uniform(size=200))
     y = np.array(np.random.normal(size=200))
-    alpha0_init = 0.0
-    alpha = Parameter(alpha0_init)
-    n = Normal.fit(y, loc=linear(x=x, b=alpha), scale=linear(x=x, b=alpha))
+    alpha = Parameter(0.0)
+    n = Normal().fit(y, loc=linear(x=x, b=alpha), scale=linear(x=x, b=alpha))
     alpha1 = n.loc.b
     alpha2 = n.scale.b
     assert alpha1 == alpha2
 
 
-def test_fit_instance_fixing_shared_params_in_trends():
+def test_fit_fixing_shared_params_in_trends():
     """
-    when 2 trends in the distribution parameters share a common parameter, e.g. alpha in the below example, making one of the corresponding trend parameter constant should automatically result in the other trend parameter is constant.
+    when 2 trends in the distribution parameters share a common parameter,
+    e.g. alpha in the below example, making one of the corresponding trend parameter
+    constant should automatically result in the other trend parameter being constant.
     """
     x = np.array(np.random.uniform(size=200))
     y = np.array(np.random.normal(size=200))
-    alpha0_init = 0.0
-    alpha = Parameter(alpha0_init)
-    n = Normal.fit(y, loc=linear(x=x, b=alpha), scale=linear(x=x, b=alpha))
+    alpha = Parameter(0.0)
+    n = Normal().fit(y, loc=linear(x=x, b=alpha), scale=linear(x=x, b=alpha))
     fixed_alpha = ConstantParameter(
         n.loc.b.value
-    )  # should be equal to fit.scale.a as per problem1
-    fit_with_fixed_alpha = n.fit_instance(data=y, loc_b=fixed_alpha)
+    )  # should be equal to fit.scale.b as per previous test above
+    fit_with_fixed_alpha = n.fit(data=y, loc_b=fixed_alpha)
     assert isinstance(fit_with_fixed_alpha.scale.b, ConstantParameter)
     assert fit_with_fixed_alpha.scale.b.value == fixed_alpha.value
 

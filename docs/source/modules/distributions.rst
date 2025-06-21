@@ -23,7 +23,6 @@ some parameters have been adjusted (e.g., the GEV distribution) to align with st
 
    ~Distribution.cdf
    ~Distribution.fit
-   ~Distribution.fit_instance
    ~Distribution.inverse_cdf
    ~Distribution.isf
    ~Distribution.logcdf
