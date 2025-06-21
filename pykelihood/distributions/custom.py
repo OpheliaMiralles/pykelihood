@@ -30,11 +30,14 @@ class Exponential(ScipyDistribution):
         Rate parameter, by default 1.0.
     """
 
-    params_names = ("loc", "rate")
     _base_module = _stats.expon
 
     def __init__(self, loc=0.0, rate=1.0):
         super().__init__(loc, rate)
+
+    @property
+    def params_names(self):
+        return ("loc", "rate")
 
     def _to_scipy_args(self, loc=None, rate=None):
         """
@@ -71,11 +74,14 @@ class Gamma(ScipyDistribution):
         Shape parameter, by default 0.0.
     """
 
-    params_names = ("loc", "scale", "shape")
     _base_module = _stats.gamma
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super().__init__(loc, scale, shape)
+
+    @property
+    def params_names(self):
+        return ("loc", "scale", "shape")
 
     def _to_scipy_args(self, loc=None, scale=None, shape=None):
         """
@@ -116,11 +122,14 @@ class Pareto(ScipyDistribution):
         Shape parameter, by default 1.0.
     """
 
-    params_names = ("loc", "scale", "alpha")
     _base_module = _stats.pareto
 
     def __init__(self, loc=0.0, scale=1.0, alpha=1.0):
         super().__init__(loc, scale, alpha)
+
+    @property
+    def params_names(self):
+        return ("loc", "scale", "alpha")
 
     def _to_scipy_args(self, loc=None, scale=None, alpha=None):
         """
@@ -163,11 +172,14 @@ class Beta(ScipyDistribution):
         Beta parameter, by default 1.0.
     """
 
-    params_names = ("loc", "scale", "alpha", "beta")
     _base_module = _stats.beta
 
     def __init__(self, loc=0.0, scale=1.0, alpha=2.0, beta=1.0):
         super().__init__(loc, scale, alpha, beta)
+
+    @property
+    def params_names(self):
+        return ("loc", "scale", "alpha", "beta")
 
     def _to_scipy_args(self, loc=None, scale=None, alpha=None, beta=None):
         """
@@ -217,11 +229,14 @@ class GEV(ScipyDistribution):
     is `-c`.
     """
 
-    params_names = ("loc", "scale", "shape")
     _base_module = _stats.genextreme
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super().__init__(loc, scale, shape)
+
+    @property
+    def params_names(self):
+        return ("loc", "scale", "shape")
 
     def lb_shape(self, data):
         """
@@ -310,11 +325,14 @@ class GPD(ScipyDistribution):
         Shape parameter, by default 0.0.
     """
 
-    params_names = ("loc", "scale", "shape")
     _base_module = _stats.genpareto
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super().__init__(loc, scale, shape)
+
+    @property
+    def params_names(self):
+        return ("loc", "scale", "shape")
 
     def _to_scipy_args(self, loc=None, scale=None, shape=None):
         """
@@ -360,8 +378,6 @@ class TruncatedDistribution(Distribution):
         If the lower and upper bounds are equal.
     """
 
-    params_names = ("distribution",)
-
     def __init__(
         self, distribution: Distribution, lower_bound=-np.inf, upper_bound=np.inf
     ):
@@ -374,7 +390,11 @@ class TruncatedDistribution(Distribution):
         upper_cdf = self.distribution.cdf(self.upper_bound)
         self._normalizer = upper_cdf - lower_cdf
 
-    def _build_instance(self, **new_params):
+    @property
+    def params_names(self):
+        return ("distribution",)
+
+    def _build_instance(self, distribution: Distribution):
         """
         Build a new instance with the given parameters.
 
@@ -388,9 +408,6 @@ class TruncatedDistribution(Distribution):
         TruncatedDistribution
             The new instance.
         """
-        distribution = new_params.pop("distribution")
-        if new_params:
-            raise ValueError(f"Unexpected arguments: {new_params}")
         return type(self)(distribution, self.lower_bound, self.upper_bound)
 
     def _valid_indices(self, x: np.ndarray):
