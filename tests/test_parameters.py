@@ -13,14 +13,21 @@ def test_parameter_with_params():
     assert p.with_params([5.0])() == 5.0
 
 
+class BareParametrized(parameters.Parametrized):
+    def __init__(self, *p, names):
+        super().__init__(*p)
+        self._params_names = names
+
+    @property
+    def params_names(self):
+        return self._params_names
+
+
 def test_flattened_params():
     p1 = parameters.Parameter(1)
     p2 = parameters.ConstantParameter(2)
-    a = parameters.Parametrized(p1, 2)
-    a.params_names = ("x", "m")
-    repr(a)
-    b = parameters.Parametrized(a, p2)
-    b.params_names = ("y", "n")
+    a = BareParametrized(p1, 2, names=("x", "m"))
+    b = BareParametrized(a, p2, names=("y", "n"))
     assert set(a.flattened_param_dict.keys()) == {"x", "m"}
     assert len(a.flattened_params) == 2
     assert set(b.flattened_param_dict.keys()) == {"y_x", "y_m", "n"}
@@ -30,10 +37,8 @@ def test_flattened_params():
 def test_flattened_params_with_embedded_constant():
     p1 = parameters.Parameter(1)
     p2 = parameters.ConstantParameter(2)
-    a = parameters.Parametrized(p1, p2)
-    a.params_names = ("x", "m")
-    b = parameters.Parametrized(a)
-    b.params_names = "y"
+    a = BareParametrized(p1, p2, names=("x", "m"))
+    b = BareParametrized(a, names="y")
     assert set(a.flattened_param_dict.keys()) == {"x", "m"}
     assert len(a.flattened_params) == 2
     assert set(b.flattened_param_dict.keys()) == {"y_x", "y_m"}

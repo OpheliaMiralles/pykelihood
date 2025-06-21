@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 from collections import ChainMap
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
@@ -37,12 +38,10 @@ def ensure_parametrized(x: Any, constant=False) -> Parametrized:
     return cls(x)
 
 
-class Parametrized:
+class Parametrized(abc.ABC):
     """
     Base class for parametrized objects.
     """
-
-    params_names: tuple[str, ...]
 
     def __init__(self, *params: Parametrized | Any):
         """
@@ -54,6 +53,19 @@ class Parametrized:
             Parameters to be used in the object.
         """
         self._params = tuple(ensure_parametrized(p) for p in params)
+
+    @property
+    @abc.abstractmethod
+    def params_names(self) -> tuple[str, ...]:
+        """
+        Get the names of the parameters.
+
+        Returns
+        -------
+        tuple[str, ...]
+            The parameter names.
+        """
+        raise NotImplementedError()
 
     def _build_instance(self, **new_params) -> Self:
         """
@@ -72,7 +84,7 @@ class Parametrized:
         return type(self)(**new_params)
 
     @property
-    def params(self) -> tuple[Parametrized]:
+    def params(self) -> tuple[Parametrized, ...]:
         """
         Get parameters in their parametrized format, e.g. how they were defined.
 
@@ -96,7 +108,7 @@ class Parametrized:
         return dict(zip(self.params_names, self.params))
 
     @property
-    def flattened_params(self) -> tuple[Parametrized]:
+    def flattened_params(self) -> tuple[Parametrized, ...]:
         """
         Get a horizontal view of all parameters in the final state of their
         respective tree of dependence.
@@ -220,14 +232,6 @@ class Parametrized:
         raise NotImplementedError("A generic Parametrized object has no value!")
 
     def __repr__(self):
-        """
-        Get the string representation of the `Parametrized` object.
-
-        Returns
-        -------
-        str
-            The string representation.
-        """
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
         return f"{type(self).__name__}({', '.join(args)})"
 
@@ -326,6 +330,10 @@ class Parameter(Parametrized):
             Initial value of the parameter
         """
         self._value = np.asarray(value, dtype=np.float64)
+
+    @property
+    def params_names(self) -> tuple[()]:
+        return ()
 
     @property
     def params(self):
@@ -497,9 +505,21 @@ class ParametrizedFunction(Parametrized):
             Parameters for the function.
         """
         super().__init__(*params.values())
-        self.params_names = tuple(params.keys())
+        self._params_names = tuple(params.keys())
         self.f = f
         self.fname = fname or f.__qualname__
+
+    @property
+    def params_names(self) -> tuple[str, ...]:
+        """
+        Get the names of the parameters.
+
+        Returns
+        -------
+        tuple[str, ...]
+            The parameter names.
+        """
+        return self._params_names
 
     def __call__(self, *args, **kwargs):
         """

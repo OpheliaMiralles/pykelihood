@@ -45,12 +45,12 @@ def wrap_scipy_distribution(
 
     class Wrapper(ScipyDistribution):
         _base_module = scipy_dist
-        params_names = dist_params_names
         __doc__ = docstring
 
         def __init__(self, loc=0.0, scale=1.0, **kwargs):
-            assert self.params_names[:2] == ("loc", "scale")
-            shape_args = self.params_names[2:]
+            self._params_names = dist_params_names
+            assert self._params_names[:2] == ("loc", "scale")
+            shape_args = self._params_names[2:]
             for arg in shape_args:
                 if arg not in kwargs:
                     raise ValueError(
@@ -58,6 +58,11 @@ def wrap_scipy_distribution(
                     )
             args = [kwargs[a] for a in shape_args]
             super().__init__(loc, scale, *args)
+
+        @property
+        def params_names(self) -> tuple[str, ...]:
+            """Return the names of the parameters."""
+            return self._params_names
 
         def _to_scipy_args(self, **kwargs):
             return {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}

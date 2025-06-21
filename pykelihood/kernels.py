@@ -178,11 +178,6 @@ def kernel(**param_defaults):
     return wrapper
 
 
-"""
-Simple kernels with one covariate
-"""
-
-
 @kernel(a=0.0, b=0.0)
 def linear(X, a, b):
     r"""
@@ -290,12 +285,10 @@ def exponential_ratio(X, a, b, c):
     array-like
         Exponential ratio kernel output.
     """
-    inner = a * X
-    inner = inner / b
-    return c * np.exp(inner)
+    return c * np.exp(a * X / b)
 
 
-@kernel(mu=0.0, sigma=1.0, scaling=0.0)
+@kernel(mu=0.0, sigma=1.0, scaling=1.0)
 def gaussian(X, mu, sigma, scaling):
     r"""
     Gaussian kernel function.
