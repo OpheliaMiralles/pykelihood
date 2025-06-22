@@ -394,7 +394,7 @@ class TruncatedDistribution(Distribution):
     def params_names(self):
         return ("distribution",)
 
-    def _build_instance(self, distribution: Distribution):
+    def _build_instance(self, distribution: Distribution, **new_params):
         """
         Build a new instance with the given parameters.
 
@@ -408,6 +408,8 @@ class TruncatedDistribution(Distribution):
         TruncatedDistribution
             The new instance.
         """
+        if new_params:
+            raise ValueError(f"Unexpected arguments: {new_params}")
         return type(self)(distribution, self.lower_bound, self.upper_bound)
 
     def _valid_indices(self, x: np.ndarray):

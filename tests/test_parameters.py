@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 
 from pykelihood import parameters
@@ -14,7 +16,7 @@ def test_parameter_with_params():
 
 
 class BareParametrized(parameters.Parametrized):
-    def __init__(self, *p, names):
+    def __init__(self, *p: parameters.Parametrized | float, names: list[str]):
         super().__init__(*p)
         self._params_names = names
 
@@ -26,8 +28,8 @@ class BareParametrized(parameters.Parametrized):
 def test_flattened_params():
     p1 = parameters.Parameter(1)
     p2 = parameters.ConstantParameter(2)
-    a = BareParametrized(p1, 2, names=("x", "m"))
-    b = BareParametrized(a, p2, names=("y", "n"))
+    a = BareParametrized(p1, 2, names=["x", "m"])
+    b = BareParametrized(a, p2, names=["y", "n"])
     assert set(a.flattened_param_dict.keys()) == {"x", "m"}
     assert len(a.flattened_params) == 2
     assert set(b.flattened_param_dict.keys()) == {"y_x", "y_m", "n"}
@@ -37,13 +39,13 @@ def test_flattened_params():
 def test_flattened_params_with_embedded_constant():
     p1 = parameters.Parameter(1)
     p2 = parameters.ConstantParameter(2)
-    a = BareParametrized(p1, p2, names=("x", "m"))
-    b = BareParametrized(a, names="y")
-    assert set(a.flattened_param_dict.keys()) == {"x", "m"}
+    a = BareParametrized(p1, p2, names=["x", "m"])
+    b = BareParametrized(a, names=["y"])
+    assert set(a.flattened_param_dict) == {"x", "m"}
     assert len(a.flattened_params) == 2
-    assert set(b.flattened_param_dict.keys()) == {"y_x", "y_m"}
+    assert set(b.flattened_param_dict) == {"y_x", "y_m"}
     assert len(b.flattened_params) == 2
-    assert set(b.optimisation_param_dict.keys()) == {"y_x"}
+    assert set(b.optimisation_param_dict) == {"y_x"}
     assert len(b.optimisation_params) == 1
 
 
