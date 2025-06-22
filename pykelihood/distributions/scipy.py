@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, Self
+from typing import TYPE_CHECKING, Protocol
 
 import scipy
 from numpy.typing import ArrayLike
@@ -8,6 +8,9 @@ from packaging.version import Version
 from scipy import stats
 
 from pykelihood.distributions.base import ScipyDistribution
+
+if TYPE_CHECKING:
+    from typing import Self
 
 
 def _name_from_scipy_dist(scipy_dist: stats.rv_continuous) -> str:
