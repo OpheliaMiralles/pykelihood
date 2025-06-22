@@ -45,7 +45,7 @@ class TestGEV:
 
 def test_cache():
     """There is no cache anymore, the test is kept as it can still be useful."""
-    n = Normal(0, 1)
+    n = Normal()
     np.testing.assert_array_almost_equal(
         n.pdf([-1, 0, 1]), [0.24197072, 0.39894228, 0.24197072]
     )
@@ -113,7 +113,7 @@ def test_fit_fixed_param_depth_3(dataset):
 
 
 def test_rvs():
-    n = Normal(1)
+    n = Normal(loc=1)
     sample = n.rvs(10000, scale=2)
     assert np.mean(sample) == approx(1)
     assert np.std(sample) == approx(2)
@@ -137,7 +137,7 @@ def test_truncated_distribution_cdf():
 
 
 def test_truncated_distribution_fit():
-    n = Normal(1)
+    n = Normal(loc=1)
     data = n.rvs(10000)
     trunc_data = data[data >= 0]
     truncated = TruncatedDistribution(Normal(), lower_bound=0)

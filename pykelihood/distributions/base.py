@@ -129,7 +129,7 @@ class Distribution(Parametrized, ABC):
         The result of the fit. A new instance is created with the fitted parameters.
         """
         init_parms = self._process_fit_params(**fixed_values)
-        init = type(self)(**init_parms)
+        init = self.with_params(**init_parms)
         data = init._apply_constraints(data)
 
         if x0 is None:

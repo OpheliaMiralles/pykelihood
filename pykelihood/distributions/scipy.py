@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-import scipy.special
+from typing import Protocol, Self
+
+import scipy
+from numpy.typing import ArrayLike
 from packaging.version import Version
 from scipy import stats
 
@@ -13,9 +16,11 @@ def _name_from_scipy_dist(scipy_dist: stats.rv_continuous) -> str:
     return "".join(map(str.capitalize, scipy_dist_name.split("_")))
 
 
-def wrap_scipy_distribution(
-    scipy_dist: stats.rv_continuous,
-) -> type[ScipyDistribution]:
+class Reparametrization(Protocol):
+    def __call__(self, params: dict[str, ArrayLike]) -> dict[str, ArrayLike]: ...
+
+
+def wrap_scipy_distribution(scipy_dist: stats.rv_continuous) -> type[ScipyDistribution]:
     """Wrap a scipy distribution class to create a ScipyDistribution subclass."""
     scipy_dist_name = type(scipy_dist).__name__.removesuffix("_gen")
     clean_dist_name = _name_from_scipy_dist(scipy_dist)
@@ -47,17 +52,29 @@ def wrap_scipy_distribution(
         _base_module = scipy_dist
         __doc__ = docstring
 
-        def __init__(self, loc=0.0, scale=1.0, **kwargs):
-            self._params_names = dist_params_names
-            assert self._params_names[:2] == ("loc", "scale")
-            shape_args = self._params_names[2:]
-            for arg in shape_args:
-                if arg not in kwargs:
-                    raise ValueError(
-                        f"Missing shape parameter `{arg}` when initializing {type(self).__name__} distribution."
-                    )
-            args = [kwargs[a] for a in shape_args]
-            super().__init__(loc, scale, *args)
+        def __init__(
+            self, *, reparametrization: Reparametrization | None = None, **params
+        ):
+            self.reparametrization = reparametrization or (lambda p: p)
+            if reparametrization is None:
+                self._params_names = dist_params_names
+                assert self._params_names[:2] == ("loc", "scale")
+                shape_args = self._params_names[2:]
+                for arg in shape_args:
+                    if arg not in params:
+                        raise ValueError(
+                            f"Missing shape parameter `{arg}` when initializing {type(self).__name__} distribution."
+                        )
+                params = {
+                    "loc": params.get("loc", 0.0),
+                    "scale": params.get("scale", 1.0),
+                } | {a: params[a] for a in shape_args}
+            else:
+                self._params_names = tuple(params)
+            super().__init__(*params.values())
+
+        def _build_instance(self, **params) -> Self:
+            return type(self)(reparametrization=self.reparametrization, **params)
 
         @property
         def params_names(self) -> tuple[str, ...]:
@@ -65,7 +82,8 @@ def wrap_scipy_distribution(
             return self._params_names
 
         def _to_scipy_args(self, **kwargs):
-            return {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
+            values = {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
+            return self.reparametrization(values)
 
     Wrapper.__name__ = clean_dist_name
     Wrapper.__qualname__ = f"{Wrapper.__module__}.{Wrapper.__name__}"
