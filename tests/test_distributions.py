@@ -45,7 +45,7 @@ class TestGEV:
 
 def test_cache():
     """There is no cache anymore, the test is kept as it can still be useful."""
-    n = Normal()
+    n = Normal(0, 1)
     np.testing.assert_array_almost_equal(
         n.pdf([-1, 0, 1]), [0.24197072, 0.39894228, 0.24197072]
     )
