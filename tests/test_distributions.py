@@ -113,7 +113,7 @@ def test_fit_fixed_param_depth_3(dataset):
 
 
 def test_rvs():
-    n = Normal(loc=1)
+    n = Normal()
     sample = n.rvs(10000, scale=2)
     assert np.mean(sample) == approx(1)
     assert np.std(sample) == approx(2)
@@ -137,7 +137,7 @@ def test_truncated_distribution_cdf():
 
 
 def test_truncated_distribution_fit():
-    n = Normal(loc=1)
+    n = Normal()
     data = n.rvs(10000)
     trunc_data = data[data >= 0]
     truncated = TruncatedDistribution(Normal(), lower_bound=0)
