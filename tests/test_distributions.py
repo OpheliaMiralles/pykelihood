@@ -113,7 +113,7 @@ def test_fit_fixed_param_depth_3(dataset):
 
 
 def test_rvs():
-    n = Normal()
+    n = Normal(1)
     sample = n.rvs(10000, scale=2)
     assert np.mean(sample) == approx(1)
     assert np.std(sample) == approx(2)
