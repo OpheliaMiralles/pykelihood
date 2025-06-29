@@ -4,7 +4,7 @@ import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Generic, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, Protocol, TypeVar
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -129,7 +129,7 @@ class Distribution(Parametrized, ABC):
         The result of the fit. A new instance is created with the fitted parameters.
         """
         init_parms = self._process_fit_params(**fixed_values)
-        init = type(self)(**init_parms)
+        init = self.with_params(**init_parms)
         data = init._apply_constraints(data)
 
         if x0 is None:
@@ -236,6 +236,34 @@ class Fit(Generic[_T]):
         return getattr(self.fitted, item)
 
 
+class Reparametrization(Protocol):
+    """The blueprint for reparametrization functions.
+
+    A reparametrization function turns the parameters of the reparametrized
+    distribution into the parameters of the base distribution.
+
+    The provided parameters have already been evaluated. Parameters may be
+    renamed, modified, removed, or added to the returned dictionary to match
+    the expected parameters of the base distribution.
+    """
+
+    def __call__(self, params: dict[str, ArrayLike]) -> dict[str, ArrayLike]: ...
+
+
+def no_reparametrization(params: dict[str, ArrayLike]) -> dict[str, ArrayLike]:
+    """
+    A no-op reparametrization function that returns the parameters unchanged.
+    This is useful when no reparametrization is needed.
+    """
+    return params
+
+
+def _extract_scipy_shape_params_names(
+    scipy_dist: stats.rv_continuous,
+) -> tuple[str, ...]:
+    return tuple(scipy_dist.shapes.split(", ") if scipy_dist.shapes else ())
+
+
 class ScipyDistribution(Distribution, ABC):
     """
     Base class for distributions based on SciPy.
@@ -243,9 +271,56 @@ class ScipyDistribution(Distribution, ABC):
 
     _base_module: stats.rv_continuous
 
-    @abstractmethod
-    def _to_scipy_args(self, **params) -> dict[str, ArrayLike]:
-        raise NotImplementedError
+    def __init__(
+        self, *args, reparametrization: Reparametrization | None = None, **params
+    ):
+        if args and reparametrization:
+            raise ValueError(
+                "Cannot use both positional parameters and reparametrization."
+            )
+        self.reparametrization = reparametrization or no_reparametrization
+        if reparametrization is None:
+            self._params_names = ("loc", "scale") + _extract_scipy_shape_params_names(
+                self._base_module
+            )
+
+            # Insert the positional arguments into params
+            for arg, name in zip(args, self._params_names):
+                if name not in params:
+                    params[name] = arg
+                else:
+                    raise ValueError(
+                        f"Parameter `{name}` passed as positional and keyword argument when initializing {type(self).__name__} distribution."
+                    )
+
+            # Set default values for loc and scale if not provided
+            params["loc"] = params.get("loc", 0.0)
+            params["scale"] = params.get("scale", 1.0)
+
+            # Ensure all shape parameters are present
+            for arg in self._params_names[len(args) :]:
+                if arg not in params:
+                    raise ValueError(
+                        f"Missing shape parameter `{arg}` when initializing {type(self).__name__} distribution."
+                    )
+
+            # Reorder params to match the order of _params_names
+            params = {a: params[a] for a in self._params_names}
+        else:
+            self._params_names = tuple(params)
+        super().__init__(*params.values())
+
+    def _build_instance(self, **params) -> Self:
+        return type(self)(reparametrization=self.reparametrization, **params)
+
+    @property
+    def params_names(self) -> tuple[str, ...]:
+        """Return the names of the parameters."""
+        return self._params_names
+
+    def _to_scipy_args(self, **kwargs):
+        values = {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
+        return self.reparametrization(values)
 
     def rvs(self, size=None, random_state=None, **kwargs):
         return self._base_module.rvs(

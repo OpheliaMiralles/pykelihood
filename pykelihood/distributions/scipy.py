@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import scipy.special
+import scipy
 from packaging.version import Version
 from scipy import stats
 
@@ -13,9 +13,7 @@ def _name_from_scipy_dist(scipy_dist: stats.rv_continuous) -> str:
     return "".join(map(str.capitalize, scipy_dist_name.split("_")))
 
 
-def wrap_scipy_distribution(
-    scipy_dist: stats.rv_continuous,
-) -> type[ScipyDistribution]:
+def wrap_scipy_distribution(scipy_dist: stats.rv_continuous) -> type[ScipyDistribution]:
     """Wrap a scipy distribution class to create a ScipyDistribution subclass."""
     scipy_dist_name = type(scipy_dist).__name__.removesuffix("_gen")
     clean_dist_name = _name_from_scipy_dist(scipy_dist)
@@ -43,33 +41,15 @@ def wrap_scipy_distribution(
     for param in dist_params_names[2:]:
         docstring += format_param_docstring(param)
 
-    class Wrapper(ScipyDistribution):
-        _base_module = scipy_dist
-        __doc__ = docstring
-
-        def __init__(self, loc=0.0, scale=1.0, **kwargs):
-            self._params_names = dist_params_names
-            assert self._params_names[:2] == ("loc", "scale")
-            shape_args = self._params_names[2:]
-            for arg in shape_args:
-                if arg not in kwargs:
-                    raise ValueError(
-                        f"Missing shape parameter `{arg}` when initializing {type(self).__name__} distribution."
-                    )
-            args = [kwargs[a] for a in shape_args]
-            super().__init__(loc, scale, *args)
-
-        @property
-        def params_names(self) -> tuple[str, ...]:
-            """Return the names of the parameters."""
-            return self._params_names
-
-        def _to_scipy_args(self, **kwargs):
-            return {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
-
-    Wrapper.__name__ = clean_dist_name
-    Wrapper.__qualname__ = f"{Wrapper.__module__}.{Wrapper.__name__}"
-    return Wrapper
+    return type(
+        clean_dist_name,
+        (ScipyDistribution,),
+        {
+            "_base_module": scipy_dist,
+            "__doc__": docstring,
+            "__module__": wrap_scipy_distribution.__module__,
+        },
+    )
 
 
 Alpha = wrap_scipy_distribution(stats.alpha)
