@@ -44,7 +44,11 @@ def wrap_scipy_distribution(scipy_dist: stats.rv_continuous) -> type[ScipyDistri
     return type(
         clean_dist_name,
         (ScipyDistribution,),
-        {"_base_module": scipy_dist, "__doc__": docstring},
+        {
+            "_base_module": scipy_dist,
+            "__doc__": docstring,
+            "__module__": wrap_scipy_distribution.__module__,
+        },
     )
 
 
