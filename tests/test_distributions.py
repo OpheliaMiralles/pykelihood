@@ -137,7 +137,7 @@ def test_truncated_distribution_cdf():
 
 
 def test_truncated_distribution_fit():
-    n = Normal()
+    n = Normal(1)
     data = n.rvs(10000)
     trunc_data = data[data >= 0]
     truncated = TruncatedDistribution(Normal(), lower_bound=0)
