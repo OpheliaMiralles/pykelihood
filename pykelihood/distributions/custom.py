@@ -231,8 +231,20 @@ class GEV(ScipyDistribution):
 
     _base_module = _stats.genextreme
 
+    def _reparametrization(self, params):
+        return {
+            "c": -params["shape"],
+            "loc": params["loc"],
+            "scale": params["scale"],
+        }
+
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
-        super().__init__(loc, scale, shape)
+        super().__init__(
+            loc=loc, scale=scale, shape=shape, reparametrization=self._reparametrization
+        )
+
+    def _build_instance(self, **params):
+        return type(self)(**params)
 
     @property
     def params_names(self):
@@ -283,32 +295,6 @@ class GEV(ScipyDistribution):
             return self.scale / (x_min - self.loc())
         else:
             return self.scale / (x_max - self.loc())
-
-    def _to_scipy_args(self, loc=None, scale=None, shape=None):
-        """
-        Convert to scipy arguments.
-
-        Parameters
-        ----------
-        loc : float, optional
-            Location parameter, by default None.
-        scale : float, optional
-            Scale parameter, by default None.
-        shape : float, optional
-            Shape parameter, by default None.
-
-        Returns
-        -------
-        dict
-            Dictionary of scipy arguments.
-        """
-        if shape is not None:
-            shape = -shape
-        return {
-            "c": ifnone(shape, -self.shape()),
-            "loc": ifnone(loc, self.loc()),
-            "scale": ifnone(scale, self.scale()),
-        }
 
 
 class GPD(ScipyDistribution):
