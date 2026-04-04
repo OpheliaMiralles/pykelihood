@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, TypeVar
 import numpy as np
 import numpy.typing as npt
 
+from pykelihood.expr import Node
 from pykelihood.utils import flatten_dict
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ def ensure_parametrized(x: Any, constant=False) -> Parametrized:
     return cls(x)
 
 
-class Parametrized(abc.ABC):
+class Parametrized(Node, abc.ABC):
     """
     Base class for parametrized objects.
     """
@@ -106,6 +107,9 @@ class Parametrized(abc.ABC):
             The parameter dictionary.
         """
         return dict(zip(self.params_names, self.params))
+
+    def iter_children(self):
+        return iter(self.param_dict.items())
 
     @property
     def flattened_params(self) -> tuple[Parametrized, ...]:
