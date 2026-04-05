@@ -1,7 +1,10 @@
 name: tests
 
 on:
+  pull_request:
   push:
+    branches:
+      - master
   workflow_dispatch:
 
 concurrency:
@@ -10,23 +13,31 @@ concurrency:
 
 env:
   UV_LOCKED: true
-  UV_NO_MANAGED_PYTHON: true
+  UV_PYTHON_PREFERENCE: only-managed
+
+permissions:
+  contents: read
 
 jobs:
   tests:
     runs-on: ubuntu-latest
+    name: "Run tests on Python ${{ matrix.python-version }}"
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.9", "3.11", "3.13"]
+        python-version:
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+          - "3.14"
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup python ${{ matrix.python }}
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
-          python-version: ${{ matrix.python }}
-      - uses: astral-sh/setup-uv@v5
-      - name: Install dependencies
-        run: uv sync --all-extras --dev
+          python-version: ${{ matrix.python-version }}
+          cache-python: true
+          prune-cache: false  # be nice to PyPI
       - name: Run tests
-        run: uv run pytest .
+        run: uv run pytest

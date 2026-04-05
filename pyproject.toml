@@ -57,3 +57,6 @@ extend-select = [
     "I", # Import sorting
     "UP",  # PyUpgrade
 ]
+
+[tool.pytest]
+testpaths = ["tests"]
