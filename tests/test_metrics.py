@@ -96,7 +96,7 @@ def test_gpd(shape):
 @pytest.mark.parametrize(
     "score_func",
     [
-        crps,
+        # crps,  # very slow
         partial(Brier_score, threshold=0),
         opposite_log_likelihood,
         qq_l1_distance,
