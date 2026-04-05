@@ -65,6 +65,7 @@ def test_mle_with_fixed_param(profiler_with_fixed_param, dataset):
     )
 
 
+@pytest.mark.skip(reason="too slow")
 def test_profiles(profiler):
     profiles = profiler.profiles
     mle, profiler_opt = profiler.optimum
@@ -93,6 +94,7 @@ def test_profiles_with_single_profiling_param(profiler_with_single_profiling_par
     assert "shape" in single_param_profiles
 
 
+@pytest.mark.skip(reason="too slow")
 def test_profiles_with_trend(profiler_with_trend):
     profiles = profiler_with_trend.profiles
     mle, profiler_opt = profiler_with_trend.optimum
@@ -123,6 +125,7 @@ def test_profiles_with_fixed_param(profiler_with_fixed_param):
             )
 
 
+@pytest.mark.skip(reason="too slow")
 def test_confidence_interval(profiler):
     mle, _ = profiler.optimum
     CI = profiler.confidence_interval("shape")

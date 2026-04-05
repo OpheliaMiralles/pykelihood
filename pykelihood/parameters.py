@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import abc
 from collections import ChainMap
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 import numpy as np
 import numpy.typing as npt
 
-from pykelihood.utils import flatten_dict
+from pykelihood.expr import Node
 
 if TYPE_CHECKING:
     from typing import Self
@@ -38,7 +38,7 @@ def ensure_parametrized(x: Any, constant=False) -> Parametrized:
     return cls(x)
 
 
-class Parametrized(abc.ABC):
+class Parametrized(Node, abc.ABC):
     """
     Base class for parametrized objects.
     """
@@ -107,6 +107,19 @@ class Parametrized(abc.ABC):
         """
         return dict(zip(self.params_names, self.params))
 
+    def iter_children(self):
+        return iter(self.param_dict.items())
+
+    def _iter_named_leaf_params(
+        self, path: tuple[str, ...] = ()
+    ) -> Iterator[tuple[tuple[str, ...], Parametrized]]:
+        children = tuple(self.iter_children())
+        if not children:
+            yield path, self
+            return
+        for child_name, child in children:
+            yield from child._iter_named_leaf_params((*path, child_name))
+
     @property
     def flattened_params(self) -> tuple[Parametrized, ...]:
         """
@@ -118,7 +131,7 @@ class Parametrized(abc.ABC):
         Tuple[Parametrized]
             The flattened parameters.
         """
-        return tuple(p_ for p in self.params for p_ in p.params)
+        return tuple(param for _, param in self._iter_named_leaf_params())
 
     @property
     def flattened_param_dict(self) -> dict[str, Parametrized]:
@@ -130,21 +143,10 @@ class Parametrized(abc.ABC):
         Dict[str, Parametrized]
             The flattened parameter dictionary.
         """
-        p_dict = flatten_dict(self._flattened_param_dict_helper())
-        return {"_".join(names): value for names, value in p_dict.items()}
-
-    def _flattened_param_dict_helper(self):
-        """
-        Helper function to flatten the parameter dictionary.
-
-        Returns
-        -------
-        dict
-            The flattened parameter dictionary.
-        """
         return {
-            name: value._flattened_param_dict_helper()
-            for name, value in self.param_dict.items()
+            "_".join(path): value
+            for path, value in self._iter_named_leaf_params()
+            if path
         }
 
     def param_mapping(self, only_opt=False):
@@ -161,16 +163,14 @@ class Parametrized(abc.ABC):
         list
             The parameter mapping.
         """
-        results: list[list[Parametrized, list[str]]] = []
+        results: list[tuple[Parametrized, list[str]]] = []
         unique = []
-        for q, param_name in zip(
-            (p_ for p in self.flattened_params for p_ in p.params),
-            self.flattened_param_dict,
-        ):
+        for path, q in self._iter_named_leaf_params():
             if not (only_opt and isinstance(q, ConstantParameter)):
+                param_name = "_".join(path)
                 if q not in unique:
                     unique.append(q)
-                    results.append([q, [param_name]])
+                    results.append((q, [param_name]))
                 else:
                     for q_, names in results:
                         if q_ is q:
@@ -187,10 +187,14 @@ class Parametrized(abc.ABC):
         The optimization parameters.
         """
         unique = []
-        for q in (p_ for p in self.params for p_ in p.optimisation_params):
-            if q not in unique:
+        for _, q in self._iter_named_leaf_params():
+            if (
+                isinstance(q, Parameter)
+                and not isinstance(q, ConstantParameter)
+                and q not in unique
+            ):
                 unique.append(q)
-        return unique
+        return tuple(unique)
 
     @property
     def optimisation_param_dict(self) -> dict[str, Parameter]:
@@ -202,22 +206,12 @@ class Parametrized(abc.ABC):
         Dict[str, Parameter]
             The optimization parameter dictionary.
         """
-        p_dict = flatten_dict(self._optimisation_param_dict_helper())
-        return {"_".join(names): value for names, value in p_dict.items()}
-
-    def _optimisation_param_dict_helper(self):
-        """
-        Helper function to get the optimization parameter dictionary.
-
-        Returns
-        -------
-        dict
-            The optimization parameter dictionary.
-        """
         return {
-            name: value._optimisation_param_dict_helper()
-            for name, value in self.param_dict.items()
-            if not isinstance(value, ConstantParameter)
+            "_".join(path): value
+            for path, value in self._iter_named_leaf_params()
+            if path
+            and isinstance(value, Parameter)
+            and not isinstance(value, ConstantParameter)
         }
 
     def __call__(self, *args, **kwargs):
@@ -347,17 +341,6 @@ class Parameter(Parametrized):
         """
         return (self,)
 
-    def _flattened_param_dict_helper(self):
-        """
-        Helper function to flatten the parameter dictionary.
-
-        Returns
-        -------
-        Parameter
-            The parameter itself.
-        """
-        return self
-
     @property
     def optimisation_params(self):
         """
@@ -369,17 +352,6 @@ class Parameter(Parametrized):
             The parameter.
         """
         return (self,)
-
-    def _optimisation_param_dict_helper(self):
-        """
-        Helper function to get the optimization parameter dictionary.
-
-        Returns
-        -------
-        Parameter
-            The parameter itself.
-        """
-        return self
 
     def with_params(self, params):
         """
