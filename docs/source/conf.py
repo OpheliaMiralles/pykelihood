@@ -25,9 +25,7 @@ exclude_patterns = []
 add_module_names = False
 autosummary_generate = True
 autodoc_typehints = "none"
-autodoc_default_options = {
-    "inherited-members": None,
-}
+autodoc_default_options = {"inherited-members": None}
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
@@ -48,10 +46,7 @@ html_theme_options = {
         }
     ],
     "navbar_align": "content",
-    "logo": {
-        "image_light": "_static/logo.png",
-        "image_dark": "_static/darklogo.png",
-    },
+    "logo": {"image_light": "_static/logo.png", "image_dark": "_static/darklogo.png"},
     "navbar_start": ["navbar-logo"],
     "navbar_center": ["theme-switcher"],
     "navbar_end": ["search-field.html"],
@@ -62,12 +57,8 @@ html_context = {
     "github_user": "OpheliaMiralles",
     "github_repo": "pykelihood",
 }
-html_sidebars = {
-    "**": ["globaltoc.html", "sourcelink.html"],
-}
-intersphinx_mapping = {
-    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
-}
+html_sidebars = {"**": ["globaltoc.html", "sourcelink.html"]}
+intersphinx_mapping = {"scipy": ("https://docs.scipy.org/doc/scipy/", None)}
 autodoc_member_order = "alphabetical"
 
 

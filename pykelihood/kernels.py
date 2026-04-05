@@ -508,9 +508,7 @@ def exponential_linear_regression(
 
 
 def polynomial_regression(
-    x: Union[pd.DataFrame, np.ndarray],
-    degree: Union[int, Sequence] = 2,
-    **constraints,
+    x: Union[pd.DataFrame, np.ndarray], degree: Union[int, Sequence] = 2, **constraints
 ) -> Kernel:
     r"""
     Polynomial regression in the columns of the data.
