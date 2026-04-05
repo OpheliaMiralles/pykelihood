@@ -9,6 +9,7 @@ import numpy as np
 import numpy.typing as npt
 
 PathElem = Union[str, int]
+NodePath = tuple[PathElem, ...]
 
 
 def ensure_node(value: Node | npt.ArrayLike) -> Node:

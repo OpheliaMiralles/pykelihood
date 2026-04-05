@@ -9,6 +9,7 @@ import numpy as np
 import numpy.typing as npt
 
 from pykelihood.expr import Node
+from pykelihood.state import Transform
 
 if TYPE_CHECKING:
     from typing import Self
@@ -314,7 +315,15 @@ class Parameter(Parametrized):
     Class for a single parameter.
     """
 
-    def __init__(self, value: npt.ArrayLike) -> None:
+    def __init__(
+        self,
+        value: npt.ArrayLike | None = None,
+        *,
+        init: npt.ArrayLike | None = None,
+        shape: tuple[int, ...] | None = None,
+        transform: Transform | None = None,
+        name: str | None = None,
+    ) -> None:
         """
         Initialize the `Parameter` object.
 
@@ -323,7 +332,27 @@ class Parameter(Parametrized):
         value : float or ndarray
             Initial value of the parameter
         """
-        self._value = np.asarray(value, dtype=np.float64)
+        if value is not None and init is not None:
+            raise ValueError("Please provide only one of `value` or `init`.")
+
+        init_value = value if init is None else init
+        self.transform = transform
+        self.name = name
+
+        if init_value is None:
+            self.init = None
+            self.shape = shape or ()
+        else:
+            init_array = np.asarray(init_value, dtype=np.float64)
+            if shape is not None and shape != init_array.shape:
+                raise ValueError(
+                    f"Parameter shape {shape} does not match init shape {init_array.shape}."
+                )
+            self.init = init_array
+            self.shape = init_array.shape
+
+        self.size = np.prod(self.shape, dtype=int).item()
+        self._value = self.init
 
     @property
     def params_names(self) -> tuple[()]:
@@ -370,7 +399,9 @@ class Parameter(Parametrized):
         param = next(iter(params))
         if isinstance(param, ConstantParameter):
             return param
-        return type(self)(param)
+        return type(self)(
+            param, shape=self.shape, transform=self.transform, name=self.name
+        )
 
     @property
     def value(self) -> npt.NDArray[np.float64]:
@@ -382,6 +413,8 @@ class Parameter(Parametrized):
         ndarray
             The value.
         """
+        if self._value is None:
+            raise ValueError(f"Parameter {self!r} has no initial value.")
         return self._value
 
     def __call__(self):
@@ -404,7 +437,16 @@ class Parameter(Parametrized):
         str
             The string representation.
         """
-        return repr(self.value)
+        parts = []
+        if self.name is not None:
+            parts.append(f"name={self.name!r}")
+        if self.init is not None:
+            parts.append(f"init={self.init!r}")
+        if self.init is None:
+            parts.append(f"shape={self.shape!r}")
+        if self.transform is not None:
+            parts.append(f"transform={self.transform!r}")
+        return f"Parameter({', '.join(parts)})" if parts else "Parameter()"
 
     def __getattr__(self, item):
         """
