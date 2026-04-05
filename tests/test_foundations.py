@@ -58,13 +58,7 @@ def test_parameter_traversal_is_deterministic() -> None:
 
     paths = [path for path, _ in walk_nodes(outer)]
 
-    assert paths == [
-        (),
-        ("loc",),
-        ("loc", "alpha"),
-        ("loc", "offset"),
-        ("scale",),
-    ]
+    assert paths == [(), ("loc",), ("loc", "alpha"), ("loc", "offset"), ("scale",)]
 
 
 def test_literal_values_normalize_into_constant_nodes() -> None:
