@@ -57,6 +57,10 @@ extend-select = [
     "I", # Import sorting
     "UP",  # PyUpgrade
 ]
+isort.split-on-trailing-comma = false
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
 
 [tool.pytest]
 testpaths = ["tests"]

@@ -125,12 +125,9 @@ def pp_plot(
     matplotlib.axes.Axes
         The axes with the plot.
     """
-    (
-        theoretical,
-        empirical,
-        lower_bound,
-        upper_bound,
-    ) = get_quantiles_and_confidence_intervals_uniform_scale(fit, data, ci_confidence)
+    (theoretical, empirical, lower_bound, upper_bound) = (
+        get_quantiles_and_confidence_intervals_uniform_scale(fit, data, ci_confidence)
+    )
     n = len(data)
     ax.scatter(theoretical, empirical, s=5, color="navy")
     ax.plot(theoretical, theoretical, label="$x=y$", color="navy")
@@ -176,12 +173,9 @@ def qq_plot(
     matplotlib.axes.Axes
         The axes with the plot.
     """
-    (
-        theoretical,
-        empirical,
-        lower_bound,
-        upper_bound,
-    ) = get_quantiles_and_confidence_intervals(fit, data, ci_confidence)
+    (theoretical, empirical, lower_bound, upper_bound) = (
+        get_quantiles_and_confidence_intervals(fit, data, ci_confidence)
+    )
     n = len(data)
     ax.scatter(theoretical, empirical, s=5, color="navy")
     ax.plot(theoretical, theoretical, label="$x=y$", color="navy")
@@ -229,12 +223,9 @@ def qq_plot_exponential_scale(
     matplotlib.axes.Axes
         The axes with the plot.
     """
-    (
-        theoretical,
-        empirical,
-        lower_bound,
-        upper_bound,
-    ) = get_quantiles_and_confidence_intervals_uniform_scale(fit, data, ci_confidence)
+    (theoretical, empirical, lower_bound, upper_bound) = (
+        get_quantiles_and_confidence_intervals_uniform_scale(fit, data, ci_confidence)
+    )
     unit_exp = Exponential()
     theo_exp = unit_exp.inverse_cdf(theoretical)
     empi_exp = unit_exp.inverse_cdf(empirical)
@@ -285,12 +276,9 @@ def qq_plot_frechet_scale(
     matplotlib.axes.Axes
         The axes with the plot.
     """
-    (
-        theoretical,
-        empirical,
-        lower_bound,
-        upper_bound,
-    ) = get_quantiles_and_confidence_intervals_uniform_scale(fit, data, ci_confidence)
+    (theoretical, empirical, lower_bound, upper_bound) = (
+        get_quantiles_and_confidence_intervals_uniform_scale(fit, data, ci_confidence)
+    )
     unit_frechet = GEV(1, 1, -1)
     theo_fr = unit_frechet.inverse_cdf(theoretical)
     empi_fr = unit_frechet.inverse_cdf(empirical)

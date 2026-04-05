@@ -232,11 +232,7 @@ class GEV(ScipyDistribution):
     _base_module = _stats.genextreme
 
     def _reparametrization(self, params):
-        return {
-            "c": -params["shape"],
-            "loc": params["loc"],
-            "scale": params["scale"],
-        }
+        return {"c": -params["shape"], "loc": params["loc"], "scale": params["scale"]}
 
     def __init__(self, loc=0.0, scale=1.0, shape=0.0):
         super().__init__(
@@ -488,9 +484,7 @@ class TruncatedDistribution(Distribution):
             Probability density values.
         """
         return np.where(
-            self._valid_indices(x),
-            self.distribution.pdf(x) / self._normalizer,
-            0.0,
+            self._valid_indices(x), self.distribution.pdf(x) / self._normalizer, 0.0
         )
 
     def cdf(self, x: Obs):
