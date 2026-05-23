@@ -34,6 +34,13 @@ def test_linear_trend_with_constraint(dataset):
     assert (trend.with_params([3])() == 2 + dataset * 3).all()
 
 
+def test_polynomial_trend(dataset):
+    trend = kernels.polynomial(dataset)
+    assert len(trend.params) == 3
+    assert len(trend.optimisation_params) == 3
+    assert (trend.with_params([1, 2, 3])() == 1 + 2 * dataset + 3 * dataset**2).all()
+
+
 def test_trend_in_trend(dataset):
     inner_trend = kernels.linear(dataset)
     outer_trend = kernels.linear(dataset, b=inner_trend)

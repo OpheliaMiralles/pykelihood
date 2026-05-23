@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import abc
 from collections import ChainMap
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 import numpy as np
 import numpy.typing as npt
 
-from pykelihood.expr import Node
+from pykelihood.expr import Expr
 from pykelihood.state import Transform
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 
 _T = TypeVar("_T")
 
@@ -39,7 +39,7 @@ def ensure_parametrized(x: Any, constant=False) -> Parametrized:
     return cls(x)
 
 
-class Parametrized(Node, abc.ABC):
+class Parametrized(Expr, abc.ABC):
     """
     Base class for parametrized objects.
     """
@@ -226,6 +226,9 @@ class Parametrized(Node, abc.ABC):
         """
         raise NotImplementedError("A generic Parametrized object has no value!")
 
+    def eval(self, state: Mapping[Parameter, npt.NDArray[np.float64]]):
+        return self()
+
     def __repr__(self):
         args = [f"{a}={v!r}" for a, v in zip(self.params_names, self._params)]
         return f"{type(self).__name__}({', '.join(args)})"
@@ -371,7 +374,7 @@ class Parameter(Parametrized):
         return (self,)
 
     @property
-    def optimisation_params(self):
+    def optimisation_params(self) -> tuple[Parameter, ...]:
         """
         Get the parameter itself for optimization.
 
@@ -382,7 +385,7 @@ class Parameter(Parametrized):
         """
         return (self,)
 
-    def with_params(self, params):
+    def with_params(self, params: Iterable | None = None, **named_params):
         """
         Create a new instance of the parameter with the given value.
 
@@ -396,6 +399,8 @@ class Parameter(Parametrized):
         Parameter
             The new instance.
         """
+        if params is None or named_params:
+            raise ValueError("Parameters only support positional replacement values.")
         param = next(iter(params))
         if isinstance(param, ConstantParameter):
             return param
@@ -426,6 +431,13 @@ class Parameter(Parametrized):
         float
             The value.
         """
+        return self.value
+
+    def eval(
+        self, state: Mapping[Parameter, npt.NDArray[np.float64]]
+    ) -> npt.NDArray[np.float64]:
+        if self in state:
+            return np.asarray(state[self], dtype=np.float64)
         return self.value
 
     def __repr__(self):
@@ -470,7 +482,7 @@ class ConstantParameter(Parameter):
     Utility class used to manage parameters that are not optimized.
     """
 
-    def with_params(self, params):
+    def with_params(self, params: Iterable | None = None, **named_params):
         """
         Return the parameter itself, as it is constant.
 
@@ -487,7 +499,7 @@ class ConstantParameter(Parameter):
         return self
 
     @property
-    def optimisation_params(self):
+    def optimisation_params(self) -> tuple[Parameter, ...]:
         """
         Do not include in optimization parameters.
 

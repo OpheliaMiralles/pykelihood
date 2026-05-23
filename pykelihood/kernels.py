@@ -1,58 +1,177 @@
+from __future__ import annotations
+
+import inspect
 import re
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Hashable, Mapping, Sequence
 from functools import wraps
-from itertools import count
-from typing import Union
+from typing import Any, Callable, Union
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
-from pykelihood.parameters import Parameter, ParametrizedFunction, ensure_parametrized
+from pykelihood.effects import (
+    BoundEffect,
+    CategoricalEffect,
+    Effect,
+    FunctionEffect,
+    build_effect,
+)
+from pykelihood.effects import categorical as _categorical_effect
+from pykelihood.effects import constant as _constant_effect
+from pykelihood.effects import exp as _exp_effect
+from pykelihood.effects import gaussian as _gaussian_effect
+from pykelihood.effects import linear as _linear_effect
+from pykelihood.expr import Constant, Expr, FunctionExpr, PathElem, require_expr
+from pykelihood.parameters import (
+    ConstantParameter,
+    Parameter,
+    Parametrized,
+    ensure_parametrized,
+)
+from pykelihood.state import initial_state
+
+RegressionData = Union[pd.DataFrame, npt.NDArray[np.float64]]
+KernelArg = Union["Kernel", Effect, Expr, npt.ArrayLike]
 
 
-class Kernel(ParametrizedFunction):
+class _CompatNode(Parametrized):
+    """Represent an expression node through the `Parametrized` interface."""
+
+    def __init__(
+        self,
+        factory: Callable[..., Effect | Expr],
+        *,
+        name: str,
+        params: Mapping[str, Parametrized],
+    ) -> None:
+        self._factory = factory
+        self._name = name
+        self._params_names = tuple(params)
+        self._params = tuple(params.values())
+
+    @property
+    def params_names(self) -> tuple[str, ...]:
+        return self._params_names
+
+    def _build_instance(self, **new_params):
+        merged = dict(self.param_dict)
+        merged.update(
+            {name: _compat_param(value) for name, value in new_params.items()}
+        )
+        return type(self)(self._factory, name=self._name, params=merged)
+
+    def to_node(self) -> Effect | Expr:
+        return self._factory(*(_compat_to_node(param) for param in self._params))
+
+    def __call__(self):
+        expr = require_expr(self.to_node())
+        return expr.eval(initial_state(expr))
+
+
+def _compat_param(value: Any) -> Parametrized:
+    """Normalize a kernel argument to a `Parametrized` child."""
+    if isinstance(value, Kernel):
+        return value._compat
+    if isinstance(value, Parametrized):
+        return value
+    if isinstance(value, (Effect, Expr)):
+        return _compat_from_node(value)
+    return ensure_parametrized(value)
+
+
+def _compat_to_node(param: Parametrized) -> Effect | Expr:
+    if isinstance(param, _CompatNode):
+        return param.to_node()
+    return param
+
+
+def _compat_from_node(node: Effect | Expr) -> Parametrized:
+    """Translate an expression tree into a `Parametrized` shape."""
+    if isinstance(node, Parametrized):
+        return node
+    if isinstance(node, Constant):
+        return ConstantParameter(node.value)
+    if isinstance(node, FunctionExpr):
+        names = tuple(
+            str(index if node.arg_names is None else node.arg_names[index])
+            for index, _ in enumerate(node.args)
+        )
+        params = {name: _compat_from_node(arg) for name, arg in zip(names, node.args)}
+        return _CompatNode(
+            lambda *args: FunctionExpr(
+                node.function,
+                tuple(require_expr(arg) for arg in args),
+                node.name,
+                node.arg_names,
+            ),
+            name=node.name,
+            params=params,
+        )
+    if isinstance(node, FunctionEffect):
+        keys = tuple(node.args)
+        params = {str(name): _compat_from_node(arg) for name, arg in node.args.items()}
+        return _CompatNode(
+            lambda *args: FunctionEffect(
+                node.function, dict(zip(keys, args)), node.name
+            ),
+            name=node.name,
+            params=params,
+        )
+    if isinstance(node, CategoricalEffect):
+        used_names: dict[str, int] = {}
+        names_by_level: dict[Hashable, str] = {}
+        for level in node.levels:
+            base_name = str(level)
+            count = used_names.get(base_name, 0)
+            name = base_name if count == 0 else f"{base_name}_{count}"
+            used_names[base_name] = count + 1
+            names_by_level[level] = name
+        params = {
+            names_by_level[level]: _compat_from_node(node.level_args[level])
+            for level in node.levels
+        }
+        return _CompatNode(
+            lambda *args: CategoricalEffect(
+                node.levels, {level: arg for level, arg in zip(node.levels, args)}
+            ),
+            name="categorical",
+            params=params,
+        )
+    raise TypeError(
+        f"Unsupported node type for kernel compatibility: {type(node).__name__}"
+    )
+
+
+class Kernel(Parametrized):
     """
     Represents a kernel function of one covariate with parameters.
-
-    Parameters
-    ----------
-    f : callable
-        The kernel function to be wrapped.
-    x : array-like, optional
-        Covariates on which the kernel will operate.
-    fname : str, optional
-        Name of the kernel function.
-    params : dict
-        Parameters of the kernel function.
     """
 
-    def __init__(self, f, x=None, fname=None, **params):
-        """Function of one covariate with parameters."""
-        fname = fname or f.__qualname__
-        super().__init__(f, fname=fname, **params)
-        self._validate(x)
-        self.x = x
+    def __init__(self, effect: Effect, covariate: npt.ArrayLike | None = None) -> None:
+        self.covariate = covariate
+        self._compat = _compat_from_node(effect)
+        self._params_names = self._compat.params_names
+        self._params = self._compat.params
 
-    def _validate(self, x):
-        """
-        Validates the covariate input.
+    @classmethod
+    def from_compat(
+        cls, compat: Parametrized, covariate: npt.ArrayLike | None = None
+    ) -> Kernel:
+        instance = cls.__new__(cls)
+        instance.covariate = covariate
+        instance._compat = compat
+        instance._params_names = compat.params_names
+        instance._params = compat.params
+        return instance
 
-        Parameters
-        ----------
-        x : array-like
-            Covariates to validate.
+    @property
+    def params_names(self) -> tuple[str, ...]:
+        return self._params_names
 
-        Raises
-        ------
-        ValueError
-            If `x` is not iterable.
-        """
-        try:
-            iter(x)
-        except TypeError:
-            raise ValueError(
-                f"Incorrect covariate for {self.fname}: {self.x}"
-            ) from None
+    @property
+    def effect(self) -> Effect:
+        return _compat_to_node(self._compat)  # pyright: ignore[reportReturnType]
 
     def __call__(self, x=None):
         """
@@ -61,21 +180,21 @@ class Kernel(ParametrizedFunction):
         Parameters
         ----------
         x : array-like, optional
-            Covariate values. If not provided, uses the instance's `x`.
+            Covariate values. If not provided, uses the instance's `covariate`.
 
         Returns
         -------
         float
             Result of the kernel function evaluation.
         """
-        if x is None:
-            x = self.x
-        self._validate(x)
-        param_values = {p_name: p() for p_name, p in self.param_dict.items()}
-        return self.f(x, **param_values)
+        covariate = self.covariate if x is None else x
+        if covariate is None:
+            covariate = np.array(0.0, dtype=np.float64)
+        return BoundEffect(self.effect, covariate).eval({})
 
     def _build_instance(self, **new_params):
-        return type(self)(self.f, self.x, fname=self.fname, **new_params)
+        compat = self._compat._build_instance(**new_params)
+        return type(self).from_compat(compat, self.covariate)
 
     def with_covariate(self, covariate):
         """
@@ -91,10 +210,49 @@ class Kernel(ParametrizedFunction):
         Kernel
             New kernel instance with updated covariate.
         """
-        return type(self)(self.f, covariate, fname=self.fname, **self.param_dict)
+        return type(self).from_compat(self._compat, covariate)
 
 
-class constant(Kernel):
+def _unwrap_kernel_arg(value: KernelArg) -> Effect | Expr | npt.ArrayLike:
+    if isinstance(value, Kernel):
+        return value.effect
+    return value
+
+
+def _kernel_arguments(
+    **kwargs: KernelArg | None,
+) -> dict[PathElem, Effect | Expr | npt.ArrayLike]:
+    return {
+        name: _unwrap_kernel_arg(value)
+        for name, value in kwargs.items()
+        if value is not None
+    }
+
+
+def kernel(function: Callable[..., Any]) -> Callable[..., Kernel]:
+    signature = inspect.signature(function)
+    parameters = tuple(signature.parameters.values())
+    if not parameters:
+        raise TypeError("kernel expects a function with a covariate parameter.")
+    kernel_parameters = parameters[1:]
+    kernel_signature = inspect.Signature(parameters=kernel_parameters)
+    parameter_names = tuple(parameter.name for parameter in kernel_parameters)
+
+    @wraps(function)
+    def build(x: npt.ArrayLike | None = None, *args: Any, **kwargs: Any) -> Kernel:
+        bound = kernel_signature.bind_partial(*args, **kwargs)
+        effect = build_effect(
+            function,
+            name=function.__name__,
+            parameter_names=parameter_names,
+            arguments=_kernel_arguments(**bound.arguments),
+        )
+        return Kernel(effect, x)
+
+    return build
+
+
+def constant(value: KernelArg = 0.0) -> Kernel:
     """
     A kernel representing a constant value.
 
@@ -103,93 +261,30 @@ class constant(Kernel):
     value : float, optional
         Constant value for the kernel. Default is 0.0.
     """
-
-    def __init__(self, value=0.0):
-        super().__init__(self._call, fname="constant", value=value)
-
-    def _build_instance(self, value):
-        return constant(value)
-
-    def _validate(self, x):
-        """
-        Validates the input for the constant kernel.
-
-        Parameters
-        ----------
-        x : any
-            Input value to validate.
-
-        Raises
-        ------
-        ValueError
-            If `x` is not None.
-        """
-        if x is not None:
-            raise ValueError(f"Unexpected data for constant kernel: {x}")
-
-    def _call(self, _x, value):
-        """
-        Compute the constant kernel value.
-
-        Parameters
-        ----------
-        _x : any
-            Ignored input.
-        value : float
-            The constant value.
-
-        Returns
-        -------
-        float
-            The constant value.
-        """
-        return value
+    unwrapped = _unwrap_kernel_arg(value)
+    if isinstance(unwrapped, (Effect, Expr)):
+        effect = _constant_effect(unwrapped)
+    else:
+        effect = _constant_effect(Parameter(unwrapped))
+    return Kernel(effect, None)
 
 
-def kernel(**param_defaults):
-    """
-    Decorator for creating a kernel function with parameters.
-
-    Parameters
-    ----------
-    param_defaults : dict
-        Default values for the kernel parameters.
-
-    Returns
-    -------
-    callable
-        A decorated kernel function.
-    """
-
-    def wrapper(f):
-        @wraps(f)
-        def wrapped(x, **param_values) -> Kernel:
-            final_params = {}
-            for p_name, default_value in param_defaults.items():
-                override = param_values.get(p_name)
-                if override is not None:
-                    final_params[p_name] = ensure_parametrized(override, constant=True)
-                else:
-                    final_params[p_name] = ensure_parametrized(default_value)
-            return Kernel(f, x, fname=f.__name__, **final_params)
-
-        return wrapped
-
-    return wrapper
-
-
-@kernel(a=0.0, b=0.0)
-def linear(X, a, b):
+def linear(
+    x: npt.ArrayLike | None = None,
+    *,
+    a: KernelArg | None = None,
+    b: KernelArg | None = None,
+) -> Kernel:
     r"""
     Linear kernel function.
 
     .. math::
 
-        y = a + b \cdot X
+        y = a + b \cdot x
 
     Parameters
     ----------
-    X : array-like
+    x : array-like
         Input data.
     a : float
         Intercept of the linear function.
@@ -201,11 +296,48 @@ def linear(X, a, b):
     array-like
         Output of the linear kernel.
     """
-    return a + b * X
+    effect_kwargs = {}
+    if b is not None:
+        effect_kwargs["slope"] = _unwrap_kernel_arg(b)
+
+    effect: Effect = _linear_effect(**effect_kwargs)
+    if not isinstance(effect, FunctionEffect):
+        raise TypeError("effects.linear is expected to return a FunctionEffect.")
+    linear_effect = effect
+    if a is not None:
+        effect = build_effect(
+            lambda x, a, b: a + b * x,
+            name="linear",
+            parameter_names=("a", "b"),
+            arguments={"a": _unwrap_kernel_arg(a), "b": linear_effect.args["slope"]},
+        )
+    elif x is None:
+        effect = build_effect(
+            lambda x, a, b: a + b * x,
+            name="linear",
+            parameter_names=("a", "b"),
+            arguments={
+                "a": Parameter(init=0.0, name="a"),
+                "b": Parameter(init=0.0, name="b"),
+            },
+        )
+    else:
+        effect = build_effect(
+            lambda x, a, b: a + b * x,
+            name="linear",
+            parameter_names=("a", "b"),
+            arguments={
+                "a": Parameter(init=0.0, name="a"),
+                "b": linear_effect.args["slope"],
+            },
+        )
+    return Kernel(effect, x)
 
 
-@kernel(a=0.0, b=0.0, c=0.0)
-def polynomial(X, a, b, c):
+@kernel
+def polynomial(
+    x: npt.ArrayLike, a: Any = None, b: Any = None, c: Any = None
+) -> npt.NDArray[np.float64]:
     r"""
     Polynomial kernel function.
 
@@ -229,11 +361,14 @@ def polynomial(X, a, b, c):
     array-like
         Output of the polynomial kernel.
     """
-    return a + b * X + c * X**2
+    x_value = np.asarray(x, dtype=np.float64)
+    return a + b * x_value + c * x_value**2
 
 
-@kernel(a=0.0, b=0.0)
-def exponential(X, a, b):
+@kernel
+def exponential(
+    x: npt.ArrayLike, a: Any = None, b: Any = None
+) -> npt.NDArray[np.float64]:
     r"""
     Exponential kernel function.
 
@@ -255,13 +390,13 @@ def exponential(X, a, b):
     array-like
         Exponential of the linear function.
     """
-    inner = b * X
-    inner = a + inner
-    return np.exp(inner)
+    return np.exp(a + b * x)
 
 
-@kernel(a=0.0, b=1.0, c=1.0)
-def exponential_ratio(X, a, b, c):
+@kernel
+def exponential_ratio(
+    x: npt.ArrayLike, a: Any = None, b: Any = None, c: Any = None
+) -> npt.NDArray[np.float64]:
     r"""
     Exponential ratio kernel function.
 
@@ -285,11 +420,16 @@ def exponential_ratio(X, a, b, c):
     array-like
         Exponential ratio kernel output.
     """
-    return c * np.exp(a * X / b)
+    return c * np.exp(a * x / b)
 
 
-@kernel(mu=0.0, sigma=1.0, scaling=1.0)
-def gaussian(X, mu, sigma, scaling):
+def gaussian(
+    x: npt.ArrayLike | None = None,
+    *,
+    mu: KernelArg | None = None,
+    sigma: KernelArg | None = None,
+    scaling: KernelArg | None = None,
+) -> Kernel:
     r"""
     Gaussian kernel function.
 
@@ -314,13 +454,19 @@ def gaussian(X, mu, sigma, scaling):
     array-like
         Gaussian kernel output.
     """
-    mult = scaling * 1 / (sigma * np.sqrt(2 * np.pi))
-    expo = np.exp(-((X - mu) ** 2) / sigma**2)
-    return mult * expo
+    effect_kwargs = {
+        name: _unwrap_kernel_arg(value)
+        for name, value in {"mu": mu, "sigma": sigma, "scaling": scaling}.items()
+        if value is not None
+    }
+    effect = _gaussian_effect(**effect_kwargs)
+    return Kernel(effect, x)
 
 
-@kernel(a=0.0, b=0.0, c=0.0)
-def trigonometric(X, a, b, c):
+@kernel
+def trigonometric(
+    x: npt.ArrayLike, a: Any = None, b: Any = None, c: Any = None
+) -> npt.NDArray[np.float64]:
     r"""
     Trigonometric kernel function.
 
@@ -344,11 +490,14 @@ def trigonometric(X, a, b, c):
     array-like
         Trigonometric kernel output.
     """
-    return a + b * np.cos(2 * np.pi * X) + c * np.sin(2 * np.pi * X)
+    x_value = np.asarray(x, dtype=np.float64)
+    return a + b * np.cos(2 * np.pi * x_value) + c * np.sin(2 * np.pi * x_value)
 
 
-@kernel(mu=0.0, alpha=0.0, theta=1.0)
-def hawkes(X, mu, alpha, theta):
+@kernel
+def hawkes(
+    x: npt.NDArray, mu: Any = None, alpha: Any = None, theta: Any = None
+) -> npt.NDArray[np.float64]:
     r"""
     Hawkes process with exponential kernel.
 
@@ -373,17 +522,12 @@ def hawkes(X, mu, alpha, theta):
         Intensity function values at each time point.
     """
     return mu + alpha * theta * np.array(
-        [np.sum(np.exp(-theta * (X[i] - X[:i]))) for i in range(len(X))]
+        [np.sum(np.exp(-theta * (x[i] - x[:i]))) for i in range(len(x))]
     )
 
 
-"""
-Sophisticated kernels with multiple covariates
-"""
-
-
 def linear_regression(
-    x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
+    x: RegressionData, add_intercept: bool = False, **constraints: KernelArg
 ) -> Kernel:
     r"""
     Linear regression of the columns in the data.
@@ -411,41 +555,61 @@ def linear_regression(
     float
         The linear sum computed from the input data.
     """
-    if len(x.shape) > 1:
-        ndim = x.shape[1]
-    else:
-        raise ValueError("Consider using kernels.linear for a 1-dimensional data array")
-    fixed = {}
-    for p_name, p_value in constraints.items():
-        if p_name.startswith("beta_"):
-            p_name = p_name[len("beta_") :]
-        if isinstance(x, pd.DataFrame) and p_name in x.columns:
-            index = tuple(x.columns).index(p_name) + 1
+    matrix = np.asarray(x, dtype=np.float64)
+    if matrix.ndim == 1:
+        matrix = matrix[:, np.newaxis]
+    elif matrix.ndim != 2:
+        raise ValueError("linear_regression expects a 1- or 2-dimensional array.")
+    translated_constraints = {}
+    for parameter_name, value in constraints.items():
+        raw_name = parameter_name.removeprefix("beta_")
+        if isinstance(x, pd.DataFrame) and raw_name in x.columns:
+            index = x.columns.get_loc(raw_name)
+            if not isinstance(index, int):
+                raise ValueError(
+                    f"Unable to resolve parameter constraint: {parameter_name}"
+                )
+            translated_name = f"beta_{index + 1}"
         else:
-            index = int(p_name)
-        fixed[index] = ensure_parametrized(p_value, constant=True)
+            translated_name = parameter_name
+        translated_constraints[translated_name] = _unwrap_kernel_arg(value)
 
-    if 0 in fixed and not add_intercept:
+    if "beta_0" in translated_constraints and not add_intercept:
         raise ValueError(
             "A fixed value is given for the intercept, but `add_intercept` is not True."
         )
 
-    param_indices = range(0 if add_intercept else 1, ndim + 1)
-    params = {
-        f"beta_{i}": Parameter(0.0) if i not in fixed else fixed[i]
-        for i in param_indices
-    }
+    parameter_names = tuple(
+        f"beta_{index}"
+        for index in range(0 if add_intercept else 1, matrix.shape[1] + 1)
+    )
 
-    def _compute(data, **params_from_wrapper):
-        intercept = params_from_wrapper.pop("beta_0", 0)
-        sorted_params = [params_from_wrapper[k] for k in params if k != "beta_0"]
-        return intercept + (sorted_params * data).sum(axis=1)
+    def regression_fn(
+        data: npt.ArrayLike, *resolved: npt.ArrayLike
+    ) -> npt.NDArray[np.float64]:
+        data_array = np.asarray(data, dtype=np.float64)
+        if data_array.ndim == 1:
+            data_array = data_array[:, np.newaxis]
+        values = [np.asarray(value, dtype=np.float64) for value in resolved]
+        if add_intercept:
+            intercept, coefficient_values = values[0], values[1:]
+        else:
+            intercept = np.array(0.0, dtype=np.float64)
+            coefficient_values = values
+        coefficients = np.stack(coefficient_values)
+        return intercept + (coefficients * data_array).sum(axis=1)
 
-    return Kernel(_compute, x, **params, fname=linear_regression.__qualname__)
+    effect = build_effect(
+        regression_fn,
+        name="linear_regression",
+        parameter_names=parameter_names,
+        arguments=translated_constraints,
+    )
+    return Kernel(effect, matrix)
 
 
 def exponential_linear_regression(
-    x: Union[pd.DataFrame, np.ndarray], add_intercept=False, **constraints
+    x: RegressionData, add_intercept: bool = False, **constraints: KernelArg
 ) -> Kernel:
     r"""
     Exponential of a linear sum of the columns in the data.
@@ -473,42 +637,12 @@ def exponential_linear_regression(
     float
         The linear sum computed from the input data.
     """
-    if len(x.shape) > 1:
-        ndim = x.shape[1]
-    else:
-        raise ValueError("Consider using kernels.expo for a 1-dimensional data array")
-    fixed = {}
-    for p_name, p_value in constraints.items():
-        if p_name.startswith("beta_"):
-            p_name = p_name[len("beta_") :]
-        if isinstance(x, pd.DataFrame) and p_name in x.columns:
-            index = tuple(x.columns).index(p_name) + 1
-        else:
-            index = int(p_name)
-        fixed[index] = ensure_parametrized(p_value, constant=True)
-
-    if 0 in fixed and not add_intercept:
-        raise ValueError(
-            "A fixed value is given for the intercept, but `add_intercept` is not True."
-        )
-
-    param_indices = range(0 if add_intercept else 1, ndim + 1)
-    params = {
-        f"beta_{i}": Parameter(0.0) if i not in fixed else fixed[i]
-        for i in param_indices
-    }
-
-    def _compute(data, **params_from_wrapper):
-        sorted_params = np.stack([params_from_wrapper[k] for k in params])
-        return np.exp((sorted_params * data).sum(axis=1))
-
-    return Kernel(
-        _compute, x, **params, fname=exponential_linear_regression.__qualname__
-    )
+    regression = linear_regression(x, add_intercept=add_intercept, **constraints)
+    return Kernel(_exp_effect(regression.effect), regression.covariate)
 
 
 def polynomial_regression(
-    x: Union[pd.DataFrame, np.ndarray], degree: Union[int, Sequence] = 2, **constraints
+    x: RegressionData, degree: int | Sequence[int] = 2, **constraints: KernelArg
 ) -> Kernel:
     r"""
     Polynomial regression in the columns of the data.
@@ -535,51 +669,79 @@ def polynomial_regression(
     float
         The polynomial regression computed from the input data.
     """
-    if len(x.shape) > 1:
-        ndim = x.shape[1]
-    else:
-        raise ValueError("Consider using kernels.linear for a 1-dimensional data array")
+    matrix = np.asarray(x, dtype=np.float64)
     if isinstance(degree, int):
-        assert degree > 0, "This model considers positive power laws only."
-        degree = [degree] * ndim
+        effect_degree = int(degree)
+        degrees = [effect_degree] * matrix.shape[1]
     else:
-        assert len(degree) == ndim, (
-            "The number of degrees is different than the number of covariates."
-        )
-    ncols = sum(degree)
-    fixed = {}
-    for p_name, p_value in constraints.items():
-        if p_name.startswith("beta_"):
-            p_name = p_name[len("beta_") :]
-        match = re.match(r"^(.+)_(\d+)$", p_name)
-        if match:
-            column, deg = match.groups()
+        degrees = list(degree)
+        if len(degrees) != matrix.shape[1]:
+            raise ValueError(
+                "The number of degrees is different than the number of covariates."
+            )
+        effect_degree = max(degrees)
+
+    translated_constraints = {}
+    for parameter_name, value in constraints.items():
+        raw_name = parameter_name.removeprefix("beta_")
+        match = re.match(r"^(.+)_(\d+)$", raw_name)
+        if match is None:
+            raise ValueError(f"Unable to parse parameter constraint: {parameter_name}")
+        column_name, power = match.groups()
+        if isinstance(x, pd.DataFrame) and column_name in x.columns:
+            column_index = x.columns.get_loc(column_name)
+            if not isinstance(column_index, int):
+                raise ValueError(
+                    f"Unable to resolve parameter constraint: {parameter_name}"
+                )
+            translated_name = f"beta_{column_index + 1}_{power}"
         else:
-            raise ValueError(f"Unable to parse parameter constraint: {p_name}")
-        if isinstance(x, pd.DataFrame) and column in x.columns:
-            column = list(x.columns).index(column) + 1
-        fixed[(int(column), int(deg))] = ensure_parametrized(p_value, constant=True)
-    params = {}
-    for col_idx, max_degree in enumerate(degree):
-        for d in range(1, max_degree + 1):
-            name = f"beta_{col_idx + 1}_{d}"
-            params[name] = fixed.get((col_idx + 1, d), Parameter(0.0))
+            translated_name = f"beta_{int(column_name)}_{power}"
+        translated_constraints[translated_name] = _unwrap_kernel_arg(value)
 
-    def _compute(data, **params_from_wrapper):
-        data = np.array(data)
-        data_with_extra_cols = np.zeros(shape=(len(data), ncols))
-        extra_col_idx = 0
-        for col_idx, max_degree in enumerate(degree):
-            for d in range(1, max_degree + 1):
-                data_with_extra_cols[:, extra_col_idx] = data[:, col_idx] ** d
-                extra_col_idx += 1
-        sorted_params = [params_from_wrapper[k] for k in params]
-        return (sorted_params * data_with_extra_cols).sum(axis=1)
+    for column_index, max_degree in enumerate(degrees, start=1):
+        for power in range(max_degree + 1, effect_degree + 1):
+            translated_constraints[f"beta_{column_index}_{power}"] = 0.0
 
-    return Kernel(_compute, x, **params, fname=polynomial_regression.__qualname__)
+    parameter_names = tuple(
+        f"beta_{column_index}_{power}"
+        for column_index, max_degree in enumerate(degrees, start=1)
+        for power in range(1, max_degree + 1)
+    )
+
+    filtered_constraints = {
+        name: value
+        for name, value in translated_constraints.items()
+        if name in parameter_names
+    }
+
+    def regression_fn(
+        data: npt.ArrayLike, *resolved: npt.ArrayLike
+    ) -> npt.NDArray[np.float64]:
+        data_array = np.asarray(data, dtype=np.float64)
+        expanded_columns = [
+            data_array[:, column_index] ** power
+            for column_index, max_degree in enumerate(degrees)
+            for power in range(1, max_degree + 1)
+        ]
+        expanded = np.stack(expanded_columns, axis=1)
+        coefficients = np.stack(
+            [np.asarray(value, dtype=np.float64) for value in resolved]
+        )
+        return (coefficients * expanded).sum(axis=1)
+
+    effect = build_effect(
+        regression_fn,
+        name="polynomial_regression",
+        parameter_names=parameter_names,
+        arguments=filtered_constraints,
+    )
+    return Kernel(effect, x)
 
 
-def categories_qualitative(x: Collection, fixed_values: dict = None) -> Kernel:
+def categories_qualitative(
+    x: Collection[Hashable], fixed_values: Mapping[Any, KernelArg] | None = None
+) -> Kernel:
     """
     Kernel for qualitative (categorical) data.
 
@@ -606,19 +768,11 @@ def categories_qualitative(x: Collection, fixed_values: dict = None) -> Kernel:
     >>> data = ['A', 'B', 'A', 'C']
     >>> kernel = categories_qualitative(data, fixed_values={'A': 1.0})
     """
-    unique_values = sorted(set(map(str, x)))
-    fixed_values = {str(k): v for k, v in (fixed_values or {}).items()}
-    parameter = (Parameter(0.0) for _ in count())  # generate parameters on demand
-    params = {
-        value: (
-            next(parameter)
-            if value not in fixed_values
-            else ensure_parametrized(fixed_values[value], constant=True)
-        )
-        for value in unique_values
-    }
-
-    def _compute(data, **params_from_wrapper):
-        return type(data)(list(map(lambda v: params_from_wrapper[str(v)], data)))
-
-    return Kernel(_compute, x, **params, fname=categories_qualitative.__qualname__)
+    levels = tuple(dict.fromkeys(x))
+    effect = _categorical_effect(
+        levels=levels,
+        fixed_values=None
+        if fixed_values is None
+        else {key: _unwrap_kernel_arg(value) for key, value in fixed_values.items()},
+    )
+    return Kernel(effect, x)  # pyright: ignore[reportArgumentType]

@@ -40,7 +40,7 @@ tool for statistical modeling.
 -------------
 Documentation
 -------------
-For detailed documentation, please visit the `official documentation <https://pykelihood.readthedocs.io>`_.
+For detailed documentation, please visit the `official documentation <https://pykelihood.readthedocs.io/en/latest/>`_.
 
 
 Installation

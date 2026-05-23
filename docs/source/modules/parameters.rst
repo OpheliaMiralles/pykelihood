@@ -4,7 +4,7 @@ Parameters
 The parameters module provides a framework for defining and managing parameters
 used in statistical models and distributions. It allows for the creation of parameter objects
 that can be optimized, ensuring that they are properly initialized.
-Parameters can take any form, including constants or kernels.
+Parameters can take any form, including constants or effect expressions.
 
 .. currentmodule:: pykelihood.parameters
 

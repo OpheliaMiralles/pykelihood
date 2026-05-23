@@ -2,9 +2,17 @@ from typing import Union
 
 import numpy as np
 import pytest
+from numpy.testing import assert_allclose
 
 from pykelihood import parameters
-from pykelihood.expr import Constant, FunctionExpr, Node, PathElem, ensure_node
+from pykelihood.expr import (
+    Constant,
+    FunctionExpr,
+    Node,
+    PathElem,
+    ensure_node,
+    require_expr,
+)
 
 
 class BareParametrized(parameters.Parametrized):
@@ -46,7 +54,7 @@ def test_arithmetic_operators_evaluate_as_expected(builder, expected) -> None:
     expr = builder(param)
 
     assert isinstance(expr, FunctionExpr)
-    np.testing.assert_allclose(expr(), expected)
+    assert_allclose(expr.eval({}), expected)
 
 
 def test_parameter_traversal_is_deterministic() -> None:
@@ -67,29 +75,42 @@ def test_literal_values_normalize_into_constant_nodes() -> None:
     children = list(expr.iter_children())
 
     assert isinstance(children[1][1], Constant)
-    np.testing.assert_allclose(children[1][1](), 3.0)
-    assert children[1][1]().dtype == np.float64
+    assert_allclose(children[1][1].eval({}), 3.0)
+    assert children[1][1].eval({}).dtype == np.float64
 
 
 def test_ensure_node_is_idempotent_for_nodes() -> None:
-    parameter = parameters.Parameter(2.0)
+    node = Node()
+    assert ensure_node(node) is node
 
+
+def test_ensure_node_is_idempotent_for_exprs() -> None:
+    parameter = parameters.Parameter(2.0)
     assert ensure_node(parameter) is parameter
 
 
 def test_ensure_node_wraps_literals_as_float64_constants() -> None:
     constant = ensure_node([1, 2, 3])
-
     assert isinstance(constant, Constant)
-    np.testing.assert_allclose(constant(), np.array([1.0, 2.0, 3.0]))
+    assert_allclose(constant.eval({}), np.array([1.0, 2.0, 3.0]))
     assert constant.value.dtype == np.float64
+
+
+def test_require_expr_is_idempotent_for_exprs() -> None:
+    parameter = parameters.Parameter(2.0)
+    assert require_expr(parameter) is parameter
+
+
+def test_require_expr_rejects_non_evaluable_nodes() -> None:
+    with pytest.raises(TypeError, match="Expected an Expr"):
+        require_expr(Node())
 
 
 def test_nested_arithmetic_expressions_evaluate() -> None:
     expr = (parameters.Parameter(2.0) + 1.5) * 4.0 - 3.0
 
     assert isinstance(expr, FunctionExpr)
-    np.testing.assert_allclose(expr(), 11.0)
+    assert_allclose(expr.eval({}), 11.0)
 
 
 def test_binary_expression_children_use_left_and_right_names() -> None:
