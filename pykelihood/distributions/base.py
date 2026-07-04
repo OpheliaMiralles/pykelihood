@@ -22,7 +22,7 @@ _T = TypeVar("_T")
 SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
 
 
-class Distribution(Parametrized, ABC):
+class Distribution(ABC):
     """
     Base class for all distributions.
 

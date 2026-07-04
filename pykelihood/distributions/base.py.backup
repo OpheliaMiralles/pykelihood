@@ -1,0 +1,420 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable
+
+import numpy as np
+from numpy.typing import ArrayLike
+from scipy import stats
+from scipy.optimize import OptimizeResult, minimize
+
+from pykelihood.expr import Constant, Node
+from pykelihood.generic_types import Obs
+from pykelihood.parameters import Parameter
+from pykelihood.state import ParameterLayout, initial_state
+
+if TYPE_CHECKING:
+    from typing import Self
+
+
+class _ParamValueWrapper:
+    """Wrapper to provide .value attribute for backward compatibility with legacy profiler."""
+    def __init__(self, value):
+        self.value = value
+
+
+def _extract_scipy_shape_params_names(
+    scipy_dist: stats.rv_continuous,
+) -> tuple[str, ...]:
+    return tuple(scipy_dist.shapes.split(", ")) if scipy_dist.shapes else ()
+
+
+class Distribution(ABC):
+    """
+    Base class for all distributions.
+
+    This class uses the node-based architecture where distribution
+    parameters are represented as Node objects (Parameters or Constants).
+    """
+
+    @abstractmethod
+    def _get_param_nodes(self) -> dict[str, Node]:
+        """Return the parameter nodes for this distribution."""
+        ...
+
+    @property
+    def flattened_params(self) -> tuple:
+        """Return flattened parameters for backward compatibility."""
+        return tuple(self._get_param_nodes().values())
+
+    @property
+    def optimisation_params(self) -> tuple["Parameter", ...]:
+        """Return parameters used for optimization."""
+        return tuple(
+            node for node in self._get_param_nodes().values()
+            if isinstance(node, Parameter)
+        )
+
+    @property
+    def _node(self) -> Node:
+        """The root node for the distribution expression."""
+        nodes = list(self._get_param_nodes().values())
+        if len(nodes) == 1:
+            return nodes[0]
+        result = nodes[0]
+        for n in nodes[1:]:
+            result = result + n
+        return result
+
+    @property
+    @abstractmethod
+    def _scipy_dist(self) -> stats.rv_continuous:
+        """Return the scipy distribution instance."""
+        ...
+
+    def _evaluate_param(self, name: str, state: dict) -> np.ndarray:
+        node = self._get_param_nodes()[name]
+        return node.eval(state)
+
+    def _eval_scipy_params(self, state: dict | None = None) -> dict[str, float]:
+        state = state or {}
+        params = {}
+        for name, node in self._get_param_nodes().items():
+            if isinstance(node, Parameter):
+                params[name] = node.eval(state)
+            else:
+                params[name] = node.eval({})
+        for key in ("scale", "loc"):
+            if key in params and params[key] is not None:
+                val = params[key]
+                if np.ndim(val) == 0:
+                    params[key] = float(np.array(val).item())
+        for name in _extract_scipy_shape_params_names(self._scipy_dist):
+            if name in params:
+                val = params[name]
+                if np.ndim(val) == 0:
+                    params[name] = np.array(val).item()
+        return params
+
+    def pdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Probability density function."""
+        return self._scipy_dist.pdf(x, **self._eval_scipy_params(state))
+
+    def logpdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Log probability density function."""
+        return self._scipy_dist.logpdf(x, **self._eval_scipy_params(state))
+
+    def cdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Cumulative distribution function."""
+        return self._scipy_dist.cdf(x, **self._eval_scipy_params(state))
+
+    def ppf(self, q: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Percent point function (inverse of cdf)."""
+        return self._scipy_dist.ppf(q, **self._eval_scipy_params(state))
+
+    def rvs(self, size: int | None = None, *, state: dict | None = None, random_state: int | None = None) -> np.ndarray:
+        """Generate random variates."""
+        return self._scipy_dist.rvs(size=size, random_state=random_state, **self._eval_scipy_params(state))
+
+    def sf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Survival function."""
+        return self._scipy_dist.sf(x, **self._eval_scipy_params(state))
+
+    def isf(self, q: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Inverse survival function."""
+        return self._scipy_dist.isf(q, **self._eval_scipy_params(state))
+
+    def logcdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Log of the cumulative distribution function."""
+        return self._scipy_dist.logcdf(x, **self._eval_scipy_params(state))
+
+    def logsf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Log of the survival function."""
+        return self._scipy_dist.logsf(x, **self._eval_scipy_params(state))
+
+    def inverse_cdf(self, q: Obs, *, state: dict | None = None) -> np.ndarray:
+        """Inverse CDF (same as ppf)."""
+        return self.ppf(q, state=state)
+
+    @property
+    def params_names(self) -> tuple[str, ...]:
+        """Return the parameter names."""
+        return tuple(self._get_param_nodes().keys())
+
+    def with_state(self, state: dict) -> Self:
+        """Return a new instance with the given state applied."""
+        new_instance = self.__class__.__new__(self.__class__)
+        new_instance.__dict__.update(self.__dict__)
+        if hasattr(new_instance, "_cached_param_nodes"):
+            for name, node in list(new_instance._cached_param_nodes.items()):
+                if isinstance(node, Parameter) and node in state:
+                    new_node = Parameter(state[node])
+                    new_instance._cached_param_nodes[name] = new_node
+        return new_instance
+
+            working_model = self
+        if fixed_values and hasattr(self, "_cached_param_nodes"):
+            working_model = self.__class__.__new__(self.__class__)
+            working_model.__dict__.update(self.__dict__)
+            working_model._cached_param_nodes = dict(self._cached_param_nodes)
+            for param_name, value in fixed_values.items():
+                if param_name in working_model._cached_param_nodes:
+                    from pykelihood.kernels import Kernel
+                    if isinstance(value, Kernel):
+                        working_model._cached_param_nodes[param_name] = value.effect
+                    elif isinstance(value, Node):
+                        working_model._cached_param_nodes[param_name] = value
+                    else:
+                        working_model._cached_param_nodes[param_name] = ConstantParameter(np.asarray(value, dtype=np.float64))
+
+        layout = ParameterLayout.from_expr(working_model._node)
+        state = initial_state(working_model._node)
+
+        def to_minimize(x: np.ndarray) -> float:
+            new_state = layout.unflatten(x)
+            new_state.update({k: v for k, v in state.items() if k not in new_state})
+            updated_model = working_model.with_state(new_state)
+            return score_fn(updated_model, data)
+
+        if x0 is None:
+            x0 = layout.flatten(state)
+        else:
+            x0 = np.asarray(x0, dtype=np.float64)
+
+        minimize_args = {
+            "method": "Nelder-Mead",
+            "options": {"maxiter": 1500, "fatol": 1e-8},
+        }
+        minimize_args.update(scipy_args)
+
+        result = minimize(to_minimize, x0, **minimize_args)
+
+        final_state = layout.unflatten(result.x)
+        final_state.update({k: v for k, v in state.items() if k not in final_state})
+
+        return Fit(
+            model=self.with_state(final_state),
+            data=data,
+            score_fn=score_fn,
+            x0=tuple(float(v) for v in x0),
+            optimize_result=result,
+            state=final_state,
+        )
+
+
+
+@dataclass
+class Fit:
+    model: Any
+    data: Obs
+    score_fn: Callable[[Any, Obs], float]
+    x0: tuple[float, ...]
+    optimize_result: OptimizeResult
+    state: dict = None
+
+    @property
+    def optimisation_param_dict(self) -> dict:
+        """Backward compatibility: dict mapping param names to Parameter objects."""
+        return {name: node for name, node in self.model._get_param_nodes().items()
+                if isinstance(node, Parameter)}
+
+    def param_mapping(self) -> list[tuple[Any, tuple[str, ...]]]:
+        """Backward compatibility: returns list of (param_value, (param_name,)) tuples."""
+        state = self.state or {}
+        nodes = self.model._get_param_nodes()
+        return [
+            (node.eval(state).item() if isinstance(node, Parameter) else node.eval({}), (name,))
+            for name, node in nodes.items()
+            if isinstance(node, Parameter)
+        ]
+
+    @property
+    def flattened_param_dict(self) -> dict:
+        """Backward compatibility: dict mapping param names to their fitted values."""
+        state = self.state or {}
+        nodes = self.model._get_param_nodes()
+        result = {}
+        for name, node in nodes.items():
+            val = node.eval(state)
+            if hasattr(val, 'item'):
+                val = val.item()
+            result[name] = _ParamValueWrapper(val)
+        return result
+
+    def confidence_interval(
+        self, param: str, alpha: float = 0.05, precision: float = 1e-5
+    ) -> tuple[float, float]:
+        from pykelihood.profiler import Profiler
+
+        profiler = Profiler(
+            self.model,
+            self.data,
+            self.score_fn,
+            single_profiling_param=param,
+            inference_confidence=alpha,
+        )
+        return profiler.confidence_interval(param, precision=precision)
+
+    def __getattr__(self, item: str) -> Any:
+        return getattr(self.model, item)
+
+
+
+class ScipyDistribution(Distribution, ABC):
+    """Base class for distributions based on SciPy."""
+
+    _base_module: stats.rv_continuous
+
+    @property
+    def _scipy_dist(self) -> stats.rv_continuous:
+        return self._base_module
+
+
+def make_scipy_distribution(scipy_dist: stats.rv_continuous, require_shape_params: bool = False) -> type[ScipyDistribution]:
+    """Create a ScipyDistribution subclass for a scipy distribution."""
+    name = "".join(map(str.capitalize, type(scipy_dist).__name__.removesuffix("_gen").split("_")))
+    
+    shape_params = _extract_scipy_shape_params_names(scipy_dist)
+    
+    class DynamicScipyDistribution(ScipyDistribution):
+        """Dynamically created scipy distribution wrapper."""
+        
+        _base_module = scipy_dist
+        _cached_param_nodes: dict[str, Node]
+        
+        def __init__(self, loc: float = 0.0, scale: float = 1.0, **kwargs):
+            self._cached_param_nodes = {}
+            # Handle positional arguments - always use Parameter for optimization
+            if isinstance(loc, Node):
+                self._cached_param_nodes["loc"] = loc
+            else:
+                self._cached_param_nodes["loc"] = Parameter(loc, name="loc")
+            if isinstance(scale, Node):
+                self._cached_param_nodes["scale"] = scale
+            else:
+                self._cached_param_nodes["scale"] = Parameter(scale, name="scale")
+            # Handle shape parameters and keyword overrides
+            for p in shape_params:
+                if p in kwargs:
+                    val = kwargs[p]
+                    if isinstance(val, Node) and not isinstance(val, Constant):
+                        self._cached_param_nodes[p] = val
+                    else:
+                        self._cached_param_nodes[p] = Parameter(val, name=p)
+                elif require_shape_params:
+                    self._cached_param_nodes[p] = Parameter(init=None, name=p)
+        
+        def _get_param_nodes(self) -> dict[str, Node]:
+            return self._cached_param_nodes
+
+        @property
+        def loc(self) -> Parameter:
+            """Access the loc parameter."""
+            return self._cached_param_nodes["loc"]
+
+        @property
+        def scale(self) -> Parameter:
+            """Access the scale parameter."""
+            return self._cached_param_nodes["scale"]
+    
+    DynamicScipyDistribution.__name__ = name
+    DynamicScipyDistribution.__qualname__ = name
+    DynamicScipyDistribution.__module__ = "pykelihood.distributions.scipy"
+    DynamicScipyDistribution.__doc__ = f"{name} distribution wrapping scipy.stats.{type(scipy_dist).__name__}."
+    
+    return DynamicScipyDistribution
+
+
+def make_scipy_distribution_with_omission_policy(scipy_dist: stats.rv_continuous) -> type[ScipyDistribution]:
+    """Create a ScipyDistribution where loc/scale get defaults but shape params are required."""
+    return make_scipy_distribution(scipy_dist, require_shape_params=True)
+
+
+class Bernoulli(Distribution):
+    """Bernoulli distribution for binary outcomes."""
+
+    p: Node
+    _cached_param_nodes: dict[str, Node]
+
+    def __init__(self, p: Node | ArrayLike = 0.5):
+        if isinstance(p, Constant):
+            self._cached_param_nodes = {"p": Parameter(p.value, name="p")}
+        elif isinstance(p, Node):
+            self._cached_param_nodes = {"p": p}
+        else:
+            self._cached_param_nodes = {"p": Parameter(p, name="p")}
+
+    def _get_param_nodes(self) -> dict[str, Node]:
+        return self._cached_param_nodes
+
+    @property
+    def _scipy_dist(self) -> stats.rv_continuous:
+        return stats.bernoulli
+
+    def pdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        p = self._evaluate_param("p", state or {})
+        return np.where(x == 1, p, 1 - p)
+
+    def logpdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        p = self._evaluate_param("p", state or {})
+        return np.where(x == 1, np.log(p), np.log(1 - p))
+
+    def cdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        p = self._evaluate_param("p", state or {})
+        return np.where(x >= 1, p, 0.0)
+
+    def rvs(self, size: int | None = None, *, state: dict | None = None, random_state: int | None = None) -> np.ndarray:
+        p = self._evaluate_param("p", state or {})
+        if hasattr(p, "item"):
+            p = float(p.item())
+        elif isinstance(p, np.ndarray):
+            p = float(p)
+        return stats.bernoulli.rvs(p=p, size=size, random_state=random_state)
+
+
+class TruncatedDistribution(Distribution):
+    """Truncated distribution."""
+
+    _base_dist: Distribution
+    lower_bound: float
+    upper_bound: float
+
+    def __init__(self, distribution: Distribution, lower_bound: float = -np.inf, upper_bound: float = np.inf):
+        if upper_bound == lower_bound:
+            raise ValueError("Both bounds are equal.")
+        self._base_dist = distribution
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
+
+    def _get_param_nodes(self) -> dict[str, Node]:
+        return self._base_dist._get_param_nodes()
+
+    @property
+    def _scipy_dist(self) -> stats.rv_continuous:
+        return self._base_dist._scipy_dist
+
+    def pdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        base_pdf = self._base_dist.pdf(x, state=state)
+        mask = (self.lower_bound <= x) & (x <= self.upper_bound)
+        normalizer = self._base_dist.cdf(self.upper_bound, state=state) - self._base_dist.cdf(self.lower_bound, state=state)
+        result = np.where(mask, base_pdf / normalizer, 0.0)
+        return result
+
+    def cdf(self, x: Obs, *, state: dict | None = None) -> np.ndarray:
+        mask = (self.lower_bound <= x) & (x <= self.upper_bound)
+        lower_cdf = self._base_dist.cdf(self.lower_bound, state=state)
+        upper_cdf = self._base_dist.cdf(self.upper_bound, state=state)
+        normalizer = upper_cdf - lower_cdf
+        result = np.where(mask, (self._base_dist.cdf(x, state=state) - lower_cdf) / normalizer, 0.0)
+        return result
+
+    def rvs(self, size: int | None = None, *, state: dict | None = None, random_state: int | None = None) -> np.ndarray:
+        lower_cdf = self._base_dist.cdf(self.lower_bound, state=state)
+        upper_cdf = self._base_dist.cdf(self.upper_bound, state=state)
+        u = stats.uniform(lower_cdf, upper_cdf - lower_cdf)
+        return self._base_dist.ppf(u.rvs(size=size, random_state=random_state), state=state)
+
+    def ppf(self, q: Obs, *, state: dict | None = None) -> np.ndarray:
+        lower_cdf = self._base_dist.cdf(self.lower_bound, state=state)
+        return self._base_dist.ppf(lower_cdf + q * (self._base_dist.cdf(self.upper_bound, state=state) - lower_cdf), state=state)
