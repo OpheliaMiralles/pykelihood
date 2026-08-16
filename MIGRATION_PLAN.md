@@ -471,10 +471,16 @@ Required behavior:
   convention, where larger is better.
 - `fit_mle` returns `FitResult` and never mutates the model or input state.
 - `FitResult.model` is the immutable structural model and `FitResult.state` is the
-  fitted physical-value mapping owned by the result. Optimizer coordinates and
-  transforms are metadata, not a second fitted state.
+  fitted physical-value mapping owned by the result. `FitResult.optimizer_layout`
+  contains only free parameters; optimizer coordinates and transforms are metadata,
+  not a second fitted state.
 - Fixed-parameter refits constrain the optimization through explicit state/layout
-  handling. `ParameterLayout` is built from the active model graph after fixing.
+  handling. `optimizer_layout` is derived from the full graph layout after
+  excluding fixed `Parameter` identities; fixing does not structurally rewrite
+  the model graph.
+- In PR5.2, fixed values are supplied as
+  `fixed: Mapping[Parameter, ArrayLike]`, keyed by the actual parameter nodes.
+  Named `**fixed_values` adaptation is deferred to PR5.3 compatibility work.
 - There is one MLE implementation in `pykelihood/parametric/fitting.py`.
 
 Current branch cleanup checklist:
@@ -483,7 +489,7 @@ Current branch cleanup checklist:
 - Make `FitResult` the only new fit-result type. Do not keep a second `Fit`
   dataclass in `distributions/base.py` unless it is deliberately retained as a
   legacy alias.
-- Make fixed values in `fit_mle(..., **fixed_values)` actually constrain the
+- Make values supplied through `fit_mle(..., fixed=...)` actually constrain the
   optimization rather than being ignored.
 - If a state entry is absent, evaluation may use the parameter's initial value;
   fitting boundaries must deliberately reject or project unknown state entries.
