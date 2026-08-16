@@ -1,9 +1,20 @@
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 import pytest
+from scipy import stats
 
 from pykelihood import parameters
+from pykelihood.distributions.core import (
+    ParameterDefault,
+    ParameterInput,
+    ScipyDistribution,
+)
+from pykelihood.effects import linear
+from pykelihood.likelihood import log_likelihood, negative_log_likelihood
+from pykelihood.parametric import FitResult, Objective, fit_mle
 from pykelihood.state import ParameterLayout, PositiveTransform, initial_state
 
 
@@ -114,3 +125,208 @@ def test_state_indexing() -> None:
     assert isinstance(state, dict)
     assert len(state) == 1
     np.testing.assert_allclose(state[alpha], np.array(1.0))
+
+
+def _normal(
+    loc: ParameterInput = None, scale: ParameterInput = None
+) -> ScipyDistribution:
+    return ScipyDistribution(
+        stats.norm,
+        {"loc": loc, "scale": scale},
+        defaults={
+            "loc": ParameterDefault(0.0),
+            "scale": ParameterDefault(1.0, PositiveTransform()),
+        },
+    )
+
+
+def test_likelihood_functions_sum_explicit_state_logpdf_values() -> None:
+    loc = parameters.Parameter(0.0)
+    scale = parameters.Parameter(1.0, transform=PositiveTransform())
+    model = _normal(loc, scale)
+    state = {loc: np.asarray(2.0), scale: np.asarray(3.0)}
+    data = np.asarray([1.0, 2.0, 3.0])
+
+    expected = np.sum(stats.norm.logpdf(data, loc=2.0, scale=3.0))
+
+    assert log_likelihood(model, data, state=state) == pytest.approx(expected)
+    assert negative_log_likelihood(model, data, state=state) == pytest.approx(-expected)
+
+
+def test_fit_mle_returns_owned_physical_state_and_optimizer_metadata() -> None:
+    model = _normal()
+    loc = model.parameters["loc"]
+    scale = model.parameters["scale"]
+    assert isinstance(loc, parameters.Parameter)
+    assert isinstance(scale, parameters.Parameter)
+    input_state = {loc: np.asarray(2.0), scale: np.asarray(3.0)}
+    original_state = {
+        parameter: value.copy() for parameter, value in input_state.items()
+    }
+
+    result = fit_mle(model, np.asarray([1.0, 2.0, 3.0]), state=input_state)
+
+    assert isinstance(result, FitResult)
+    assert result.model is model
+    assert result.optimizer_layout.parameters == (loc, scale)
+    np.testing.assert_allclose(result.optimizer_x0, [2.0, np.log(3.0)])
+    np.testing.assert_allclose(result.optimizer_x, result.optimize_result.x)
+    for parameter, value in original_state.items():
+        np.testing.assert_array_equal(input_state[parameter], value)
+        assert result.state[parameter] is not input_state[parameter]
+
+
+def test_fit_mle_uses_transformed_coordinates_and_identity_fixed_refits() -> None:
+    loc = parameters.Parameter(0.0)
+    scale = parameters.Parameter(1.0, transform=PositiveTransform())
+    model = _normal(loc, scale)
+    data = np.asarray([-1.0, 0.0, 1.0])
+
+    result = fit_mle(model, data, x0=[0.0, 2.0])
+    refit = fit_mle(model, data, state=result.state, fixed={loc: 2.0})
+
+    np.testing.assert_allclose(result.optimizer_x0, [0.0, np.log(2.0)])
+    assert loc not in refit.optimizer_layout.parameters
+    assert refit.optimizer_layout.parameters == (scale,)
+    np.testing.assert_allclose(refit.state[loc], 2.0)
+    assert refit.fixed[loc] is not result.state[loc]
+
+
+def test_fit_mle_supports_bound_effect_parameters() -> None:
+    slope = parameters.Parameter(0.5)
+    covariate = np.asarray([0.0, 1.0, 2.0])
+    model = _normal(loc=linear(slope=slope).with_covariate(covariate), scale=1.0)
+
+    result = fit_mle(model, covariate)
+
+    assert result.optimizer_layout.parameters == (slope,)
+    assert result.state[slope] == pytest.approx(1.0, abs=0.1)
+
+
+def test_fit_mle_handles_zero_free_parameters() -> None:
+    model = _normal(loc=0.0, scale=1.0)
+    data = np.asarray([0.0, 1.0])
+
+    result = fit_mle(model, data)
+
+    assert result.optimizer_layout.vector_size == 0
+    assert result.optimize_result.success
+    assert result.optimize_result.nfev == 1
+    assert result.state == {}
+
+
+def test_fit_mle_all_fixed_parameters_skips_minimize(monkeypatch) -> None:
+    loc = parameters.Parameter(0.0)
+    scale = parameters.Parameter(1.0, transform=PositiveTransform())
+    model = _normal(loc, scale)
+
+    def unexpected_minimize(*args, **kwargs):
+        pytest.fail("minimize must not run when all parameters are fixed")
+
+    monkeypatch.setattr("pykelihood.parametric.fitting.minimize", unexpected_minimize)
+    result = fit_mle(
+        model,
+        np.asarray([0.0, 1.0]),
+        fixed={loc: np.asarray(2.0), scale: np.asarray(3.0)},
+    )
+
+    assert result.optimizer_layout.vector_size == 0
+    np.testing.assert_allclose(result.state[loc], 2.0)
+    np.testing.assert_allclose(result.state[scale], 3.0)
+
+
+def test_fit_mle_allows_supplied_values_for_uninitialized_parameters() -> None:
+    loc = parameters.Parameter()
+    model = _normal(loc=loc, scale=1.0)
+
+    result = fit_mle(model, np.asarray([0.0, 1.0]), state={loc: np.asarray(2.0)})
+    np.testing.assert_allclose(result.optimizer_x0, [2.0])
+
+    fixed_result = fit_mle(model, np.asarray([0.0, 1.0]), fixed={loc: np.asarray(2.0)})
+    np.testing.assert_allclose(fixed_result.state[loc], 2.0)
+
+
+def test_fit_mle_deduplicates_shared_fixed_parameters() -> None:
+    shared = parameters.Parameter(1.0, transform=PositiveTransform())
+    model = _normal(loc=shared, scale=shared)
+
+    result = fit_mle(model, np.asarray([0.0, 1.0]), fixed={shared: 2.0})
+
+    assert result.optimizer_layout.parameters == ()
+    assert tuple(result.state) == (shared,)
+    assert tuple(result.fixed) == (shared,)
+
+
+def test_fit_mle_validates_fixed_shapes_and_owns_values() -> None:
+    loc = parameters.Parameter(np.zeros(2))
+    model = _normal(loc=loc, scale=1.0)
+    fixed_value = np.asarray([1.0, 2.0])
+
+    with pytest.raises(ValueError, match=r"expected \(2,\)"):
+        fit_mle(model, np.asarray([0.0, 1.0]), fixed={loc: np.asarray(1.0)})
+
+    result = fit_mle(model, np.asarray([0.0, 1.0]), fixed={loc: fixed_value})
+    fixed_value[:] = 9.0
+    np.testing.assert_allclose(result.fixed[loc], [1.0, 2.0])
+    np.testing.assert_allclose(result.state[loc], [1.0, 2.0])
+
+
+def test_fit_mle_converts_optimizer_coordinates_to_physical_state() -> None:
+    loc = parameters.Parameter(0.0)
+    scale = parameters.Parameter(1.0, transform=PositiveTransform())
+    model = _normal(loc, scale)
+
+    result = fit_mle(
+        model,
+        np.asarray([-1.0, 0.0, 1.0]),
+        x0=[0.0, 2.0],
+        scipy_args={"options": {"maxiter": 1}},
+    )
+
+    np.testing.assert_allclose(result.state[loc], result.optimizer_x[0])
+    np.testing.assert_allclose(result.state[scale], np.exp(result.optimizer_x[1]))
+
+
+def test_fit_mle_rejects_unknown_state_and_wrong_x0_length() -> None:
+    model = _normal()
+    data = np.asarray([0.0, 1.0])
+    unknown = parameters.Parameter(0.0)
+
+    with pytest.raises(ValueError, match="state contains parameters"):
+        fit_mle(model, data, state={unknown: np.asarray(0.0)})
+    with pytest.raises(ValueError, match="Expected 2 values in x0"):
+        fit_mle(model, data, x0=[0.0])
+
+
+def test_fit_mle_rejects_non_scalar_objective() -> None:
+    model = _normal(loc=0.0, scale=1.0)
+
+    def objective(model, data, *, state):
+        return np.asarray([1.0, 2.0])
+
+    with pytest.raises(TypeError, match="must return one scalar"):
+        fit_mle(model, np.asarray([0.0]), objective=cast(Objective, objective))
+
+
+def test_fit_mle_rejects_nan_but_preserves_infinite_objectives() -> None:
+    model = _normal(loc=0.0, scale=1.0)
+
+    def nan_objective(model, data, *, state):
+        return np.nan
+
+    def infinite_objective(model, data, *, state):
+        return np.inf
+
+    with pytest.raises(ValueError, match="returned NaN"):
+        fit_mle(model, np.asarray([0.0]), objective=nan_objective)
+
+    result = fit_mle(model, np.asarray([0.0]), objective=infinite_objective)
+    assert np.isinf(result.optimize_result.fun)
+
+
+def test_fit_mle_validates_transformed_parameter_domains() -> None:
+    scale = parameters.Parameter(1.0, transform=PositiveTransform())
+    model = _normal(scale=scale)
+
+    with pytest.raises(ValueError, match="outside its transform domain"):
+        fit_mle(model, np.asarray([0.0]), state={scale: np.asarray(0.0)})
