@@ -2,10 +2,11 @@ Modules
 =======
 
 .. toctree::
-   :maxdepth: 1
+    :maxdepth: 2
 
-   modules/distributions
-   modules/parameters
-   modules/kernels
-   modules/metrics
-   modules/profiler
+    modules/distributions
+    modules/parameters
+    modules/effects
+    modules/kernels
+    modules/metrics
+    modules/profiler
