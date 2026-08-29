@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import cast
+
 import numpy as np
+import numpy.typing as npt
 from scipy import stats as _stats
 
+from pykelihood.distributions._compat import CompatibilityValue, as_expr, evaluate
 from pykelihood.distributions.base import Distribution, ScipyDistribution
-from pykelihood.generic_types import Obs
-from pykelihood.utils import ifnone
+from pykelihood.distributions.core import (
+    ParameterDefault,
+    ParameterInput,
+    ParameterState,
+    RandomState,
+)
+from pykelihood.distributions.scipy import Beta, Gamma, Pareto
+from pykelihood.expr import Expr, Node
+from pykelihood.parameters import Parameter
+from pykelihood.state import PositiveTransform, ProbabilityTransform
 
 __all__ = [
     "Exponential",
@@ -15,6 +29,7 @@ __all__ = [
     "GEV",
     "GPD",
     "TruncatedDistribution",
+    "Bernoulli",
 ]
 
 
@@ -32,184 +47,94 @@ class Exponential(ScipyDistribution):
 
     _base_module = _stats.expon
 
-    def __init__(self, loc=0.0, rate=1.0):
-        super().__init__(loc, rate)
+    def __init__(self, loc: ParameterInput = None, rate: ParameterInput = None) -> None:
+        super().__init__(
+            self._base_module,
+            {"loc": loc, "rate": rate},
+            defaults={
+                "loc": ParameterDefault(0.0),
+                "rate": ParameterDefault(1.0, PositiveTransform()),
+            },
+            reparametrization=_exponential_parameters,
+        )
+
+
+def _exponential_parameters(
+    parameters: Mapping[str, npt.NDArray[np.float64]],
+) -> Mapping[str, npt.NDArray[np.float64]]:
+    return {"loc": parameters["loc"], "scale": 1.0 / parameters["rate"]}
+
+
+class _ShapeCompatibilityDistribution(ScipyDistribution):
+    """Legacy ``shape`` naming over one native SciPy ``c`` shape parameter."""
+
+    _base_module: _stats.rv_continuous
+
+    def __init__(
+        self,
+        loc: ParameterInput = None,
+        scale: ParameterInput = None,
+        shape: ParameterInput = None,
+    ) -> None:
+        shape_node = (
+            Parameter(init=0.0, name="shape") if shape is None else as_expr(shape)
+        )
+        native_shape = self._to_native_shape(shape_node)
+        super().__init__(
+            self._base_module,
+            {"loc": loc, "scale": scale, "c": native_shape},
+            defaults={
+                "loc": ParameterDefault(0.0),
+                "scale": ParameterDefault(1.0, PositiveTransform()),
+            },
+        )
+        self._public_parameters = MappingProxyType(
+            {
+                "loc": self._parameters["loc"],
+                "scale": self._parameters["scale"],
+                "shape": shape_node,
+            }
+        )
+
+    @staticmethod
+    def _to_native_shape(shape: Expr) -> Expr:
+        raise NotImplementedError
 
     @property
-    def params_names(self):
-        return ("loc", "rate")
+    def parameters(self) -> Mapping[str, Expr]:
+        return self._public_parameters
 
-    def _to_scipy_args(self, loc=None, rate=None):
-        """
-        Convert to scipy arguments.
+    def _with_parameters(
+        self, parameters: Mapping[str, Node]
+    ) -> _ShapeCompatibilityDistribution:
+        try:
+            loc = cast(Expr, parameters["loc"])
+            scale = cast(Expr, parameters["scale"])
+            shape = cast(Expr, parameters["shape"])
+        except KeyError as error:
+            raise ValueError("Expected loc, scale, and shape parameters.") from error
+        return type(self)(loc=loc, scale=scale, shape=shape)
 
-        Parameters
-        ----------
-        loc : float, optional
-            Location parameter, by default None.
-        rate : float, optional
-            Rate parameter, by default None.
-
-        Returns
-        -------
-        dict
-            Dictionary of scipy arguments.
-        """
-        if rate is not None:
-            rate = 1 / rate
-        return {"loc": ifnone(loc, self.loc()), "scale": ifnone(rate, 1 / self.rate())}
-
-
-class Gamma(ScipyDistribution):
-    """
-    Gamma distribution.
-
-    Parameters
-    ----------
-    loc : float, optional
-        Location parameter, by default 0.0.
-    scale : float, optional
-        Scale parameter, by default 1.0.
-    shape : float, optional
-        Shape parameter, by default 0.0.
-    """
-
-    _base_module = _stats.gamma
-
-    def __init__(self, loc=0.0, scale=1.0, shape=0.0):
-        super().__init__(loc, scale, shape)
-
-    @property
-    def params_names(self):
-        return ("loc", "scale", "shape")
-
-    def _to_scipy_args(self, loc=None, scale=None, shape=None):
-        """
-        Convert to scipy arguments.
-
-        Parameters
-        ----------
-        loc : float, optional
-            Location parameter, by default None.
-        scale : float, optional
-            Scale parameter, by default None.
-        shape : float, optional
-            Shape parameter, by default None.
-
-        Returns
-        -------
-        dict
-            Dictionary of scipy arguments.
-        """
+    def _scipy_parameters(
+        self, state: ParameterState | None
+    ) -> dict[str, npt.NDArray[np.float64]]:
+        parameter_state = {} if state is None else state
+        public = {
+            name: evaluate(node, parameter_state)
+            for name, node in self.parameters.items()
+        }
         return {
-            "a": ifnone(shape, self.shape()),
-            "loc": ifnone(loc, self.loc()),
-            "scale": ifnone(scale, self.scale()),
+            "c": self._native_shape_value(public["shape"]),
+            "loc": public["loc"],
+            "scale": public["scale"],
         }
 
-
-class Pareto(ScipyDistribution):
-    """
-    Pareto distribution.
-
-    Parameters
-    ----------
-    loc : float, optional
-        Location parameter, by default 0.0.
-    scale : float, optional
-        Scale parameter, by default 1.0.
-    alpha : float, optional
-        Shape parameter, by default 1.0.
-    """
-
-    _base_module = _stats.pareto
-
-    def __init__(self, loc=0.0, scale=1.0, alpha=1.0):
-        super().__init__(loc, scale, alpha)
-
-    @property
-    def params_names(self):
-        return ("loc", "scale", "alpha")
-
-    def _to_scipy_args(self, loc=None, scale=None, alpha=None):
-        """
-        Convert to scipy arguments.
-
-        Parameters
-        ----------
-        loc : float, optional
-            Location parameter, by default None.
-        scale : float, optional
-            Scale parameter, by default None.
-        alpha : float, optional
-            Shape parameter, by default None.
-
-        Returns
-        -------
-        dict
-            Dictionary of scipy arguments.
-        """
-        return {
-            "c": ifnone(alpha, self.alpha()),
-            "loc": ifnone(loc, self.loc()),
-            "scale": ifnone(scale, self.scale()),
-        }
+    @staticmethod
+    def _native_shape_value(shape: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        raise NotImplementedError
 
 
-class Beta(ScipyDistribution):
-    """
-    Beta distribution.
-
-    Parameters
-    ----------
-    loc : float, optional
-        Location parameter, by default 0.0.
-    scale : float, optional
-        Scale parameter, by default 1.0.
-    alpha : float, optional
-        Alpha parameter, by default 2.0.
-    beta : float, optional
-        Beta parameter, by default 1.0.
-    """
-
-    _base_module = _stats.beta
-
-    def __init__(self, loc=0.0, scale=1.0, alpha=2.0, beta=1.0):
-        super().__init__(loc, scale, alpha, beta)
-
-    @property
-    def params_names(self):
-        return ("loc", "scale", "alpha", "beta")
-
-    def _to_scipy_args(self, loc=None, scale=None, alpha=None, beta=None):
-        """
-        Convert to scipy arguments.
-
-        Parameters
-        ----------
-        loc : float, optional
-            Location parameter, by default None.
-        scale : float, optional
-            Scale parameter, by default None.
-        alpha : float, optional
-            Alpha parameter, by default None.
-        beta : float, optional
-            Beta parameter, by default None.
-
-        Returns
-        -------
-        dict
-            Dictionary of scipy arguments.
-        """
-        return {
-            "a": ifnone(alpha, self.alpha()),
-            "b": ifnone(beta, self.beta()),
-            "loc": ifnone(loc, self.loc()),
-            "scale": ifnone(scale, self.scale()),
-        }
-
-
-class GEV(ScipyDistribution):
+class GEV(_ShapeCompatibilityDistribution):
     """
     Generalized Extreme Value (GEV) distribution.
 
@@ -231,22 +156,23 @@ class GEV(ScipyDistribution):
 
     _base_module = _stats.genextreme
 
-    def _reparametrization(self, params):
-        return {"c": -params["shape"], "loc": params["loc"], "scale": params["scale"]}
+    def __init__(
+        self,
+        loc: ParameterInput = None,
+        scale: ParameterInput = None,
+        shape: ParameterInput = None,
+    ) -> None:
+        super().__init__(loc=loc, scale=scale, shape=shape)
 
-    def __init__(self, loc=0.0, scale=1.0, shape=0.0):
-        super().__init__(
-            loc=loc, scale=scale, shape=shape, reparametrization=self._reparametrization
-        )
+    @staticmethod
+    def _to_native_shape(shape: Expr) -> Expr:
+        return -shape
 
-    def _build_instance(self, **params):
-        return type(self)(**params)
+    @staticmethod
+    def _native_shape_value(shape: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        return -shape
 
-    @property
-    def params_names(self):
-        return ("loc", "scale", "shape")
-
-    def lb_shape(self, data):
+    def lb_shape(self, data: npt.ArrayLike) -> npt.NDArray[np.float64]:
         """
         Calculate the lower bound of the shape parameter.
 
@@ -260,16 +186,15 @@ class GEV(ScipyDistribution):
         float
             Lower bound of the shape parameter.
         """
-        x_min = data.min()
-        x_max = data.max()
+        values = self._scipy_parameters(None)
+        x_min, x_max = np.min(data), np.max(data)
         if x_min * x_max < 0:
-            return -np.inf
-        elif x_min > 0:
-            return self.scale / (x_max - self.loc())
-        else:
-            return self.scale / (x_min - self.loc())
+            return np.asarray(-np.inf)
+        if x_min > 0:
+            return values["scale"] / (x_max - values["loc"])
+        return values["scale"] / (x_min - values["loc"])
 
-    def ub_shape(self, data):
+    def ub_shape(self, data: npt.ArrayLike) -> npt.NDArray[np.float64]:
         """
         Calculate the upper bound of the shape parameter.
 
@@ -283,17 +208,16 @@ class GEV(ScipyDistribution):
         float
             Upper bound of the shape parameter.
         """
-        x_min = data.min()
-        x_max = data.max()
+        values = self._scipy_parameters(None)
+        x_min, x_max = np.min(data), np.max(data)
         if x_min * x_max < 0:
-            return np.inf
-        elif x_min > 0:
-            return self.scale / (x_min - self.loc())
-        else:
-            return self.scale / (x_max - self.loc())
+            return np.asarray(np.inf)
+        if x_min > 0:
+            return values["scale"] / (x_min - values["loc"])
+        return values["scale"] / (x_max - values["loc"])
 
 
-class GPD(ScipyDistribution):
+class GPD(_ShapeCompatibilityDistribution):
     """
     Generalized Pareto Distribution (GPD).
 
@@ -309,36 +233,21 @@ class GPD(ScipyDistribution):
 
     _base_module = _stats.genpareto
 
-    def __init__(self, loc=0.0, scale=1.0, shape=0.0):
-        super().__init__(loc, scale, shape)
+    def __init__(
+        self,
+        loc: ParameterInput = None,
+        scale: ParameterInput = None,
+        shape: ParameterInput = None,
+    ) -> None:
+        super().__init__(loc=loc, scale=scale, shape=shape)
 
-    @property
-    def params_names(self):
-        return ("loc", "scale", "shape")
+    @staticmethod
+    def _to_native_shape(shape: Expr) -> Expr:
+        return shape
 
-    def _to_scipy_args(self, loc=None, scale=None, shape=None):
-        """
-        Convert to scipy arguments.
-
-        Parameters
-        ----------
-        loc : float, optional
-            Location parameter, by default None.
-        scale : float, optional
-            Scale parameter, by default None.
-        shape : float, optional
-            Shape parameter, by default None.
-
-        Returns
-        -------
-        dict
-            Dictionary of scipy arguments.
-        """
-        return {
-            "c": ifnone(shape, self.shape()),
-            "loc": ifnone(loc, self.loc()),
-            "scale": ifnone(scale, self.scale()),
-        }
+    @staticmethod
+    def _native_shape_value(shape: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        return shape
 
 
 class TruncatedDistribution(Distribution):
@@ -362,21 +271,25 @@ class TruncatedDistribution(Distribution):
 
     def __init__(
         self, distribution: Distribution, lower_bound=-np.inf, upper_bound=np.inf
-    ):
+    ) -> None:
         if upper_bound == lower_bound:
             raise ValueError("Both bounds are equal.")
-        super().__init__(distribution)
+        self.distribution = distribution
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
-        lower_cdf = self.distribution.cdf(self.lower_bound)
-        upper_cdf = self.distribution.cdf(self.upper_bound)
-        self._normalizer = upper_cdf - lower_cdf
+        self._parameters = MappingProxyType({"distribution": cast(Expr, distribution)})
 
     @property
-    def params_names(self):
+    def parameters(self) -> Mapping[str, Expr]:
+        return self._parameters
+
+    @property
+    def params_names(self) -> tuple[str, ...]:
         return ("distribution",)
 
-    def _build_instance(self, distribution: Distribution, **new_params):
+    def _build_instance(
+        self, distribution: Distribution, **new_params: object
+    ) -> TruncatedDistribution:
         """
         Build a new instance with the given parameters.
 
@@ -394,7 +307,21 @@ class TruncatedDistribution(Distribution):
             raise ValueError(f"Unexpected arguments: {new_params}")
         return type(self)(distribution, self.lower_bound, self.upper_bound)
 
-    def _valid_indices(self, x: np.ndarray):
+    def _with_parameters(self, parameters: Mapping[str, Node]) -> TruncatedDistribution:
+        distribution = parameters.get("distribution")
+        if not isinstance(distribution, Distribution):
+            raise TypeError("TruncatedDistribution requires a Distribution child.")
+        return self._build_instance(distribution)
+
+    def __getattr__(self, name: str) -> Parameter | CompatibilityValue:
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return cast(
+                Parameter | CompatibilityValue, getattr(self.distribution, name)
+            )
+
+    def _valid_indices(self, x: npt.NDArray[np.float64]) -> npt.NDArray[np.bool_]:
         """
         Get valid indices within the bounds.
 
@@ -410,7 +337,7 @@ class TruncatedDistribution(Distribution):
         """
         return (self.lower_bound <= x) & (x <= self.upper_bound)
 
-    def _apply_constraints(self, x):
+    def _apply_constraints(self, data: npt.ArrayLike) -> npt.NDArray[np.float64]:
         """
         Apply constraints to the data.
 
@@ -424,28 +351,16 @@ class TruncatedDistribution(Distribution):
         array-like
             Data within the bounds.
         """
-        return x[self._valid_indices(x)]
+        values = np.asarray(data, dtype=np.float64)
+        return values[self._valid_indices(values)]
 
-    def fit(self, *args, **kwargs):
-        """
-        Fit the instance to the data.
-
-        Parameters
-        ----------
-        args : tuple
-            Positional arguments.
-        kwargs : dict
-            Keyword arguments.
-
-        Returns
-        -------
-        TruncatedDistribution
-            The fitted instance.
-        """
-        kwargs.update(lower_bound=self.lower_bound, upper_bound=self.upper_bound)
-        return super().fit(*args, **kwargs)
-
-    def rvs(self, size: int, *args, **kwargs):
+    def rvs(
+        self,
+        size: int | tuple[int, ...] | None = None,
+        *,
+        state: ParameterState | None = None,
+        random_state: RandomState = None,
+    ) -> npt.NDArray[np.float64]:
         """
         Generate random variates.
 
@@ -453,29 +368,28 @@ class TruncatedDistribution(Distribution):
         ----------
         size : int
             Number of random variates to generate.
-        args : tuple
-            Positional arguments.
-        kwargs : dict
-            Keyword arguments.
 
         Returns
         -------
         np.ndarray
             Random variates.
         """
-        u = _stats.uniform(
-            self.distribution.cdf(self.lower_bound),
-            self.distribution.cdf(self.upper_bound),
+        lower = self.distribution.cdf(self.lower_bound, state=state)
+        upper = self.distribution.cdf(self.upper_bound, state=state)
+        quantiles = _stats.uniform.rvs(
+            loc=lower, scale=upper - lower, size=size, random_state=random_state
         )
-        return self.distribution.inverse_cdf(u.rvs(size, *args, **kwargs))
+        return self.distribution.ppf(quantiles, state=state)
 
-    def pdf(self, x: Obs):
+    def pdf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
         """
         Probability density function.
 
         Parameters
         ----------
-        x : Obs
+        x : array-like
             Data to evaluate.
 
         Returns
@@ -483,17 +397,36 @@ class TruncatedDistribution(Distribution):
         np.ndarray
             Probability density values.
         """
-        return np.where(
-            self._valid_indices(x), self.distribution.pdf(x) / self._normalizer, 0.0
+        values = np.asarray(x, dtype=np.float64)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            result = self.distribution.pdf(values, state=state) / self._normalizer(
+                state
+            )
+        return np.asarray(
+            np.where(self._valid_indices(values), result, 0.0), dtype=np.float64
         )
 
-    def cdf(self, x: Obs):
+    def logpdf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        values = np.asarray(x, dtype=np.float64)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            result = self.distribution.logpdf(values, state=state) - np.log(
+                self._normalizer(state)
+            )
+        return np.asarray(
+            np.where(self._valid_indices(values), result, -np.inf), dtype=np.float64
+        )
+
+    def cdf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
         """
         Cumulative distribution function.
 
         Parameters
         ----------
-        x : Obs
+        x : array-like
             Data to evaluate.
 
         Returns
@@ -501,18 +434,30 @@ class TruncatedDistribution(Distribution):
         np.ndarray
             Cumulative distribution values.
         """
-        right_range_x = (
-            self.distribution.cdf(x) - self.distribution.cdf(self.lower_bound)
-        ) / self._normalizer
-        return np.where(self._valid_indices(x), right_range_x, 0.0)
+        values = np.asarray(x, dtype=np.float64)
+        lower = self.distribution.cdf(self.lower_bound, state=state)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            result = (
+                self.distribution.cdf(values, state=state) - lower
+            ) / self._normalizer(state)
+        return np.asarray(
+            np.where(
+                values < self.lower_bound,
+                0.0,
+                np.where(values > self.upper_bound, 1.0, result),
+            ),
+            dtype=np.float64,
+        )
 
-    def isf(self, q: Obs):
+    def isf(
+        self, q: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
         """
         Inverse survival function.
 
         Parameters
         ----------
-        q : Obs
+        q : array-like
             Quantiles to evaluate.
 
         Returns
@@ -520,17 +465,17 @@ class TruncatedDistribution(Distribution):
         np.ndarray
             Inverse survival function values.
         """
-        return self.distribution.isf(
-            self.distribution.isf(self.upper_bound) + q * self._normalizer
-        )
+        return self.ppf(1.0 - np.asarray(q, dtype=np.float64), state=state)
 
-    def ppf(self, q: Obs):
+    def ppf(
+        self, q: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
         """
         Percent point function (inverse of cdf).
 
         Parameters
         ----------
-        q : Obs
+        q : array-like
             Quantiles to evaluate.
 
         Returns
@@ -538,6 +483,103 @@ class TruncatedDistribution(Distribution):
         np.ndarray
             Percent point function values.
         """
+        lower = self.distribution.cdf(self.lower_bound, state=state)
         return self.distribution.ppf(
-            self.distribution.cdf(self.lower_bound) + q * self._normalizer
+            lower + np.asarray(q, dtype=np.float64) * self._normalizer(state),
+            state=state,
+        )
+
+    def _normalizer(self, state: ParameterState | None) -> npt.NDArray[np.float64]:
+        return self.distribution.cdf(
+            self.upper_bound, state=state
+        ) - self.distribution.cdf(self.lower_bound, state=state)
+
+
+class Bernoulli(Distribution):
+    """Bernoulli distribution using ``pdf`` as the public mass vocabulary."""
+
+    def __init__(self, p: ParameterInput = None) -> None:
+        if p is None:
+            probability: Expr = Parameter(
+                init=0.5, name="p", transform=ProbabilityTransform()
+            )
+        else:
+            probability = as_expr(p)
+        self._parameters = MappingProxyType({"p": probability})
+
+    @property
+    def parameters(self) -> Mapping[str, Expr]:
+        return self._parameters
+
+    def _probability(self, state: ParameterState | None) -> npt.NDArray[np.float64]:
+        return evaluate(self.parameters["p"], {} if state is None else state)
+
+    def rvs(
+        self,
+        size: int | tuple[int, ...] | None = None,
+        *,
+        state: ParameterState | None = None,
+        random_state: RandomState = None,
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.rvs(
+                self._probability(state), size=size, random_state=random_state
+            ),
+            dtype=np.float64,
+        )
+
+    def cdf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.cdf(x, self._probability(state)), dtype=np.float64
+        )
+
+    def isf(
+        self, q: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.isf(q, self._probability(state)), dtype=np.float64
+        )
+
+    def ppf(
+        self, q: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.ppf(q, self._probability(state)), dtype=np.float64
+        )
+
+    def pdf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.pmf(x, self._probability(state)), dtype=np.float64
+        )
+
+    def logpdf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.logpmf(x, self._probability(state)), dtype=np.float64
+        )
+
+    def sf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.sf(x, self._probability(state)), dtype=np.float64
+        )
+
+    def logcdf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.logcdf(x, self._probability(state)), dtype=np.float64
+        )
+
+    def logsf(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        return np.asarray(
+            _stats.bernoulli.logsf(x, self._probability(state)), dtype=np.float64
         )

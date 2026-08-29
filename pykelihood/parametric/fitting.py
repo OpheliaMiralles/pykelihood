@@ -1,16 +1,27 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Callable, Protocol, cast
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
+from functools import partial
+from typing import Any, Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
 from scipy.optimize import OptimizeResult, minimize
 
+from pykelihood.distributions._compat import (
+    CompatibilityProjection,
+    CompatibilityValue,
+    compatibility_flattened_param_dict,
+    compatibility_optimisation_param_dict,
+    compatibility_optimisation_params,
+    compatibility_param_mapping,
+    distribution_leaf_nodes,
+    value_projection,
+)
 from pykelihood.distributions.core import Distribution, ParameterState
 from pykelihood.likelihood import negative_log_likelihood
-from pykelihood.parameters import Parameter
+from pykelihood.parameters import ConstantParameter, Parameter
 from pykelihood.state import ParameterLayout, State
 
 
@@ -25,6 +36,110 @@ class Objective(Protocol):
 OptimizerArgs = Mapping[str, object]
 StateInput = Mapping[Parameter, npt.ArrayLike]
 FixedParameters = Mapping[Parameter, npt.ArrayLike]
+# Legacy scores are minimization objectives, matching ``fit`` and the old
+# profiler contract. They are adapted to the core objective protocol below.
+CompatibilityScore = Callable[[object, npt.ArrayLike], float]
+
+
+class _ConfidenceProfiler(Protocol):
+    def confidence_interval(
+        self, param: str, precision: float = 1e-5
+    ) -> tuple[float, float]: ...
+
+
+class _ProfilerFactory(Protocol):
+    def __call__(
+        self,
+        distribution: object,
+        data: npt.ArrayLike,
+        *,
+        score_function: CompatibilityScore,
+        single_profiling_param: str,
+        inference_confidence: float,
+    ) -> _ConfidenceProfiler: ...
+
+
+class _BoundDistribution:
+    """Model/state view used only by the compatibility boundary."""
+
+    _EVALUATION_METHODS = frozenset(
+        {
+            "cdf",
+            "inverse_cdf",
+            "isf",
+            "logcdf",
+            "logpdf",
+            "logsf",
+            "pdf",
+            "ppf",
+            "rvs",
+            "sf",
+        }
+    )
+
+    def __init__(
+        self, model: Distribution, state: ParameterState, fixed: Iterable[Parameter]
+    ) -> None:
+        self.model = model
+        self.state = state
+        self._fixed = frozenset(fixed)
+
+    @property
+    def params_names(self) -> tuple[str, ...]:
+        return tuple(self.model.parameters)
+
+    @property
+    def flattened_param_dict(self) -> dict[str, CompatibilityProjection]:
+        return compatibility_flattened_param_dict(self.model, self.state, self._fixed)
+
+    @property
+    def flattened_params(self) -> tuple[CompatibilityProjection, ...]:
+        return tuple(self.flattened_param_dict.values())
+
+    @property
+    def optimisation_params(self) -> tuple[CompatibilityValue, ...]:
+        return compatibility_optimisation_params(self.model, self.state, self._fixed)
+
+    @property
+    def optimisation_param_dict(self) -> dict[str, CompatibilityValue]:
+        return compatibility_optimisation_param_dict(
+            self.model, self.state, self._fixed
+        )
+
+    def param_mapping(
+        self, only_opt: bool = False
+    ) -> list[tuple[float | npt.NDArray[np.float64], tuple[str, ...]]]:
+        return compatibility_param_mapping(
+            self.model, self.state, self._fixed, only_opt=only_opt
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        parameters = self.model.parameters
+        if name in parameters:
+            return value_projection(parameters[name], self.state, self._fixed)
+        attribute = getattr(self.model, name)
+        if name in self._EVALUATION_METHODS and callable(attribute):
+            return partial(attribute, state=self.state)
+        return attribute
+
+
+def compatibility_objective(
+    score: CompatibilityScore, fixed: Mapping[Parameter, npt.ArrayLike] | None = None
+) -> Objective:
+    """Adapt a legacy minimization score to the core objective protocol."""
+
+    fixed_parameters = frozenset() if fixed is None else frozenset(fixed)
+
+    def objective(
+        model: Distribution, data: npt.ArrayLike, *, state: ParameterState
+    ) -> float:
+        value = score(_BoundDistribution(model, state, fixed_parameters), data)
+        # Older expression-valued scale models can visit an invalid starting
+        # point. The new core still rejects NaN objectives; this adapter turns
+        # that legacy boundary condition into the normal optimizer penalty.
+        return np.inf if np.isnan(value) else value
+
+    return objective
 
 
 def _copy_value(parameter: Parameter, value: npt.ArrayLike) -> npt.NDArray[np.float64]:
@@ -103,6 +218,12 @@ class FitResult:
     optimizer_x0: npt.NDArray[np.float64]
     optimize_result: OptimizeResult
     fixed: Mapping[Parameter, npt.NDArray[np.float64]]
+    _compat_data: npt.NDArray[np.float64] | None = field(
+        default=None, init=False, repr=False
+    )
+    _compat_score: CompatibilityScore | None = field(
+        default=None, init=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         self.state = {
@@ -119,6 +240,134 @@ class FitResult:
     def optimizer_x(self) -> npt.NDArray[np.float64]:
         """Return the fitted coordinates passed to SciPy's optimizer."""
         return np.asarray(self.optimize_result.x, dtype=np.float64).copy()
+
+    def _set_compatibility(
+        self, data: npt.ArrayLike, score: CompatibilityScore
+    ) -> None:
+        self._compat_data = np.asarray(data, dtype=np.float64).copy()
+        self._compat_score = score
+
+    @property
+    def fitted(self) -> _BoundDistribution:
+        """Deprecated fitted-distribution projection over ``model`` and ``state``."""
+
+        return _BoundDistribution(self.model, self.state, self.fixed)
+
+    @property
+    def params_names(self) -> tuple[str, ...]:
+        return self.fitted.params_names
+
+    @property
+    def flattened_params(self) -> tuple[CompatibilityProjection, ...]:
+        return self.fitted.flattened_params
+
+    @property
+    def flattened_param_dict(self) -> dict[str, CompatibilityProjection]:
+        return self.fitted.flattened_param_dict
+
+    @property
+    def optimisation_params(self) -> tuple[CompatibilityValue, ...]:
+        return self.fitted.optimisation_params
+
+    @property
+    def optimisation_param_dict(self) -> dict[str, CompatibilityValue]:
+        return self.fitted.optimisation_param_dict
+
+    def param_mapping(
+        self, only_opt: bool = False
+    ) -> list[tuple[float | npt.NDArray[np.float64], tuple[str, ...]]]:
+        return self.fitted.param_mapping(only_opt)
+
+    def fit(
+        self,
+        data: npt.ArrayLike | None = None,
+        x0: npt.ArrayLike | None = None,
+        score: CompatibilityScore | None = None,
+        scipy_args: OptimizerArgs | None = None,
+        **fixed_values: object,
+    ) -> FitResult:
+        """Deprecated named fixed-parameter refit used by the old profiler."""
+        if data is None:
+            if self._compat_data is None:
+                raise ValueError(
+                    "A refit needs data when the result has no compatibility data."
+                )
+            data = self._compat_data
+
+        values = dict(fixed_values)
+        method = values.pop("method", None)
+        if method is not None:
+            if not isinstance(method, str):
+                raise TypeError("method must be a SciPy optimizer method name.")
+            options = dict(scipy_args or {})
+            options.setdefault("method", method)
+            scipy_args = options
+
+        flattened = distribution_leaf_nodes(self.model)
+        named_fixed: dict[Parameter, npt.NDArray[np.float64]] = {}
+        for name, value in values.items():
+            target = flattened.get(name)
+            if target is None:
+                if name in self.model.parameters:
+                    raise ValueError(
+                        f"Distribution parameter `{name}` is structural; "
+                        "only leaf Parameter nodes can be fixed during a refit."
+                    )
+                raise ValueError(f"Unknown distribution parameter `{name}`.")
+            if not isinstance(target, Parameter):
+                raise ValueError(
+                    f"Distribution parameter `{name}` is structural; "
+                    "only leaf Parameter nodes can be fixed during a refit."
+                )
+            if isinstance(value, (CompatibilityValue, ConstantParameter)):
+                value = value.value
+            named_fixed[target] = np.asarray(value, dtype=np.float64).copy()
+
+        fixed = dict(self.fixed)
+        fixed.update(named_fixed)
+        legacy_score = self._compat_score if score is None else score
+        objective = (
+            None
+            if legacy_score is None
+            else compatibility_objective(legacy_score, fixed)
+        )
+        result = fit_mle(
+            self.model,
+            data,
+            state=self.state,
+            fixed=fixed,
+            x0=x0,
+            objective=objective,
+            scipy_args=scipy_args,
+        )
+        if legacy_score is not None:
+            result._set_compatibility(data, legacy_score)
+        return result
+
+    def confidence_interval(
+        self, param: str, alpha: float = 0.05, precision: float = 1e-5
+    ) -> tuple[float, float]:
+        """Deprecated profiler-backed confidence interval projection."""
+
+        from pykelihood.profiler import Profiler
+
+        if self._compat_data is None or self._compat_score is None:
+            raise ValueError("Confidence intervals require a compatibility fit result.")
+        if not np.isfinite(alpha) or not 0.0 < alpha < 1.0:
+            raise ValueError("alpha must be between 0 and 1.")
+        if param not in self.flattened_param_dict:
+            raise ValueError(f"Parameter {param} not found in fitted distribution.")
+        profiler = cast(_ProfilerFactory, Profiler)(
+            self,
+            self._compat_data,
+            score_function=self._compat_score,
+            single_profiling_param=param,
+            inference_confidence=1.0 - alpha,
+        )
+        return profiler.confidence_interval(param, precision=precision)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.fitted, name)
 
 
 def fit_mle(

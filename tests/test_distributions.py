@@ -5,12 +5,14 @@ from scipy import stats
 from pykelihood import distributions, kernels
 from pykelihood.distributions import (
     GEV,
+    Bernoulli,
     Normal,
     TruncatedDistribution,
     _name_from_scipy_dist,
 )
 from pykelihood.kernels import linear
 from pykelihood.parameters import ConstantParameter, Parameter
+from pykelihood.state import ProbabilityTransform
 
 REL_PREC = 1e-7
 ABS_PREC = 0.1
@@ -127,6 +129,38 @@ def test_rvs_random_state():
     assert (sample == sample2).all()
 
 
+def test_generated_wrapper_aliases_and_native_shape_names():
+    assert distributions.Normal is distributions.Norm
+    assert distributions.Loguniform is distributions.Reciprocal
+    assert distributions.VonmisesLine is distributions.Vonmises
+    if hasattr(stats, "trapz") or hasattr(stats, "trapezoid"):
+        assert distributions.Trapz is distributions.Trapezoid
+
+    assert distributions.Gamma(a=2.0).params_names == ("loc", "scale", "a")
+    assert distributions.Beta(a=2.0, b=3.0).params_names == ("loc", "scale", "a", "b")
+    assert distributions.Pareto(b=2.0).params_names == ("loc", "scale", "b")
+    with pytest.raises(TypeError, match="Missing required distribution parameter: a"):
+        distributions.Gamma()
+
+
+def test_bernoulli_preserves_supplied_parameter_and_uses_explicit_state():
+    probability = Parameter(0.25)
+    distribution = Bernoulli(probability)
+
+    assert distribution.p is probability
+    np.testing.assert_allclose(
+        distribution.pdf([0, 1], state={probability: np.asarray(0.75)}), [0.25, 0.75]
+    )
+    assert isinstance(Bernoulli().p.transform, ProbabilityTransform)
+
+
+def test_bernoulli_pdf_is_zero_outside_its_support():
+    distribution = Bernoulli(0.25)
+
+    np.testing.assert_array_equal(distribution.pdf([-1, 2]), [0.0, 0.0])
+    np.testing.assert_array_equal(distribution.logpdf([-1, 2]), [-np.inf, -np.inf])
+
+
 def test_truncated_distribution_cdf():
     n = Normal()
     truncated = TruncatedDistribution(Normal(), lower_bound=0)
@@ -134,6 +168,19 @@ def test_truncated_distribution_cdf():
     assert truncated.cdf(0) == 0
     assert truncated.cdf(1) == 2 * (n.cdf(1) - n.cdf(0))
     assert truncated.cdf(np.inf) == 1
+
+
+def test_truncated_distribution_uses_the_passed_state_for_normalization():
+    loc = Parameter(0.0)
+    truncated = TruncatedDistribution(Normal(loc=loc), lower_bound=0.0)
+    state = {loc: np.asarray([0.0, 1.0])}
+    expected = stats.norm.pdf([1.0, 1.0], loc=[0.0, 1.0]) / (
+        1.0 - stats.norm.cdf(0.0, loc=[0.0, 1.0])
+    )
+
+    assert truncated.flattened_param_dict["distribution_loc"] is loc
+    np.testing.assert_allclose(truncated.pdf([1.0, 1.0], state=state), expected)
+    assert np.all(truncated.rvs(20, state={loc: np.asarray(0.0)}, random_state=1) >= 0)
 
 
 def test_truncated_distribution_fit():

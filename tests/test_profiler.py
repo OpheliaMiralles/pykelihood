@@ -1,34 +1,39 @@
+from typing import cast
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from pykelihood import kernels
-from pykelihood.distributions import GEV
+from pykelihood.distributions import GEV, Distribution, Normal
 from pykelihood.profiler import Profiler
 
 
 @pytest.fixture(scope="module")
 def profiler(dataset):
-    fit = GEV().fit(dataset)
+    fit = cast(Distribution, GEV().fit(dataset))
     return Profiler(fit, dataset)
 
 
 @pytest.fixture(scope="module")
 def profiler_with_single_profiling_param(dataset):
-    fit = GEV().fit(dataset)
+    fit = cast(Distribution, GEV().fit(dataset))
     return Profiler(fit, dataset, single_profiling_param="shape")
 
 
 @pytest.fixture(scope="module")
 def profiler_with_fixed_param(dataset):
-    fit = GEV().fit(dataset, scale=1.0)
+    fit = cast(Distribution, GEV().fit(dataset, scale=1.0))
     return Profiler(fit, dataset)
 
 
 @pytest.fixture(scope="module")
 def profiler_with_trend(dataset):
-    fit = GEV().fit(
-        dataset, loc=kernels.linear(np.linspace(1, len(dataset), len(dataset)))
+    fit = cast(
+        Distribution,
+        GEV().fit(
+            dataset, loc=kernels.linear(np.linspace(1, len(dataset), len(dataset)))
+        ),
     )
     return Profiler(fit, dataset)
 
@@ -63,6 +68,29 @@ def test_mle_with_fixed_param(profiler_with_fixed_param, dataset):
     assert len(profiler_with_fixed_param.distribution.optimisation_params) == len(
         mle.optimisation_params
     )
+
+
+def test_normal_profiler_compatibility_smoke():
+    data = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    fit_result = Normal().fit(data, method="Powell")
+    # Profiler still has the deprecated Distribution annotation; FitResult is
+    # its runtime compatibility projection until the profiler migration.
+    fit = cast(Distribution, fit_result)
+    profiler = Profiler(
+        fit, data, single_profiling_param="loc", optimization_method="Powell"
+    )
+
+    standard_mle, _ = profiler.standard_mle
+    optimum, score = profiler.optimum
+    profiles = profiler.profiles
+    lower, upper = fit_result.confidence_interval("loc")
+    standard_mle = cast(Distribution, standard_mle)
+    optimum = cast(Distribution, optimum)
+
+    assert standard_mle.loc.value == pytest.approx(3.0, abs=1e-3)
+    assert optimum.logpdf(data).sum() == pytest.approx(score)
+    assert list(profiles) == ["loc"]
+    assert lower <= fit.loc.value <= upper
 
 
 @pytest.mark.skip(reason="too slow")

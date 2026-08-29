@@ -1,27 +1,108 @@
 from __future__ import annotations
 
-import scipy
-from packaging.version import Version
+from collections.abc import MutableMapping
+from typing import TYPE_CHECKING, Final, cast
+
 from scipy import stats
+from scipy.stats import rv_continuous
 
-from pykelihood.distributions.base import ScipyDistribution
+from pykelihood.distributions.base import Reparametrization, ScipyDistribution
+from pykelihood.distributions.core import ParameterDefault, ParameterInput
+from pykelihood.expr import Expr
+from pykelihood.parameters import Parameter
+from pykelihood.state import PositiveTransform
 
 
-def _name_from_scipy_dist(scipy_dist: stats.rv_continuous) -> str:
+def _name_from_scipy_dist(scipy_dist: rv_continuous) -> str:
     """Generate a name for the distribution based on the scipy distribution class."""
+
     scipy_dist_name = type(scipy_dist).__name__.removesuffix("_gen")
     return "".join(map(str.capitalize, scipy_dist_name.split("_")))
 
 
-def wrap_scipy_distribution(scipy_dist: stats.rv_continuous) -> type[ScipyDistribution]:
+def _native_defaults() -> dict[str, ParameterDefault]:
+    return {
+        "loc": ParameterDefault(0.0),
+        "scale": ParameterDefault(1.0, PositiveTransform()),
+    }
+
+
+class _WrappedScipyDistribution(ScipyDistribution):
+    """Constructor shared by the generated plain SciPy wrappers."""
+
+    _base_module: rv_continuous
+
+    def __init__(
+        self,
+        *args: ParameterInput,
+        reparametrization: Reparametrization | None = None,
+        **parameters: ParameterInput,
+    ) -> None:
+        if reparametrization is not None:
+            if args:
+                raise TypeError(
+                    "Cannot use positional parameters with reparametrization."
+                )
+            if not parameters:
+                raise TypeError(
+                    "Reparametrized wrappers require at least one parameter."
+                )
+            compatibility_parameters: dict[str, Expr] = {}
+            for name, value in parameters.items():
+                if isinstance(value, Expr):
+                    compatibility_parameters[name] = value
+                elif value is None:
+                    compatibility_parameters[name] = Parameter(init=0.0, name=name)
+                else:
+                    compatibility_parameters[name] = Parameter(init=value, name=name)
+            super().__init__(
+                self._base_module,
+                compatibility_parameters,
+                reparametrization=reparametrization,
+            )
+            return
+
+        shape_names = (
+            ()
+            if self._base_module.shapes is None
+            else tuple(self._base_module.shapes.split(", "))
+        )
+        names = ("loc", "scale", *shape_names)
+        if len(args) > len(names):
+            raise TypeError(f"Expected at most {len(names)} positional parameters.")
+
+        values = dict(parameters)
+        for name, value in zip(names, args):
+            if name in values:
+                raise TypeError(f"Parameter `{name}` was supplied more than once.")
+            values[name] = value
+        unknown = set(values) - set(names)
+        if unknown:
+            unknown_names = ", ".join(sorted(unknown))
+            raise TypeError(f"Unexpected parameter(s): {unknown_names}.")
+        for name in names[2:]:
+            if values.get(name) is None:
+                raise TypeError(f"Missing required distribution parameter: {name}")
+
+        super().__init__(
+            self._base_module,
+            {name: values.get(name) for name in names},
+            defaults=_native_defaults(),
+        )
+
+
+def wrap_scipy_distribution(
+    scipy_dist: rv_continuous, *, name: str | None = None
+) -> type[_WrappedScipyDistribution]:
     """Wrap a scipy distribution class to create a ScipyDistribution subclass."""
+
     scipy_dist_name = type(scipy_dist).__name__.removesuffix("_gen")
-    clean_dist_name = _name_from_scipy_dist(scipy_dist)
+    clean_dist_name = name or _name_from_scipy_dist(scipy_dist)
     dist_params_names = ("loc", "scale") + tuple(
         scipy_dist.shapes.split(", ") if scipy_dist.shapes else ()
     )
 
-    docstring = f"""\
+    docstring = f"""\\
     {clean_dist_name} distribution.
 
     Parameters
@@ -29,254 +110,206 @@ def wrap_scipy_distribution(scipy_dist: stats.rv_continuous) -> type[ScipyDistri
     loc : float, optional
         Location parameter, by default 0.0.
     scale : float, optional
-        Scale parameter, by default 1.0.\
+        Scale parameter, by default 1.0.\\
     """
 
     def format_param_docstring(param: str) -> str:
         return f"""
     {param} : float, mandatory
-        Shape parameter. See the SciPy documentation for the {scipy_dist_name} distribution for details.\
+        Shape parameter. See the SciPy documentation for the {scipy_dist_name} distribution for details.\\
         """
 
     for param in dist_params_names[2:]:
         docstring += format_param_docstring(param)
 
-    return type(
-        clean_dist_name,
-        (ScipyDistribution,),
-        {
-            "_base_module": scipy_dist,
-            "__doc__": docstring,
-            "__module__": wrap_scipy_distribution.__module__,
-        },
+    return cast(
+        type[_WrappedScipyDistribution],
+        type(
+            clean_dist_name,
+            (_WrappedScipyDistribution,),
+            {
+                "_base_module": scipy_dist,
+                "__doc__": docstring,
+                "__module__": wrap_scipy_distribution.__module__,
+            },
+        ),
     )
 
 
-Alpha = wrap_scipy_distribution(stats.alpha)
-Anglit = wrap_scipy_distribution(stats.anglit)
-Arcsine = wrap_scipy_distribution(stats.arcsine)
-Argus = wrap_scipy_distribution(stats.argus)
-# Beta = wrap_scipy_distribution(stats.beta)
-Betaprime = wrap_scipy_distribution(stats.betaprime)
-Bradford = wrap_scipy_distribution(stats.bradford)
-Burr = wrap_scipy_distribution(stats.burr)
-Burr12 = wrap_scipy_distribution(stats.burr12)
-Cauchy = wrap_scipy_distribution(stats.cauchy)
-Chi = wrap_scipy_distribution(stats.chi)
-Chi2 = wrap_scipy_distribution(stats.chi2)
-Cosine = wrap_scipy_distribution(stats.cosine)
-Crystalball = wrap_scipy_distribution(stats.crystalball)
-Dgamma = wrap_scipy_distribution(stats.dgamma)
-Dweibull = wrap_scipy_distribution(stats.dweibull)
-Erlang = wrap_scipy_distribution(stats.erlang)
-Expon = wrap_scipy_distribution(stats.expon)
-Exponnorm = wrap_scipy_distribution(stats.exponnorm)
-Exponpow = wrap_scipy_distribution(stats.exponpow)
-Exponweib = wrap_scipy_distribution(stats.exponweib)
-F = wrap_scipy_distribution(stats.f)
-Fatiguelife = wrap_scipy_distribution(stats.fatiguelife)
-Fisk = wrap_scipy_distribution(stats.fisk)
-Foldcauchy = wrap_scipy_distribution(stats.foldcauchy)
-Foldnorm = wrap_scipy_distribution(stats.foldnorm)
-# Gamma = wrap_scipy_distribution(stats.gamma)
-Gausshyper = wrap_scipy_distribution(stats.gausshyper)
-Genexpon = wrap_scipy_distribution(stats.genexpon)
-Genextreme = wrap_scipy_distribution(stats.genextreme)
-Gengamma = wrap_scipy_distribution(stats.gengamma)
-Genhalflogistic = wrap_scipy_distribution(stats.genhalflogistic)
-Genhyperbolic = wrap_scipy_distribution(stats.genhyperbolic)
-Geninvgauss = wrap_scipy_distribution(stats.geninvgauss)
-Genlogistic = wrap_scipy_distribution(stats.genlogistic)
-Gennorm = wrap_scipy_distribution(stats.gennorm)
-Genpareto = wrap_scipy_distribution(stats.genpareto)
-Gibrat = wrap_scipy_distribution(stats.gibrat)
-Gompertz = wrap_scipy_distribution(stats.gompertz)
-GumbelL = wrap_scipy_distribution(stats.gumbel_l)
-GumbelR = wrap_scipy_distribution(stats.gumbel_r)
-Halfcauchy = wrap_scipy_distribution(stats.halfcauchy)
-Halfgennorm = wrap_scipy_distribution(stats.halfgennorm)
-Halflogistic = wrap_scipy_distribution(stats.halflogistic)
-Halfnorm = wrap_scipy_distribution(stats.halfnorm)
-Hypsecant = wrap_scipy_distribution(stats.hypsecant)
-Invgamma = wrap_scipy_distribution(stats.invgamma)
-Invgauss = wrap_scipy_distribution(stats.invgauss)
-Invweibull = wrap_scipy_distribution(stats.invweibull)
-JfSkewT = wrap_scipy_distribution(stats.jf_skew_t)
-Johnsonsb = wrap_scipy_distribution(stats.johnsonsb)
-Johnsonsu = wrap_scipy_distribution(stats.johnsonsu)
-Kappa3 = wrap_scipy_distribution(stats.kappa3)
-Kappa4 = wrap_scipy_distribution(stats.kappa4)
-Ksone = wrap_scipy_distribution(stats.ksone)
-Kstwo = wrap_scipy_distribution(stats.kstwo)
-Kstwobign = wrap_scipy_distribution(stats.kstwobign)
-Laplace = wrap_scipy_distribution(stats.laplace)
-LaplaceAsymmetric = wrap_scipy_distribution(stats.laplace_asymmetric)
-Levy = wrap_scipy_distribution(stats.levy)
-LevyL = wrap_scipy_distribution(stats.levy_l)
-LevyStable = wrap_scipy_distribution(stats.levy_stable)
-Loggamma = wrap_scipy_distribution(stats.loggamma)
-Logistic = wrap_scipy_distribution(stats.logistic)
-Loglaplace = wrap_scipy_distribution(stats.loglaplace)
-Lognorm = wrap_scipy_distribution(stats.lognorm)
-Lomax = wrap_scipy_distribution(stats.lomax)
-Maxwell = wrap_scipy_distribution(stats.maxwell)
-Mielke = wrap_scipy_distribution(stats.mielke)
-Moyal = wrap_scipy_distribution(stats.moyal)
-Nakagami = wrap_scipy_distribution(stats.nakagami)
-Ncf = wrap_scipy_distribution(stats.ncf)
-Nct = wrap_scipy_distribution(stats.nct)
-Ncx2 = wrap_scipy_distribution(stats.ncx2)
-Norm = wrap_scipy_distribution(stats.norm)
-Normal = Norm  # alias for backward compatibility
-Norminvgauss = wrap_scipy_distribution(stats.norminvgauss)
-# Pareto = wrap_scipy_distribution(stats.pareto)
-Pearson3 = wrap_scipy_distribution(stats.pearson3)
-Powerlaw = wrap_scipy_distribution(stats.powerlaw)
-Powerlognorm = wrap_scipy_distribution(stats.powerlognorm)
-Powernorm = wrap_scipy_distribution(stats.powernorm)
-Rayleigh = wrap_scipy_distribution(stats.rayleigh)
-Rdist = wrap_scipy_distribution(stats.rdist)
-Recipinvgauss = wrap_scipy_distribution(stats.recipinvgauss)
-Loguniform = wrap_scipy_distribution(stats.loguniform)
-Reciprocal = wrap_scipy_distribution(stats.reciprocal)
-RelBreitwigner = wrap_scipy_distribution(stats.rel_breitwigner)
-Rice = wrap_scipy_distribution(stats.rice)
-Semicircular = wrap_scipy_distribution(stats.semicircular)
-Skewcauchy = wrap_scipy_distribution(stats.skewcauchy)
-Skewnorm = wrap_scipy_distribution(stats.skewnorm)
-StudentizedRange = wrap_scipy_distribution(stats.studentized_range)
-T = wrap_scipy_distribution(stats.t)
-Trapezoid = wrap_scipy_distribution(stats.trapezoid)
-Trapz = Trapezoid
-Triang = wrap_scipy_distribution(stats.triang)
-Truncexpon = wrap_scipy_distribution(stats.truncexpon)
-Truncnorm = wrap_scipy_distribution(stats.truncnorm)
-Truncpareto = wrap_scipy_distribution(stats.truncpareto)
-TruncweibullMin = wrap_scipy_distribution(stats.truncweibull_min)
-Tukeylambda = wrap_scipy_distribution(stats.tukeylambda)
-Uniform = wrap_scipy_distribution(stats.uniform)
-Vonmises = wrap_scipy_distribution(stats.vonmises)
-VonmisesLine = wrap_scipy_distribution(stats.vonmises_line)
-Wald = wrap_scipy_distribution(stats.wald)
-WeibullMax = wrap_scipy_distribution(stats.weibull_max)
-WeibullMin = wrap_scipy_distribution(stats.weibull_min)
-Wrapcauchy = wrap_scipy_distribution(stats.wrapcauchy)
+_SCIPY_WRAPPER_SPECS: Final[tuple[tuple[str, str], ...]] = (
+    ("Alpha", "alpha"),
+    ("Anglit", "anglit"),
+    ("Arcsine", "arcsine"),
+    ("Argus", "argus"),
+    ("Beta", "beta"),
+    ("Betaprime", "betaprime"),
+    ("Bradford", "bradford"),
+    ("Burr", "burr"),
+    ("Burr12", "burr12"),
+    ("Cauchy", "cauchy"),
+    ("Chi", "chi"),
+    ("Chi2", "chi2"),
+    ("Cosine", "cosine"),
+    ("Crystalball", "crystalball"),
+    ("Dgamma", "dgamma"),
+    ("Dweibull", "dweibull"),
+    ("Erlang", "erlang"),
+    ("Expon", "expon"),
+    ("Exponnorm", "exponnorm"),
+    ("Exponpow", "exponpow"),
+    ("Exponweib", "exponweib"),
+    ("F", "f"),
+    ("Fatiguelife", "fatiguelife"),
+    ("Fisk", "fisk"),
+    ("Foldcauchy", "foldcauchy"),
+    ("Foldnorm", "foldnorm"),
+    ("Gamma", "gamma"),
+    ("Gausshyper", "gausshyper"),
+    ("Genexpon", "genexpon"),
+    ("Genextreme", "genextreme"),
+    ("Gengamma", "gengamma"),
+    ("Genhalflogistic", "genhalflogistic"),
+    ("Genhyperbolic", "genhyperbolic"),
+    ("Geninvgauss", "geninvgauss"),
+    ("Genlogistic", "genlogistic"),
+    ("Gennorm", "gennorm"),
+    ("Genpareto", "genpareto"),
+    ("Gibrat", "gibrat"),
+    ("Gompertz", "gompertz"),
+    ("GumbelL", "gumbel_l"),
+    ("GumbelR", "gumbel_r"),
+    ("Halfcauchy", "halfcauchy"),
+    ("Halfgennorm", "halfgennorm"),
+    ("Halflogistic", "halflogistic"),
+    ("Halfnorm", "halfnorm"),
+    ("Hypsecant", "hypsecant"),
+    ("Invgamma", "invgamma"),
+    ("Invgauss", "invgauss"),
+    ("Invweibull", "invweibull"),
+    ("JfSkewT", "jf_skew_t"),
+    ("Johnsonsb", "johnsonsb"),
+    ("Johnsonsu", "johnsonsu"),
+    ("Kappa3", "kappa3"),
+    ("Kappa4", "kappa4"),
+    ("Ksone", "ksone"),
+    ("Kstwo", "kstwo"),
+    ("Kstwobign", "kstwobign"),
+    ("Laplace", "laplace"),
+    ("LaplaceAsymmetric", "laplace_asymmetric"),
+    ("Levy", "levy"),
+    ("LevyL", "levy_l"),
+    ("LevyStable", "levy_stable"),
+    ("Loggamma", "loggamma"),
+    ("Logistic", "logistic"),
+    ("Loglaplace", "loglaplace"),
+    ("Lognorm", "lognorm"),
+    ("Lomax", "lomax"),
+    ("Maxwell", "maxwell"),
+    ("Mielke", "mielke"),
+    ("Moyal", "moyal"),
+    ("Nakagami", "nakagami"),
+    ("Ncf", "ncf"),
+    ("Nct", "nct"),
+    ("Ncx2", "ncx2"),
+    ("Norm", "norm"),
+    ("Norminvgauss", "norminvgauss"),
+    ("Pareto", "pareto"),
+    ("Pearson3", "pearson3"),
+    ("Powerlaw", "powerlaw"),
+    ("Powerlognorm", "powerlognorm"),
+    ("Powernorm", "powernorm"),
+    ("Rayleigh", "rayleigh"),
+    ("Rdist", "rdist"),
+    ("Recipinvgauss", "recipinvgauss"),
+    ("Reciprocal", "reciprocal"),
+    ("RelBreitwigner", "rel_breitwigner"),
+    ("Rice", "rice"),
+    ("Semicircular", "semicircular"),
+    ("Skewcauchy", "skewcauchy"),
+    ("Skewnorm", "skewnorm"),
+    ("StudentizedRange", "studentized_range"),
+    ("T", "t"),
+    ("Trapezoid", "trapezoid"),
+    ("Triang", "triang"),
+    ("Truncexpon", "truncexpon"),
+    ("Truncnorm", "truncnorm"),
+    ("Truncpareto", "truncpareto"),
+    ("TruncweibullMin", "truncweibull_min"),
+    ("Tukeylambda", "tukeylambda"),
+    ("Uniform", "uniform"),
+    ("Vonmises", "vonmises"),
+    ("Wald", "wald"),
+    ("WeibullMax", "weibull_max"),
+    ("WeibullMin", "weibull_min"),
+    ("Wrapcauchy", "wrapcauchy"),
+    ("DparetoLognorm", "dpareto_lognorm"),
+    ("Landau", "landau"),
+    ("Irwinhall", "irwinhall"),
+)
 
-if Version(scipy.__version__) >= Version("1.15.0"):
-    DparetoLognorm = wrap_scipy_distribution(stats.dpareto_lognorm)
-    Landau = wrap_scipy_distribution(stats.landau)
-    Irwinhall = wrap_scipy_distribution(stats.irwinhall)
+_SCIPY_ALIASES: Final[tuple[tuple[str, str], ...]] = (
+    ("Normal", "Norm"),
+    ("Loguniform", "Reciprocal"),
+    ("Trapz", "Trapezoid"),
+    ("VonmisesLine", "Vonmises"),
+)
 
-__all__ = [
+_HELPER_EXPORTS: Final[tuple[str, ...]] = (
     "_name_from_scipy_dist",
     "wrap_scipy_distribution",
-    "Alpha",
-    "Anglit",
-    "Arcsine",
-    "Argus",
-    "Betaprime",
-    "Bradford",
-    "Burr",
-    "Burr12",
-    "Cauchy",
-    "Chi",
-    "Chi2",
-    "Cosine",
-    "Crystalball",
-    "Dgamma",
-    "Dweibull",
-    "Erlang",
-    "Expon",
-    "Exponnorm",
-    "Exponpow",
-    "Exponweib",
-    "F",
-    "Fatiguelife",
-    "Fisk",
-    "Foldcauchy",
-    "Foldnorm",
-    "Gausshyper",
-    "Genexpon",
-    "Genextreme",
-    "Gengamma",
-    "Genhalflogistic",
-    "Genhyperbolic",
-    "Geninvgauss",
-    "Genlogistic",
-    "Gennorm",
-    "Genpareto",
-    "Gibrat",
-    "Gompertz",
-    "GumbelL",
-    "GumbelR",
-    "Halfcauchy",
-    "Halfgennorm",
-    "Halflogistic",
-    "Halfnorm",
-    "Hypsecant",
-    "Invgamma",
-    "Invgauss",
-    "Invweibull",
-    "JfSkewT",
-    "Johnsonsb",
-    "Johnsonsu",
-    "Kappa3",
-    "Kappa4",
-    "Ksone",
-    "Kstwo",
-    "Kstwobign",
-    "Laplace",
-    "LaplaceAsymmetric",
-    "Levy",
-    "LevyL",
-    "LevyStable",
-    "Loggamma",
-    "Logistic",
-    "Loglaplace",
-    "Lognorm",
-    "Lomax",
-    "Maxwell",
-    "Mielke",
-    "Moyal",
-    "Nakagami",
-    "Ncf",
-    "Nct",
-    "Ncx2",
-    "Norm",
-    "Normal",
-    "Norminvgauss",
-    "Pearson3",
-    "Powerlaw",
-    "Powerlognorm",
-    "Powernorm",
-    "Rayleigh",
-    "Rdist",
-    "Recipinvgauss",
-    "Loguniform",
-    "Reciprocal",
-    "RelBreitwigner",
-    "Rice",
-    "Semicircular",
-    "Skewcauchy",
-    "Skewnorm",
-    "StudentizedRange",
-    "T",
-    "Trapezoid",
-    "Trapz",
-    "Triang",
-    "Truncexpon",
-    "Truncnorm",
-    "Truncpareto",
-    "TruncweibullMin",
-    "Tukeylambda",
-    "Uniform",
-    "Vonmises",
-    "VonmisesLine",
-    "Wald",
-    "WeibullMax",
-    "WeibullMin",
-    "Wrapcauchy",
-]
+)
 
-if Version(scipy.__version__) >= Version("1.15.0"):
-    __all__.extend(["DparetoLognorm", "Landau", "Irwinhall"])
+
+def _get_scipy_distribution(name: str) -> rv_continuous | None:
+    candidates = ("trapz",) if name == "trapezoid" else ()
+    for candidate_name in (name, *candidates):
+        candidate = getattr(stats, candidate_name, None)
+        if isinstance(candidate, rv_continuous):
+            return candidate
+    return None
+
+
+def _register_scipy_wrappers(namespace: MutableMapping[str, object]) -> tuple[str, ...]:
+    for public_name, scipy_name in _SCIPY_WRAPPER_SPECS:
+        scipy_dist = _get_scipy_distribution(scipy_name)
+        if scipy_dist is not None:
+            namespace[public_name] = wrap_scipy_distribution(
+                scipy_dist, name="Trapezoid" if scipy_name == "trapezoid" else None
+            )
+
+    for alias_name, target_name in _SCIPY_ALIASES:
+        target = namespace.get(target_name)
+        if isinstance(target, type) and issubclass(target, ScipyDistribution):
+            namespace[alias_name] = target
+
+    return tuple(
+        name
+        for public_name, _ in _SCIPY_WRAPPER_SPECS
+        for name in (
+            public_name,
+            *(alias for alias, target in _SCIPY_ALIASES if target == public_name),
+        )
+        if name in namespace
+    )
+
+
+_REGISTERED_NAMES = _register_scipy_wrappers(
+    cast(MutableMapping[str, object], globals())
+)
+
+if TYPE_CHECKING:
+    Beta: type[_WrappedScipyDistribution]
+    Gamma: type[_WrappedScipyDistribution]
+    Loguniform: type[_WrappedScipyDistribution]
+    Norm: type[_WrappedScipyDistribution]
+    Normal: type[_WrappedScipyDistribution]
+    Pareto: type[_WrappedScipyDistribution]
+    Reciprocal: type[_WrappedScipyDistribution]
+    Trapz: type[_WrappedScipyDistribution]
+    Trapezoid: type[_WrappedScipyDistribution]
+    Uniform: type[_WrappedScipyDistribution]
+    Vonmises: type[_WrappedScipyDistribution]
+    VonmisesLine: type[_WrappedScipyDistribution]
+    __all__: list[str]
+else:
+    __all__ = [*_HELPER_EXPORTS, *_REGISTERED_NAMES]

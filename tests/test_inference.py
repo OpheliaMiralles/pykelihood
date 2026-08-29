@@ -7,7 +7,10 @@ import pytest
 from scipy import stats
 
 from pykelihood import parameters
+from pykelihood.distributions import Normal
+from pykelihood.distributions._compat import CompatibilityValue
 from pykelihood.distributions.core import (
+    Distribution,
     ParameterDefault,
     ParameterInput,
     ScipyDistribution,
@@ -330,3 +333,90 @@ def test_fit_mle_validates_transformed_parameter_domains() -> None:
 
     with pytest.raises(ValueError, match="outside its transform domain"):
         fit_mle(model, np.asarray([0.0]), state={scale: np.asarray(0.0)})
+
+
+def test_compatibility_fit_result_binds_state_and_refits_named_parameters() -> None:
+    model = Normal()
+    loc = model.parameters["loc"]
+    assert isinstance(loc, parameters.Parameter)
+    data = np.asarray([1.0, 2.0, 3.0, 4.0, 5.0])
+
+    result = model.fit(data, method="Powell")
+    fitted = cast(Distribution, result)
+
+    np.testing.assert_allclose(
+        fitted.logpdf(data), model.logpdf(data, state=result.state)
+    )
+    assert result.model is model
+    loc_projection = cast(CompatibilityValue, result.flattened_param_dict["loc"])
+    assert loc_projection.value == pytest.approx(result.state[loc])
+    assert loc_projection() == pytest.approx(result.state[loc])
+
+    refit = result.fit(loc=3.0)
+
+    assert refit.model is model
+    assert loc in refit.fixed
+    assert cast(CompatibilityValue, refit.loc).value == pytest.approx(3.0)
+
+
+def test_core_fit_result_refit_preserves_original_and_existing_fixed_parameters() -> (
+    None
+):
+    model = _normal()
+    loc = model.parameters["loc"]
+    scale = model.parameters["scale"]
+    assert isinstance(loc, parameters.Parameter)
+    assert isinstance(scale, parameters.Parameter)
+    data = np.asarray([1.0, 2.0, 3.0, 4.0])
+
+    result = fit_mle(
+        model,
+        data,
+        state={loc: np.asarray(1.0), scale: np.asarray(2.0)},
+        fixed={scale: 2.0},
+    )
+    original_state = {
+        parameter: value.copy() for parameter, value in result.state.items()
+    }
+    original_fixed = {
+        parameter: value.copy() for parameter, value in result.fixed.items()
+    }
+
+    refit = result.fit(data, loc=3.0, scipy_args={"method": "Powell"})
+
+    assert refit.model is model
+    np.testing.assert_allclose(refit.state[loc], 3.0)
+    np.testing.assert_allclose(refit.state[scale], 2.0)
+    assert set(refit.fixed) == {loc, scale}
+    for parameter, value in original_state.items():
+        np.testing.assert_array_equal(result.state[parameter], value)
+    for parameter, value in original_fixed.items():
+        np.testing.assert_array_equal(result.fixed[parameter], value)
+
+
+def test_core_fit_result_refit_resolves_nested_shared_leaf_names() -> None:
+    shared = parameters.Parameter(1.0)
+    covariate = np.asarray([1.0, 2.0, 3.0])
+    model = _normal(loc=linear(slope=shared).with_covariate(covariate), scale=shared)
+    result = fit_mle(model, covariate, state={shared: np.asarray(1.0)})
+
+    mapping = result.param_mapping()
+    assert mapping == [(pytest.approx(result.state[shared]), ("loc_slope", "scale"))]
+
+    refit = result.fit(covariate, loc_slope=2.0)
+
+    assert tuple(refit.fixed) == (shared,)
+    np.testing.assert_allclose(refit.state[shared], 2.0)
+    with pytest.raises(ValueError, match="structural.*leaf Parameter"):
+        result.fit(covariate, loc=2.0)
+
+
+def test_legacy_compatibility_score_is_minimized() -> None:
+    data = np.asarray([1.0, 2.0, 3.0])
+
+    def score(distribution, values) -> float:
+        return -float(np.sum(distribution.logpdf(values)))
+
+    result = Normal().fit(data, score=score, method="Powell")
+
+    assert result.optimize_result.fun == pytest.approx(score(result, data))

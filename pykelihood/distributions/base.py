@@ -1,352 +1,418 @@
+"""Compatibility projections over the explicit-state distribution core."""
+
 from __future__ import annotations
 
-import warnings
-from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Generic, Protocol, TypeVar
+import copy
+from collections.abc import Callable, Mapping, Sequence
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Protocol, Union, cast
 
 import numpy as np
-from numpy.typing import ArrayLike
-from scipy import stats
-from scipy.optimize import OptimizeResult, minimize
+import numpy.typing as npt
+from scipy.stats import rv_continuous
 
-from pykelihood.generic_types import Obs
-from pykelihood.metrics import opposite_log_likelihood
-from pykelihood.parameters import Parametrized, ensure_parametrized
+from pykelihood.distributions._compat import (
+    CompatibilityValue,
+    as_expr,
+    compatibility_param_mapping,
+    distribution_leaf_nodes,
+    optimisation_leaf_nodes,
+    replace_parameters,
+    value_projection,
+)
+from pykelihood.distributions.core import Distribution as CoreDistribution
+from pykelihood.distributions.core import (
+    ParameterDefault,
+    ParameterInput,
+    ParameterState,
+    RandomState,
+)
+from pykelihood.distributions.core import ScipyDistribution as CoreScipyDistribution
+from pykelihood.expr import Expr, Node
+from pykelihood.parameters import ConstantParameter, Parameter
+from pykelihood.state import ParameterLayout, State
 
 if TYPE_CHECKING:
-    from typing import Self
-
-_T = TypeVar("_T")
-SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
-
-
-class Distribution(Parametrized, ABC):
-    """
-    Base class for all distributions.
-
-    Methods
-    -------
-    rvs(size: int, *args, **kwargs) -> np.ndarray
-        Generate random variates.
-    cdf(x: Obs)
-        Cumulative distribution function.
-    isf(q: Obs)
-        Inverse survival function.
-    ppf(q: Obs)
-        Percent point function (inverse of cdf).
-    pdf(x: Obs)
-        Probability density function.
-    sf(x: Obs)
-        Survival function.
-    logcdf(x: Obs)
-        Log of the cumulative distribution function.
-    logsf(x: Obs)
-        Log of the survival function.
-    logpdf(x: Obs)
-        Log of the probability density function.
-    inverse_cdf(q: Obs)
-        Inverse of the cumulative distribution function.
-    fit(data: Obs, x0: Sequence[float] = None, score: Callable[["Distribution", Obs], float] = opposite_log_likelihood, scipy_args: Optional[Dict] = None, **fixed_values) -> SomeDistribution
-        Fit the distribution to the data.
-    """
-
-    def __hash__(self):
-        return (self.__class__.__name__,) + self.params
-
-    @abstractmethod
-    def rvs(self, size: int, *args, **kwargs) -> np.ndarray:
-        return NotImplemented
-
-    @abstractmethod
-    def cdf(self, x: Obs):
-        return NotImplemented
-
-    @abstractmethod
-    def isf(self, q: Obs):
-        return NotImplemented
-
-    @abstractmethod
-    def ppf(self, q: Obs):
-        return NotImplemented
-
-    @abstractmethod
-    def pdf(self, x: Obs):
-        return NotImplemented
-
-    @classmethod
-    def param_dict_to_vec(cls, x: dict):
-        return tuple(x.get(p) for p in cls.params_names)
-
-    def sf(self, x: Obs):
-        return 1 - self.cdf(x)
-
-    def logcdf(self, x: Obs):
-        return np.log(self.cdf(x))
-
-    def logsf(self, x: Obs):
-        return np.log(self.sf(x))
-
-    def logpdf(self, x: Obs):
-        return np.log(self.pdf(x))
-
-    def inverse_cdf(self, q: Obs):
-        if hasattr(self, "ppf"):
-            return self.ppf(q)
-        else:
-            return self.isf(1 - q)
-
-    def _apply_constraints(self, data):
-        return data
-
-    def fit(
-        self,
-        data: Obs,
-        x0: Sequence[float] | None = None,
-        score: Callable[[Distribution, Obs], float] = opposite_log_likelihood,
-        scipy_args: dict | None = None,
-        **fixed_values,
-    ) -> Fit[Self]:
-        """
-        Fit the distribution to the data.
-
-        Parameters
-        ----------
-        data : Obs
-            Data to fit the distribution to.
-        x0 : Sequence[float], optional
-            Initial guess for the parameters, by default None.
-        score : Callable[["Distribution", Obs], float], optional
-            Scoring function, by default opposite_log_likelihood.
-        scipy_args : Optional[Dict], optional
-            Additional arguments for scipy.optimize.minimize, by default None.
-        fixed_values : dict
-            Fixed values for the parameters.
-
-        Returns
-        -------
-        The result of the fit. A new instance is created with the fitted parameters.
-        """
-        init_parms = self._process_fit_params(**fixed_values)
-        init = self.with_params(**init_parms)
-        data = init._apply_constraints(data)
-
-        if x0 is None:
-            x0 = [x() for x in init.optimisation_params]
-        else:
-            if len(x0) != len(init.optimisation_params):
-                raise ValueError(
-                    f"Expected {len(init.optimisation_params)} values in x0, got {len(x0)}"
-                )
-            x0 = [float(x) for x in x0]
-
-        def to_minimize(x) -> float:
-            return score(init.with_params(x), data)
-
-        minimize_args = {
-            "method": "Nelder-Mead",
-            "options": {"maxiter": 1500, "fatol": 1e-8},
-        }
-        minimize_args.update(scipy_args or {})
-        optimization_result = minimize(to_minimize, x0, **minimize_args)
-        dist = init.with_params(optimization_result.x)
-
-        return Fit(dist, data, score, x0=x0, optimize_result=optimization_result)
-
-    def fit_instance(self, *args, **kwargs):
-        warnings.warn(
-            "fit_instance is deprecated, use fit instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.fit(*args, **kwargs)
-
-    def _process_fit_params(self, **kwds):
-        out_dict = self.param_dict.copy()
-        to_remove = set()
-        all_fixed_params = {}
-        for name_fixed_param, value_fixed_param in kwds.items():
-            for _, related_params in self.param_mapping():
-                if name_fixed_param in related_params and len(related_params) >= 1:
-                    for p in related_params:
-                        all_fixed_params[p] = value_fixed_param
-        for param_name in out_dict:
-            for name_fixed_param, value_fixed_param in all_fixed_params.items():
-                if name_fixed_param.startswith(param_name):
-                    # this name is being processed, no need to keep it
-                    to_remove.add(name_fixed_param)
-                    replacement = ensure_parametrized(value_fixed_param, constant=True)
-                    if name_fixed_param == param_name:
-                        out_dict[param_name] = replacement
-                    else:
-                        sub_name = name_fixed_param.replace(f"{param_name}_", "")
-                        old_param = out_dict[param_name]
-                        new_param = old_param.with_params(**{sub_name: replacement})
-                        out_dict[param_name] = new_param
-        # other non-parameter kw arguments
-        for name, value in kwds.items():
-            if name not in to_remove:
-                out_dict[name] = value
-        return out_dict
-
-
-@dataclass
-class Fit(Generic[_T]):
-    fitted: _T
-    data: Obs
-    score_fn: Callable[[_T, Obs], float]
-    x0: Sequence[float]
-    optimize_result: OptimizeResult
-
-    def confidence_interval(
-        self, param: str, alpha: float = 0.05, precision: float = 1e-5
-    ) -> tuple[float, float]:
-        """
-        Calculate the confidence interval for a parameter.
-
-        Parameters
-        ----------
-        param : str
-            Name of the parameter.
-        alpha : float, optional
-            Significance level, by default 0.05.
-
-        Returns
-        -------
-        tuple
-            Lower and upper bounds of the confidence interval.
-        """
-        if param not in self.fitted.params_names:
-            raise ValueError(f"Parameter {param} not found in fitted distribution.")
-
-        from pykelihood.profiler import Profiler
-
-        profiler = Profiler(
-            self.fitted,
-            self.data,
-            self.score_fn,
-            single_profiling_param=param,
-            inference_confidence=alpha,
-        )
-        return profiler.confidence_interval(param, precision=precision)
-
-    # TODO: implement explicit wrappers and use this only for dynamic attributes (e.g. param names)
-    def __getattr__(self, item: str):
-        return getattr(self.fitted, item)
+    from pykelihood.parametric.fitting import FitResult, OptimizerArgs, StateInput
 
 
 class Reparametrization(Protocol):
-    """The blueprint for reparametrization functions.
+    """Compatibility-only conversion from public to SciPy parameter values."""
 
-    A reparametrization function turns the parameters of the reparametrized
-    distribution into the parameters of the base distribution.
-
-    The provided parameters have already been evaluated. Parameters may be
-    renamed, modified, removed, or added to the returned dictionary to match
-    the expected parameters of the base distribution.
-    """
-
-    def __call__(self, params: dict[str, ArrayLike]) -> dict[str, ArrayLike]: ...
+    def __call__(
+        self, parameters: Mapping[str, npt.NDArray[np.float64]]
+    ) -> Mapping[str, npt.ArrayLike]: ...
 
 
-def no_reparametrization(params: dict[str, ArrayLike]) -> dict[str, ArrayLike]:
-    """
-    A no-op reparametrization function that returns the parameters unchanged.
-    This is useful when no reparametrization is needed.
-    """
-    return params
+LegacyScore = Callable[[object, npt.ArrayLike], float]
+FixedValue = Union[Expr, npt.ArrayLike]
 
 
-def _extract_scipy_shape_params_names(
-    scipy_dist: stats.rv_continuous,
-) -> tuple[str, ...]:
-    return tuple(scipy_dist.shapes.split(", ") if scipy_dist.shapes else ())
+def _default_score(distribution: object, data: npt.ArrayLike) -> float:
+    logpdf = cast(
+        Callable[[npt.ArrayLike], npt.NDArray[np.float64]],
+        getattr(distribution, "logpdf"),
+    )
+    return -float(np.sum(logpdf(data)))
 
 
-class ScipyDistribution(Distribution, ABC):
-    """
-    Base class for distributions based on SciPy.
-    """
-
-    _base_module: stats.rv_continuous
-
-    def __init__(
-        self, *args, reparametrization: Reparametrization | None = None, **params
-    ):
-        if args and reparametrization:
-            raise ValueError(
-                "Cannot use both positional parameters and reparametrization."
-            )
-        self.reparametrization = reparametrization or no_reparametrization
-        if reparametrization is None:
-            self._params_names = ("loc", "scale") + _extract_scipy_shape_params_names(
-                self._base_module
-            )
-
-            # Insert the positional arguments into params
-            for arg, name in zip(args, self._params_names):
-                if name not in params:
-                    params[name] = arg
-                else:
-                    raise ValueError(
-                        f"Parameter `{name}` passed as positional and keyword argument when initializing {type(self).__name__} distribution."
-                    )
-
-            # Set default values for loc and scale if not provided
-            params["loc"] = params.get("loc", 0.0)
-            params["scale"] = params.get("scale", 1.0)
-
-            # Ensure all shape parameters are present
-            for arg in self._params_names[len(args) :]:
-                if arg not in params:
-                    raise ValueError(
-                        f"Missing shape parameter `{arg}` when initializing {type(self).__name__} distribution."
-                    )
-
-            # Reorder params to match the order of _params_names
-            params = {a: params[a] for a in self._params_names}
-        else:
-            self._params_names = tuple(params)
-        super().__init__(*params.values())
-
-    def _build_instance(self, **params) -> Self:
-        return type(self)(reparametrization=self.reparametrization, **params)
+class Distribution(CoreDistribution):
+    """Explicit-state distribution with read-only legacy projections."""
 
     @property
     def params_names(self) -> tuple[str, ...]:
-        """Return the names of the parameters."""
-        return self._params_names
+        return tuple(self.parameters)
 
-    def _to_scipy_args(self, **kwargs):
-        values = {k: kwargs.get(k, getattr(self, k)()) for k in self.params_names}
-        return self.reparametrization(values)
+    @property
+    def flattened_param_nodes(self) -> dict[str, Node]:
+        return distribution_leaf_nodes(self)
 
-    def rvs(self, size=None, random_state=None, **kwargs):
-        return self._base_module.rvs(
-            **self._to_scipy_args(**kwargs), size=size, random_state=random_state
+    @property
+    def flattened_params(self) -> tuple[Node, ...]:
+        return tuple(self.flattened_param_nodes.values())
+
+    @property
+    def flattened_param_dict(self) -> dict[str, Node]:
+        return self.flattened_param_nodes
+
+    @property
+    def optimisation_params(self) -> tuple[Parameter, ...]:
+        return ParameterLayout.from_expr(self).parameters
+
+    @property
+    def optimisation_param_dict(self) -> dict[str, Parameter]:
+        return optimisation_leaf_nodes(self)
+
+    def param_mapping(
+        self, only_opt: bool = False
+    ) -> list[tuple[float | npt.NDArray[np.float64], tuple[str, ...]]]:
+        return compatibility_param_mapping(self, {}, only_opt=only_opt)
+
+    def _with_parameters(self, parameters: Mapping[str, Node]) -> Distribution:
+        """Return the same structural model with replacement top-level nodes."""
+
+        if not hasattr(self, "_parameters"):
+            raise TypeError(f"{type(self).__name__} cannot replace its parameters.")
+        result = copy.copy(self)
+        object.__setattr__(result, "_parameters", MappingProxyType(dict(parameters)))
+        return result
+
+    def with_params(
+        self,
+        params: Sequence[Expr | npt.ArrayLike] | None = None,
+        **named_params: Expr | npt.ArrayLike,
+    ) -> Distribution:
+        """Deprecated structural replacement adapter over the expression graph."""
+
+        if params is not None and named_params:
+            raise ValueError("Please only use one way to provide values to parameters.")
+        if params is not None:
+            values = tuple(params)
+            free_parameters = self.optimisation_params
+            if len(values) > len(free_parameters):
+                raise ValueError(
+                    f"Expected at most {len(free_parameters)} values, got {len(values)}."
+                )
+            replacements = {
+                parameter: as_expr(value)
+                for parameter, value in zip(free_parameters, values)
+            }
+            return cast(Distribution, replace_parameters(self, replacements))
+
+        return self._with_named_params(named_params)
+
+    def _with_named_params(
+        self, named_params: Mapping[str, Expr | npt.ArrayLike]
+    ) -> Distribution:
+        top_level: dict[str, Node] = {
+            name: node for name, node in self.parameters.items()
+        }
+        for name in top_level:
+            if name in named_params and any(
+                nested.startswith(f"{name}_") for nested in named_params
+            ):
+                raise ValueError(
+                    f"Cannot replace parameter `{name}` and one of its children together."
+                )
+
+        direct_replacements: dict[Parameter, Node] = {}
+        top_replacements: dict[str, Node] = {}
+        flattened = self.flattened_param_nodes
+        for name, value in named_params.items():
+            replacement = as_expr(value)
+            if name in top_level:
+                top_replacements[name] = replacement
+                continue
+            target = flattened.get(name)
+            if target is None:
+                raise ValueError(f"Unknown distribution parameter `{name}`.")
+            if not isinstance(target, Parameter):
+                raise ValueError(f"Distribution parameter `{name}` cannot be replaced.")
+            direct_replacements[target] = replacement
+
+        result: Distribution = self
+        if top_replacements:
+            updated: dict[str, Node] = dict(top_level)
+            updated.update(top_replacements)
+            result = self._with_parameters(updated)
+        if direct_replacements:
+            result = cast(Distribution, replace_parameters(result, direct_replacements))
+        return result
+
+    def _apply_constraints(self, data: npt.ArrayLike) -> npt.NDArray[np.float64]:
+        return np.asarray(data, dtype=np.float64)
+
+    def fit(
+        self,
+        data: npt.ArrayLike,
+        x0: npt.ArrayLike | None = None,
+        score: LegacyScore | None = None,
+        scipy_args: OptimizerArgs | None = None,
+        *,
+        state: StateInput | None = None,
+        **fixed_values: FixedValue,
+    ) -> FitResult:
+        """Deprecated adapter from named parameters to :func:`fit_mle`."""
+
+        return _fit_compat(
+            self,
+            data,
+            state=state,
+            x0=x0,
+            score=score,
+            scipy_args=scipy_args,
+            fixed_values=fixed_values,
         )
 
-    def pdf(self, x, **kwargs):
-        return self._base_module.pdf(x, **self._to_scipy_args(**kwargs))
+    fit_instance = fit
 
-    def cdf(self, x, **kwargs):
-        return self._base_module.cdf(x, **self._to_scipy_args(**kwargs))
+    def __getattr__(self, name: str) -> Parameter | CompatibilityValue:
+        try:
+            parameters = object.__getattribute__(self, "_public_parameters")
+        except AttributeError:
+            try:
+                parameters = object.__getattribute__(self, "_parameters")
+            except AttributeError as error:
+                raise AttributeError(name) from error
+        if name in parameters:
+            node = parameters[name]
+            if isinstance(node, Parameter):
+                return node
+            return cast(CompatibilityValue, value_projection(node, {}))
+        raise AttributeError(name)
 
-    def isf(self, q, **kwargs):
-        return self._base_module.isf(q, **self._to_scipy_args(**kwargs))
 
-    def ppf(self, q, **kwargs):
-        return self._base_module.ppf(q, **self._to_scipy_args(**kwargs))
+class ScipyDistribution(CoreScipyDistribution, Distribution):
+    """Plain SciPy wrapper with explicit state and legacy keyword overrides."""
 
-    def sf(self, x, **kwargs):
-        return self._base_module.sf(x, **self._to_scipy_args(**kwargs))
+    def __init__(
+        self,
+        scipy_distribution: rv_continuous,
+        parameters: Mapping[str, ParameterInput],
+        *,
+        defaults: Mapping[str, ParameterDefault] | None = None,
+        reparametrization: Reparametrization | None = None,
+    ) -> None:
+        normalized = {
+            name: None if value is None else as_expr(value)
+            for name, value in parameters.items()
+        }
+        self._reparametrization = reparametrization
+        super().__init__(scipy_distribution, normalized, defaults=defaults)
 
-    def logpdf(self, x, **kwargs):
-        return self._base_module.logpdf(x, **self._to_scipy_args(**kwargs))
+    def _with_parameters(self, parameters: Mapping[str, Node]) -> ScipyDistribution:
+        if not all(isinstance(parameter, Expr) for parameter in parameters.values()):
+            raise TypeError("SciPy distribution parameters must be expression nodes.")
+        result = copy.copy(self)
+        result._parameters = MappingProxyType(
+            {name: cast(Expr, parameter) for name, parameter in parameters.items()}
+        )
+        return result
 
-    def logcdf(self, x, **kwargs):
-        return self._base_module.logcdf(x, **self._to_scipy_args(**kwargs))
+    def _scipy_parameters(
+        self, state: ParameterState | None
+    ) -> dict[str, npt.NDArray[np.float64]]:
+        parameters = super()._scipy_parameters(state)
+        if self._reparametrization is None:
+            return parameters
+        return {
+            name: np.asarray(value, dtype=np.float64)
+            for name, value in self._reparametrization(parameters).items()
+        }
 
-    def logsf(self, x, **kwargs):
-        return self._base_module.logsf(x, **self._to_scipy_args(**kwargs))
+    def _overridden(self, overrides: Mapping[str, npt.ArrayLike]) -> ScipyDistribution:
+        if not overrides:
+            return self
+        return cast(ScipyDistribution, self._with_named_params(overrides))
+
+    def rvs(
+        self,
+        size: int | tuple[int, ...] | None = None,
+        *,
+        state: ParameterState | None = None,
+        random_state: RandomState = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.rvs(
+            self._overridden(overrides), size, state=state, random_state=random_state
+        )
+
+    def cdf(
+        self,
+        x: npt.ArrayLike,
+        *,
+        state: ParameterState | None = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.cdf(self._overridden(overrides), x, state=state)
+
+    def isf(
+        self,
+        q: npt.ArrayLike,
+        *,
+        state: ParameterState | None = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.isf(self._overridden(overrides), q, state=state)
+
+    def ppf(
+        self,
+        q: npt.ArrayLike,
+        *,
+        state: ParameterState | None = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.ppf(self._overridden(overrides), q, state=state)
+
+    def pdf(
+        self,
+        x: npt.ArrayLike,
+        *,
+        state: ParameterState | None = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.pdf(self._overridden(overrides), x, state=state)
+
+    def sf(
+        self,
+        x: npt.ArrayLike,
+        *,
+        state: ParameterState | None = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.sf(self._overridden(overrides), x, state=state)
+
+    def logcdf(
+        self,
+        x: npt.ArrayLike,
+        *,
+        state: ParameterState | None = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.logcdf(self._overridden(overrides), x, state=state)
+
+    def logsf(
+        self,
+        x: npt.ArrayLike,
+        *,
+        state: ParameterState | None = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.logsf(self._overridden(overrides), x, state=state)
+
+    def logpdf(
+        self,
+        x: npt.ArrayLike,
+        *,
+        state: ParameterState | None = None,
+        **overrides: npt.ArrayLike,
+    ) -> npt.NDArray[np.float64]:
+        return CoreScipyDistribution.logpdf(self._overridden(overrides), x, state=state)
+
+
+def _fit_compat(
+    distribution: Distribution,
+    data: npt.ArrayLike,
+    *,
+    state: StateInput | None = None,
+    x0: npt.ArrayLike | None = None,
+    score: LegacyScore | None = None,
+    scipy_args: OptimizerArgs | None = None,
+    fixed_values: Mapping[str, object],
+    existing_fixed: Mapping[Parameter, npt.ArrayLike] | None = None,
+) -> FitResult:
+    """Adapt legacy named refits to node-keyed explicit-state fitting."""
+
+    from pykelihood.parametric.fitting import compatibility_objective, fit_mle
+
+    values = dict(fixed_values)
+    method = values.pop("method", None)
+    if method is not None:
+        if not isinstance(method, str):
+            raise TypeError("method must be a SciPy optimizer method name.")
+        options = dict(scipy_args or {})
+        options.setdefault("method", method)
+        scipy_args = options
+
+    model = distribution
+    top_level = dict(model.parameters)
+    structural = {
+        name: value
+        for name, value in values.items()
+        if name in top_level
+        and isinstance(value, Expr)
+        and not isinstance(value, ConstantParameter)
+    }
+    if structural:
+        model = model._with_named_params(structural)
+        for name in structural:
+            values.pop(name)
+
+    named_fixed: State = {}
+    for name, value in values.items():
+        flattened = model.flattened_param_nodes
+        target = flattened.get(name)
+        if isinstance(target, Parameter):
+            named_fixed[target] = np.asarray(
+                value.value if isinstance(value, ConstantParameter) else value,
+                dtype=np.float64,
+            )
+            continue
+        if name in model.parameters or target is not None:
+            model = model._with_named_params({name: cast(FixedValue, value)})
+            continue
+        raise ValueError(f"Unknown distribution parameter `{name}`.")
+
+    layout = ParameterLayout.from_expr(model)
+    active = set(layout.parameters)
+    projected_state = (
+        None
+        if state is None
+        else {
+            parameter: value
+            for parameter, value in state.items()
+            if parameter in active
+        }
+    )
+    fixed = {
+        parameter: np.asarray(value, dtype=np.float64)
+        for parameter, value in (existing_fixed or {}).items()
+        if parameter in active
+    }
+    fixed.update(named_fixed)
+    constrained_data = model._apply_constraints(data)
+    legacy_score = _default_score if score is None else score
+    result = fit_mle(
+        model,
+        constrained_data,
+        state=projected_state,
+        fixed=fixed,
+        x0=x0,
+        objective=compatibility_objective(legacy_score),
+        scipy_args=scipy_args,
+    )
+    result._set_compatibility(constrained_data, legacy_score)
+    return result
+
+
+__all__ = ["Distribution", "ScipyDistribution"]

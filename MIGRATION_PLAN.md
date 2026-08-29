@@ -556,6 +556,10 @@ Required behavior:
 - The old profiler compatibility bridge remains functional. In particular,
   `FitResult` supports the read/refit methods that `pykelihood.profiler.Profiler`
   calls today.
+- `pykelihood/parametric/fitting.py` may change only for the read-only
+  `FitResult` projections and named fixed-parameter refits required by that
+  compatibility bridge; its PR 5.2 model, state, and optimizer contract remains
+  unchanged.
 
 Touch:
 
@@ -563,8 +567,11 @@ Touch:
 - `pykelihood/distributions/custom.py`
 - `pykelihood/distributions/scipy.py`
 - `pykelihood/distributions/__init__.py`
+- `pykelihood/parametric/fitting.py` only for the narrow `FitResult`
+  compatibility bridge above
 - `tests/test_distributions.py`
 - compatibility assertions in `tests/test_inference.py`
+- one compatibility smoke test in `tests/test_profiler.py`
 
 Do not touch:
 
