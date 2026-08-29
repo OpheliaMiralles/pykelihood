@@ -377,23 +377,31 @@ Important current-state assumptions:
   `pykelihood/distributions/core.py` and `tests/test_distribution_core.py`.
 - The broader distribution, likelihood, fitting, and compatibility WIP is preserved
   on a separate branch and is not an assumption about this focused branch.
-- PR 5.1 is the current focused implementation under review. PRs 5.2-5.3
-  remain planned work from this focused branch. Compatibility should be made explicit
-  and thin as each later surface is introduced.
+- PR 5.1 and PR 5.2 are complete (node core, explicit state, effects,
+  likelihood, `fit_mle`, and `FitResult`).
+- The current focused branch is `step5.3`, which implements PR 5.3b (wrapper
+  cutover with compatibility bridge) on top of PR 5.3a (`_compat.py`).
 
 The execution order is authoritative. The detailed contracts below remain grouped
 by topic where that avoids unrelated document churn:
 
 1. PR 5.1: structural distribution core
 2. PR 5.2: likelihood, `fit_mle`, and `FitResult`
-3. PR 5.3: wrapper/custom distribution work and distribution-package cutover
-4. PR 6: parametric profiler
-5. PR 7: distribution reparametrization
-6. PR 8: metrics
-7. PR 9: broad public API cutover and legacy test retirement
-8. PR 10: backend-neutral Bayesian contracts
-9. PR 11: optional PyMC execution and integration
-10. PR 12: internal compatibility cleanup
+3. PR 5.3a: compatibility projection infrastructure (`_compat.py`)
+4. PR 5.3b: wrapper/custom distribution cutover with compatibility bridge
+5. PR 6: parametric profiler
+6. PR 7: distribution reparametrization
+7. PR 8: metrics
+8. PR 9: broad public API cutover and legacy test retirement
+9. PR 10: backend-neutral Bayesian contracts
+10. PR 11: optional PyMC execution and integration
+11. PR 12: internal compatibility cleanup
+
+PR 5.3 is split into 5.3a and 5.3b because the compatibility projection layer
+(`_compat.py`) is standalone infrastructure with no dependency on the wrapper
+changes, while the wrapper migration and the `_BoundDistribution` fitting bridge
+are inseparable: the legacy `Distribution.fit()` API tests cannot pass without
+the bridge, and the bridge depends on the new wrapper classes.
 
 ### PR 5.1: Structural Distribution Core
 
@@ -526,13 +534,56 @@ Accept when:
 - fixed values remain fixed in the returned state
 - likelihood and fitting tests do not require broad wrapper or public-import work
 
-### PR 5.3: Wrapper, Custom Distribution, And Distribution Cutover
+### PR 5.3a: Compatibility Projection Infrastructure
+
+Goal:
+
+- Introduce `pykelihood/distributions/_compat.py` as a standalone read-only
+  projection layer that bridges the new explicit-state core onto the legacy
+  `Parametrized`-based API surface.
+
+This PR must be standalone and self-contained. It introduces no changes to
+`base.py`, `custom.py`, `scipy.py`, or `fitting.py`. It only adds the adapter
+module and its tests.
+
+Required behavior:
+
+- `_compat.py` exports `CompatibilityValue`, `CompatibilityProjection`,
+  `as_expr`, `normalize_expr`, `evaluate`,
+  `distribution_leaf_nodes`, `leaf_nodes`, `replace_nodes`,
+  `replace_parameters`, `optimisation_leaf_nodes`,
+  `compatibility_flattened_param_dict`, `compatibility_optimisation_params`,
+  `compatibility_optimisation_param_dict`, `compatibility_param_mapping`,
+  `value_projection`.
+- Every adapter is a pure function operating on `Node` / `State` /
+  `ParameterLayout` projections — no `Parametrized`-specific logic.
+
+Touch:
+
+- `pykelihood/distributions/_compat.py` (new file)
+- `tests/test_distribution_compat.py` (new test file)
+
+Do not touch:
+
+- `pykelihood/distributions/base.py`
+- `pykelihood/distributions/custom.py`
+- `pykelihood/distributions/scipy.py`
+- `pykelihood/parametric/fitting.py`
+- any existing test files
+
+Accept when:
+
+- `_compat.py` imports cleanly on top of step5.2 without any other changes
+- all adapter unit tests pass independently
+- no existing tests regress (197 pass on step5.2 baseline + new adapter tests)
+
+### PR 5.3b: Wrapper Cutover With Compatibility Bridge
 
 Goal:
 
 - Finish plain SciPy wrapper coverage, add the small native custom-distribution
-  set, and make the distribution package use the new core. Keep only the minimal
-  compatibility needed by downstream code and the old profiler.
+  set, make the distribution package use the new core, and add the
+  `_BoundDistribution` fitting bridge so legacy `Distribution.fit()` tests pass.
 
 Required behavior:
 
@@ -543,23 +594,15 @@ Required behavior:
 - Wrapper naming uses one helper plus a small explicit alias table.
 - Plain SciPy wrappers use native SciPy parameter names and meanings. They should
   not permanently absorb statistical reparametrization logic.
-- Wrapper aliases refer to the same generated class object. The public wrapper set
-  follows the SciPy support/version policy above.
+- Wrapper aliases refer to the same generated class object.
 - `Distribution.fit(...)` exists only as a thin forwarder to `fit_mle`.
-- Minimal compatibility projections remain where they can be computed from the
-  graph/state/layout:
-  - `params_names` returns public distribution parameter names
-  - `flattened_params` returns parameter/expression nodes in deterministic
-    parameter-name order
-  - `optimisation_params` returns deduplicated free `Parameter` nodes in layout
-    order
-- The old profiler compatibility bridge remains functional. In particular,
-  `FitResult` supports the read/refit methods that `pykelihood.profiler.Profiler`
-  calls today.
-- `pykelihood/parametric/fitting.py` may change only for the read-only
-  `FitResult` projections and named fixed-parameter refits required by that
-  compatibility bridge; its PR 5.2 model, state, and optimizer contract remains
-  unchanged.
+- `_BoundDistribution` in `parametric/fitting.py` projects `model` + `state`
+  as a legacy-compatible distribution object for the old profiler bridge.
+- `FitResult` supports `fit()`, `flattened_param_dict`, `optimisation_params`,
+  `optimisation_param_dict`, `param_mapping()`, and attribute forwarding —
+  all as read-only projections, not a second execution model.
+- `params_names`, `flattened_params`, `optimisation_params` return clean
+  projections from `ParameterLayout` and the model graph.
 
 Touch:
 
@@ -567,9 +610,10 @@ Touch:
 - `pykelihood/distributions/custom.py`
 - `pykelihood/distributions/scipy.py`
 - `pykelihood/distributions/__init__.py`
-- `pykelihood/parametric/fitting.py` only for the narrow `FitResult`
-  compatibility bridge above
-- `tests/test_distributions.py`
+- `pykelihood/parametric/fitting.py` for the `_BoundDistribution` bridge and
+  `FitResult` compatibility projections only
+- `tests/test_distributions.py` for wrapper aliases, Bernoulli,
+  TruncatedDistribution state usage
 - compatibility assertions in `tests/test_inference.py`
 - one compatibility smoke test in `tests/test_profiler.py`
 
@@ -578,16 +622,6 @@ Do not touch:
 - public package cutover in `pykelihood/__init__.py`
 - `pykelihood/parameters.py` cleanup
 - profiler implementation, metrics, Bayesian code, or optional backends
-
-Test requirements:
-
-- Add or preserve broad SciPy wrapper coverage, wrapper naming/aliases, custom
-  distributions, and native parameter meanings.
-- Add compatibility tests for `params_names`, `flattened_params`, and
-  `optimisation_params` on at least one plain wrapper and one expression/effect-
-  valued model.
-- Add a fast profiler smoke test through the compatibility bridge without
-  rewriting profiler internals.
 
 Accept when:
 
@@ -700,7 +734,7 @@ Goal:
 Why this exists:
 
 - Many legacy custom names were really reparametrizations.
-- PR 5.3 deliberately keeps plain SciPy wrappers plain.
+- PR 5.3b deliberately keeps plain SciPy wrappers plain.
 - Backwards compatibility can preserve useful names, but the permanent mechanism should be a separate reparametrization layer.
 
 Required behavior:
@@ -738,7 +772,7 @@ Accept when:
 
 - reparametrization is independent of old parameter containers
 - SciPy wrappers remain plain
-- any temporary wrapper-level reparametrization from PR 5.3 has either moved here or been deleted
+- any temporary wrapper-level reparametrization from PR 5.3b has either moved here or been deleted
 
 ### PR 8: Metrics Port
 
@@ -785,7 +819,7 @@ Goal:
 - Make the graph/state/effect/distribution/parametric stack the default public API while keeping intentional compatibility modules thin.
 
 This PR is about default imports and tests. It is not a core distribution rewrite;
-PRs 5.1-5.3 should already have done that.
+PRs 5.1-5.3b should already have done that.
 
 Required behavior:
 
