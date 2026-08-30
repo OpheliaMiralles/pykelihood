@@ -17,7 +17,6 @@ from pykelihood.distributions._compat import (
     compatibility_param_mapping,
     distribution_leaf_nodes,
     optimisation_leaf_nodes,
-    replace_parameters,
     value_projection,
 )
 from pykelihood.distributions.core import Distribution as CoreDistribution
@@ -28,7 +27,7 @@ from pykelihood.distributions.core import (
     RandomState,
 )
 from pykelihood.distributions.core import ScipyDistribution as CoreScipyDistribution
-from pykelihood.expr import Expr, Node
+from pykelihood.expr import Expr, Node, replace_parameters
 from pykelihood.metrics import opposite_log_likelihood
 from pykelihood.parameters import ConstantParameter, Parameter
 from pykelihood.state import ParameterLayout, State
@@ -144,7 +143,7 @@ class _LegacyDistribution(CoreDistribution):
             if target is None:
                 raise ValueError(f"Unknown distribution parameter `{name}`.")
             if not isinstance(target, Parameter):
-                raise ValueError(f"Distribution parameter `{name}` cannot be replaced.")
+                raise ValueError(f"Distribution parameter `{name}` cannot be replaced.")  # noqa: TRY004
             direct_replacements[target] = replacement
 
         result: Distribution = self

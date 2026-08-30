@@ -12,7 +12,6 @@ from pykelihood.distributions._compat import (
     compatibility_optimisation_param_dict,
     compatibility_param_mapping,
     distribution_leaf_nodes,
-    replace_parameters,
     value_projection,
 )
 from pykelihood.distributions.core import (
@@ -20,7 +19,7 @@ from pykelihood.distributions.core import (
     ParameterInput,
     ScipyDistribution,
 )
-from pykelihood.expr import Constant, FunctionExpr
+from pykelihood.expr import Constant, FunctionExpr, replace_parameters
 from pykelihood.parameters import ConstantParameter, Parameter
 from pykelihood.state import PositiveTransform
 
