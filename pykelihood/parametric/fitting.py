@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Any, Protocol, cast
 
 import numpy as np
@@ -15,12 +14,7 @@ from pykelihood.distributions._compat import (
     CompatibilityProjection,
     CompatibilityValue,
     _BoundDistribution,
-    compatibility_flattened_param_dict,
-    compatibility_optimisation_param_dict,
-    compatibility_optimisation_params,
-    compatibility_param_mapping,
     distribution_leaf_nodes,
-    value_projection,
 )
 from pykelihood.distributions.core import Distribution, ParameterState
 from pykelihood.likelihood import negative_log_likelihood
@@ -262,7 +256,7 @@ class _CompatFitResult(_FitResult):
                 raise ValueError(
                     f"Distribution parameter `{name}` is structural; "
                     "only leaf Parameter nodes can be fixed during a refit."
-                )
+                )  # noqa: TRY004
             if isinstance(value, (CompatibilityValue, ConstantParameter)):
                 value = value.value
             named_fixed[target] = np.asarray(value, dtype=np.float64).copy()

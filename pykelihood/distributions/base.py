@@ -144,7 +144,7 @@ class _LegacyDistribution(CoreDistribution):
             if target is None:
                 raise ValueError(f"Unknown distribution parameter `{name}`.")
             if not isinstance(target, Parameter):
-                raise ValueError(f"Distribution parameter `{name}` cannot be replaced.")
+                raise ValueError(f"Distribution parameter `{name}` cannot be replaced.")  # noqa: TRY004
             direct_replacements[target] = replacement
 
         result: Distribution = self
