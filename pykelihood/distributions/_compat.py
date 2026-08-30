@@ -11,7 +11,6 @@ import numpy.typing as npt
 from pykelihood.effects import BoundEffect, CategoricalEffect, Effect, FunctionEffect
 from pykelihood.expr import Constant, Expr, FunctionExpr, Node, NodePath
 from pykelihood.parameters import ConstantParameter, Parameter
-from pykelihood.state import ParameterLayout
 
 
 @runtime_checkable
@@ -130,6 +129,23 @@ def compatibility_flattened_param_dict(
     }
 
 
+def _free_parameter_leaves(
+    model: Node, fixed: frozenset[Parameter] = frozenset()
+) -> dict[str, Parameter]:
+    """Return the free (non-fixed) leaf ``Parameter`` nodes in ``model``.
+
+    This is the single source of truth for the opt-parameter filter used by
+    ``optimisation_leaf_nodes``, ``compatibility_optimisation_params``,
+    ``compatibility_optimisation_param_dict``, and ``compatibility_param_mapping``.
+    """
+
+    return {
+        name: node
+        for name, node in distribution_leaf_nodes(model).items()
+        if isinstance(node, Parameter) and node not in fixed
+    }
+
+
 def compatibility_optimisation_params(
     model: Node,
     state: Mapping[Parameter, npt.NDArray[np.float64]],
@@ -137,20 +153,14 @@ def compatibility_optimisation_params(
 ) -> tuple[CompatibilityValue, ...]:
     return tuple(
         CompatibilityValue(parameter, state, fixed)
-        for parameter in ParameterLayout.from_expr(model).parameters
-        if parameter not in fixed
+        for parameter in _free_parameter_leaves(model, fixed).values()
     )
 
 
 def optimisation_leaf_nodes(
     model: Node, fixed: frozenset[Parameter] = frozenset()
 ) -> dict[str, Parameter]:
-    free_parameters = set(ParameterLayout.from_expr(model).parameters) - set(fixed)
-    return {
-        name: node
-        for name, node in distribution_leaf_nodes(model).items()
-        if isinstance(node, Parameter) and node in free_parameters
-    }
+    return _free_parameter_leaves(model, fixed)
 
 
 def compatibility_optimisation_param_dict(
@@ -160,7 +170,7 @@ def compatibility_optimisation_param_dict(
 ) -> dict[str, CompatibilityValue]:
     return {
         name: CompatibilityValue(parameter, state, fixed)
-        for name, parameter in optimisation_leaf_nodes(model, fixed).items()
+        for name, parameter in _free_parameter_leaves(model, fixed).items()
     }
 
 
@@ -172,9 +182,7 @@ def compatibility_param_mapping(
     only_opt: bool = False,
 ) -> list[tuple[float | npt.NDArray[np.float64], tuple[str, ...]]]:
     free_parameters = (
-        set(ParameterLayout.from_expr(model).parameters) - set(fixed)
-        if only_opt
-        else None
+        set(_free_parameter_leaves(model, fixed).values()) if only_opt else None
     )
     mapped: list[tuple[float | npt.NDArray[np.float64], tuple[str, ...]]] = []
     positions: dict[int, int] = {}
