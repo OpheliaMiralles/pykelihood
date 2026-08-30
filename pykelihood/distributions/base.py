@@ -49,7 +49,11 @@ LegacyScore = Callable[[object, npt.ArrayLike], float]
 FixedValue = Union[Expr, npt.ArrayLike]
 
 
-class Distribution(CoreDistribution):
+# Core ``Distribution`` and ``ScipyDistribution`` live in ``distributions.core``.
+# All deprecated compat methods live in ``_LegacyDistribution`` and
+# ``_LegacyScipyDistribution`` below.  ``Distribution`` and ``ScipyDistribution``
+# re-export the clean public aliases backed by the compatibility surface.
+class _LegacyDistribution(CoreDistribution):
     """Explicit-state distribution with read-only legacy projections."""
 
     @property
@@ -193,7 +197,7 @@ class Distribution(CoreDistribution):
         raise AttributeError(name)
 
 
-class ScipyDistribution(CoreScipyDistribution, Distribution):
+class _LegacyScipyDistribution(CoreScipyDistribution, _LegacyDistribution):
     """Plain SciPy wrapper with explicit state and legacy keyword overrides."""
 
     def __init__(
@@ -211,7 +215,9 @@ class ScipyDistribution(CoreScipyDistribution, Distribution):
         self._reparametrization = reparametrization
         super().__init__(scipy_distribution, normalized, defaults=defaults)
 
-    def _with_parameters(self, parameters: Mapping[str, Node]) -> ScipyDistribution:
+    def _with_parameters(
+        self, parameters: Mapping[str, Node]
+    ) -> _LegacyScipyDistribution:
         if not all(isinstance(parameter, Expr) for parameter in parameters.values()):
             raise TypeError("SciPy distribution parameters must be expression nodes.")
         result = copy.copy(self)
@@ -231,10 +237,12 @@ class ScipyDistribution(CoreScipyDistribution, Distribution):
             for name, value in self._reparametrization(parameters).items()
         }
 
-    def _overridden(self, overrides: Mapping[str, npt.ArrayLike]) -> ScipyDistribution:
+    def _overridden(
+        self, overrides: Mapping[str, npt.ArrayLike]
+    ) -> _LegacyScipyDistribution:
         if not overrides:
             return self
-        return cast(ScipyDistribution, self._with_named_params(overrides))
+        return cast(_LegacyScipyDistribution, self._with_named_params(overrides))
 
     def rvs(
         self,
@@ -322,7 +330,7 @@ class ScipyDistribution(CoreScipyDistribution, Distribution):
 
 
 def _fit_compat(
-    distribution: Distribution,
+    distribution: _LegacyDistribution,
     data: npt.ArrayLike,
     *,
     state: StateInput | None = None,
@@ -407,3 +415,11 @@ def _fit_compat(
 
 
 __all__ = ["Distribution", "ScipyDistribution"]
+
+
+class Distribution(_LegacyDistribution):
+    """Public distribution alias preserving the original class name."""
+
+
+class ScipyDistribution(_LegacyScipyDistribution):
+    """Public SciPy distribution alias preserving the original class name."""

@@ -3,7 +3,15 @@ from __future__ import annotations
 import abc
 import operator
 from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING, Any, TypeVar, Union, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Protocol,
+    TypeVar,
+    Union,
+    overload,
+    runtime_checkable,
+)
 
 import numpy as np
 import numpy.typing as npt
@@ -139,3 +147,68 @@ class FunctionExpr(Expr):
 
     def __repr__(self) -> str:
         return f"FunctionExpr({self.name!r}, args={self.args!r})"
+
+
+@runtime_checkable
+class _ParameterOwner(Protocol):
+    @property
+    def parameters(self) -> Mapping[str, Node]: ...
+
+    def _with_parameters(self, parameters: Mapping[str, Node]) -> Node: ...
+
+
+def replace_nodes(
+    node: Node, replacements: Mapping[int, Node], memo: dict[int, Node] | None = None
+) -> Node:
+    """Rebuild the supported expression graph while preserving shared nodes."""
+
+    if id(node) in replacements:
+        return replacements[id(node)]
+    cache = {} if memo is None else memo
+    if id(node) in cache:
+        return cache[id(node)]
+
+    from pykelihood.effects import (
+        BoundEffect,
+        CategoricalEffect,
+        Effect,
+        FunctionEffect,
+    )
+
+    if isinstance(node, BoundEffect):
+        effect = replace_nodes(node.effect, replacements, cache)
+        if not isinstance(effect, Effect):
+            raise TypeError("A bound effect must remain an Effect.")
+        rebuilt: Node = BoundEffect(effect, node.covariate)
+    elif isinstance(node, FunctionExpr):
+        args = tuple(replace_nodes(arg, replacements, cache) for arg in node.args)
+        rebuilt = FunctionExpr(node.function, args, node.name, node.arg_names)
+    elif isinstance(node, FunctionEffect):
+        args = {
+            name: replace_nodes(arg, replacements, cache)
+            for name, arg in node.args.items()
+        }
+        rebuilt = FunctionEffect(node.function, args, node.name)
+    elif isinstance(node, CategoricalEffect):
+        args = {
+            level: replace_nodes(arg, replacements, cache)
+            for level, arg in node.level_args.items()
+        }
+        rebuilt = CategoricalEffect(node.levels, args)
+    elif isinstance(node, _ParameterOwner):
+        parameters = {
+            name: replace_nodes(child, replacements, cache)
+            for name, child in node.parameters.items()
+        }
+        rebuilt = node._with_parameters(parameters)
+    else:
+        rebuilt = node
+
+    cache[id(node)] = rebuilt
+    return rebuilt
+
+
+def replace_parameters(node: Node, replacements: Mapping[Parameter, Node]) -> Node:
+    return replace_nodes(
+        node, {id(parameter): value for parameter, value in replacements.items()}
+    )

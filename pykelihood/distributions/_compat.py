@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from typing import Protocol, Union, cast, runtime_checkable
+from collections.abc import Iterable, Iterator, Mapping
+from functools import partial
+from typing import Any, Protocol, Union, runtime_checkable
 
 import numpy as np
 import numpy.typing as npt
 
-from pykelihood.effects import BoundEffect, CategoricalEffect, Effect, FunctionEffect
-from pykelihood.expr import Constant, Expr, FunctionExpr, Node, NodePath
+from pykelihood.distributions.core import Distribution, ParameterState
+from pykelihood.effects import BoundEffect, Effect
+from pykelihood.expr import Constant, Expr, Node, NodePath
 from pykelihood.parameters import ConstantParameter, Parameter
 
 
@@ -21,14 +23,6 @@ class _KernelLike(Protocol):
     def effect(self) -> Effect: ...
 
     covariate: npt.ArrayLike | None
-
-
-@runtime_checkable
-class _ParameterOwner(Protocol):
-    @property
-    def parameters(self) -> Mapping[str, Node]: ...
-
-    def _with_parameters(self, parameters: Mapping[str, Node]) -> Node: ...
 
 
 def normalize_expr(value: Expr) -> Expr:
@@ -214,51 +208,65 @@ def distribution_leaf_nodes(distribution: Node) -> dict[str, Node]:
     return dict(leaf_nodes(distribution))
 
 
-def replace_nodes(
-    node: Node, replacements: Mapping[int, Node], memo: dict[int, Node] | None = None
-) -> Node:
-    """Rebuild the supported expression graph while preserving shared nodes."""
+class _BoundDistribution:
+    """Model/state view used only by the compatibility boundary."""
 
-    if id(node) in replacements:
-        return replacements[id(node)]
-    cache = {} if memo is None else memo
-    if id(node) in cache:
-        return cache[id(node)]
-
-    if isinstance(node, BoundEffect):
-        effect = replace_nodes(node.effect, replacements, cache)
-        if not isinstance(effect, Effect):
-            raise TypeError("A bound effect must remain an Effect.")
-        rebuilt: Node = BoundEffect(effect, node.covariate)
-    elif isinstance(node, FunctionExpr):
-        args = tuple(replace_nodes(arg, replacements, cache) for arg in node.args)
-        rebuilt = FunctionExpr(node.function, args, node.name, node.arg_names)
-    elif isinstance(node, FunctionEffect):
-        args = {
-            name: cast(Union[Expr, Effect], replace_nodes(arg, replacements, cache))
-            for name, arg in node.args.items()
+    _EVALUATION_METHODS = frozenset(
+        {
+            "cdf",
+            "inverse_cdf",
+            "isf",
+            "logcdf",
+            "logpdf",
+            "logsf",
+            "pdf",
+            "ppf",
+            "rvs",
+            "sf",
         }
-        rebuilt = FunctionEffect(node.function, args, node.name)
-    elif isinstance(node, CategoricalEffect):
-        args = {
-            level: cast(Union[Expr, Effect], replace_nodes(arg, replacements, cache))
-            for level, arg in node.level_args.items()
-        }
-        rebuilt = CategoricalEffect(node.levels, args)
-    elif isinstance(node, _ParameterOwner):
-        parameters = {
-            name: replace_nodes(child, replacements, cache)
-            for name, child in node.parameters.items()
-        }
-        rebuilt = node._with_parameters(parameters)
-    else:
-        rebuilt = node
-
-    cache[id(node)] = rebuilt
-    return rebuilt
-
-
-def replace_parameters(node: Node, replacements: Mapping[Parameter, Node]) -> Node:
-    return replace_nodes(
-        node, {id(parameter): value for parameter, value in replacements.items()}
     )
+
+    def __init__(
+        self, model: Distribution, state: ParameterState, fixed: Iterable[Parameter]
+    ) -> None:
+        self.model = model
+        self.state = state
+        self._fixed = frozenset(fixed)
+
+    @property
+    def params_names(self) -> tuple[str, ...]:
+        return tuple(self.model.parameters)
+
+    @property
+    def flattened_param_dict(self) -> dict[str, CompatibilityProjection]:
+        return compatibility_flattened_param_dict(self.model, self.state, self._fixed)
+
+    @property
+    def flattened_params(self) -> tuple[CompatibilityProjection, ...]:
+        return tuple(self.flattened_param_dict.values())
+
+    @property
+    def optimisation_params(self) -> tuple[CompatibilityValue, ...]:
+        return compatibility_optimisation_params(self.model, self.state, self._fixed)
+
+    @property
+    def optimisation_param_dict(self) -> dict[str, CompatibilityValue]:
+        return compatibility_optimisation_param_dict(
+            self.model, self.state, self._fixed
+        )
+
+    def param_mapping(
+        self, only_opt: bool = False
+    ) -> list[tuple[float | npt.NDArray[np.float64], tuple[str, ...]]]:
+        return compatibility_param_mapping(
+            self.model, self.state, self._fixed, only_opt=only_opt
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        parameters = self.model.parameters
+        if name in parameters:
+            return value_projection(parameters[name], self.state, self._fixed)
+        attribute = getattr(self.model, name)
+        if name in self._EVALUATION_METHODS and callable(attribute):
+            return partial(attribute, state=self.state)
+        return attribute

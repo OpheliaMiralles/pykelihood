@@ -1,3 +1,5 @@
+"""Core fitting machinery with deprecated compatibility projections."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
@@ -12,6 +14,7 @@ from scipy.optimize import OptimizeResult, minimize
 from pykelihood.distributions._compat import (
     CompatibilityProjection,
     CompatibilityValue,
+    _BoundDistribution,
     compatibility_flattened_param_dict,
     compatibility_optimisation_param_dict,
     compatibility_optimisation_params,
@@ -57,70 +60,6 @@ class _ProfilerFactory(Protocol):
         single_profiling_param: str,
         inference_confidence: float,
     ) -> _ConfidenceProfiler: ...
-
-
-class _BoundDistribution:
-    """Model/state view used only by the compatibility boundary."""
-
-    _EVALUATION_METHODS = frozenset(
-        {
-            "cdf",
-            "inverse_cdf",
-            "isf",
-            "logcdf",
-            "logpdf",
-            "logsf",
-            "pdf",
-            "ppf",
-            "rvs",
-            "sf",
-        }
-    )
-
-    def __init__(
-        self, model: Distribution, state: ParameterState, fixed: Iterable[Parameter]
-    ) -> None:
-        self.model = model
-        self.state = state
-        self._fixed = frozenset(fixed)
-
-    @property
-    def params_names(self) -> tuple[str, ...]:
-        return tuple(self.model.parameters)
-
-    @property
-    def flattened_param_dict(self) -> dict[str, CompatibilityProjection]:
-        return compatibility_flattened_param_dict(self.model, self.state, self._fixed)
-
-    @property
-    def flattened_params(self) -> tuple[CompatibilityProjection, ...]:
-        return tuple(self.flattened_param_dict.values())
-
-    @property
-    def optimisation_params(self) -> tuple[CompatibilityValue, ...]:
-        return compatibility_optimisation_params(self.model, self.state, self._fixed)
-
-    @property
-    def optimisation_param_dict(self) -> dict[str, CompatibilityValue]:
-        return compatibility_optimisation_param_dict(
-            self.model, self.state, self._fixed
-        )
-
-    def param_mapping(
-        self, only_opt: bool = False
-    ) -> list[tuple[float | npt.NDArray[np.float64], tuple[str, ...]]]:
-        return compatibility_param_mapping(
-            self.model, self.state, self._fixed, only_opt=only_opt
-        )
-
-    def __getattr__(self, name: str) -> Any:
-        parameters = self.model.parameters
-        if name in parameters:
-            return value_projection(parameters[name], self.state, self._fixed)
-        attribute = getattr(self.model, name)
-        if name in self._EVALUATION_METHODS and callable(attribute):
-            return partial(attribute, state=self.state)
-        return attribute
 
 
 def compatibility_objective(
@@ -209,7 +148,7 @@ def _free_layout(model: Distribution, fixed: set[Parameter]) -> ParameterLayout:
 
 
 @dataclass
-class FitResult:
+class _FitResult:
     """Point-estimate result over a structural model and physical-value state."""
 
     model: Distribution
@@ -218,12 +157,6 @@ class FitResult:
     optimizer_x0: npt.NDArray[np.float64]
     optimize_result: OptimizeResult
     fixed: Mapping[Parameter, npt.NDArray[np.float64]]
-    _compat_data: npt.NDArray[np.float64] | None = field(
-        default=None, init=False, repr=False
-    )
-    _compat_score: CompatibilityScore | None = field(
-        default=None, init=False, repr=False
-    )
 
     def __post_init__(self) -> None:
         self.state = {
@@ -241,6 +174,18 @@ class FitResult:
         """Return the fitted coordinates passed to SciPy's optimizer."""
         return np.asarray(self.optimize_result.x, dtype=np.float64).copy()
 
+
+@dataclass
+class _CompatFitResult(_FitResult):
+    """Deprecated ``FitResult`` projection that carries compatibility state."""
+
+    _compat_data: npt.NDArray[np.float64] | None = field(
+        default=None, init=False, repr=False
+    )
+    _compat_score: CompatibilityScore | None = field(
+        default=None, init=False, repr=False
+    )
+
     def _set_compatibility(
         self, data: npt.ArrayLike, score: CompatibilityScore
     ) -> None:
@@ -250,7 +195,6 @@ class FitResult:
     @property
     def fitted(self) -> _BoundDistribution:
         """Deprecated fitted-distribution projection over ``model`` and ``state``."""
-
         return _BoundDistribution(self.model, self.state, self.fixed)
 
     @property
@@ -285,7 +229,7 @@ class FitResult:
         score: CompatibilityScore | None = None,
         scipy_args: OptimizerArgs | None = None,
         **fixed_values: object,
-    ) -> FitResult:
+    ) -> _CompatFitResult:
         """Deprecated named fixed-parameter refit used by the old profiler."""
         if data is None:
             if self._compat_data is None:
@@ -331,7 +275,7 @@ class FitResult:
             if legacy_score is None
             else compatibility_objective(legacy_score, fixed)
         )
-        result = fit_mle(
+        core = fit_mle(
             self.model,
             data,
             state=self.state,
@@ -339,6 +283,14 @@ class FitResult:
             x0=x0,
             objective=objective,
             scipy_args=scipy_args,
+        )
+        result = _CompatFitResult(
+            model=core.model,
+            state=core.state,
+            optimizer_layout=core.optimizer_layout,
+            optimizer_x0=core.optimizer_x0,
+            optimize_result=core.optimize_result,
+            fixed=core.fixed,
         )
         if legacy_score is not None:
             result._set_compatibility(data, legacy_score)
@@ -348,7 +300,6 @@ class FitResult:
         self, param: str, alpha: float = 0.05, precision: float = 1e-5
     ) -> tuple[float, float]:
         """Deprecated profiler-backed confidence interval projection."""
-
         from pykelihood.profiler import Profiler
 
         if self._compat_data is None or self._compat_score is None:
@@ -370,6 +321,9 @@ class FitResult:
         return getattr(self.fitted, name)
 
 
+FitResult = _CompatFitResult
+
+
 def fit_mle(
     model: Distribution,
     data: npt.ArrayLike,
@@ -379,7 +333,7 @@ def fit_mle(
     x0: npt.ArrayLike | None = None,
     objective: Objective | None = None,
     scipy_args: OptimizerArgs | None = None,
-) -> FitResult:
+) -> _FitResult:
     """Fit ``model`` by minimizing a scalar objective over its free parameters.
 
     ``state`` and ``fixed`` contain physical parameter values keyed by
@@ -460,7 +414,7 @@ def fit_mle(
         final_state = dict(initial)
         final_state.update(layout.unflatten(optimizer_x, transform=True))
 
-    return FitResult(
+    return _CompatFitResult(
         model=model,
         state=final_state,
         optimizer_layout=layout,
