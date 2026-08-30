@@ -29,6 +29,7 @@ from pykelihood.distributions.core import (
 )
 from pykelihood.distributions.core import ScipyDistribution as CoreScipyDistribution
 from pykelihood.expr import Expr, Node
+from pykelihood.metrics import opposite_log_likelihood
 from pykelihood.parameters import ConstantParameter, Parameter
 from pykelihood.state import ParameterLayout, State
 
@@ -46,14 +47,6 @@ class Reparametrization(Protocol):
 
 LegacyScore = Callable[[object, npt.ArrayLike], float]
 FixedValue = Union[Expr, npt.ArrayLike]
-
-
-def _default_score(distribution: object, data: npt.ArrayLike) -> float:
-    logpdf = cast(
-        Callable[[npt.ArrayLike], npt.NDArray[np.float64]],
-        getattr(distribution, "logpdf"),
-    )
-    return -float(np.sum(logpdf(data)))
 
 
 class Distribution(CoreDistribution):
@@ -183,8 +176,6 @@ class Distribution(CoreDistribution):
             scipy_args=scipy_args,
             fixed_values=fixed_values,
         )
-
-    fit_instance = fit
 
     def __getattr__(self, name: str) -> Parameter | CompatibilityValue:
         try:
@@ -401,7 +392,7 @@ def _fit_compat(
     }
     fixed.update(named_fixed)
     constrained_data = model._apply_constraints(data)
-    legacy_score = _default_score if score is None else score
+    legacy_score = opposite_log_likelihood if score is None else score
     result = fit_mle(
         model,
         constrained_data,
