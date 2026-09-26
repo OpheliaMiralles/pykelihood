@@ -38,6 +38,16 @@ class Node:
     def iter_children(self) -> Iterator[tuple[PathElem, Node]]:
         return iter(())
 
+
+class Expr(Node, abc.ABC):
+    """Base class for deterministic evaluable nodes."""
+
+    @abc.abstractmethod
+    def eval(
+        self, state: Mapping[Parameter, npt.NDArray[np.float64]]
+    ) -> npt.NDArray[np.float64]:
+        raise NotImplementedError
+
     def __add__(self, other: Any) -> FunctionExpr:
         return FunctionExpr(
             operator.add, (self, ensure_node(other)), "+", ("left", "right")
@@ -85,16 +95,6 @@ class Node:
 
     def __neg__(self) -> FunctionExpr:
         return FunctionExpr(operator.neg, (self,), "-", ("operand",))
-
-
-class Expr(Node, abc.ABC):
-    """Base class for deterministic evaluable nodes."""
-
-    @abc.abstractmethod
-    def eval(
-        self, state: Mapping[Parameter, npt.NDArray[np.float64]]
-    ) -> npt.NDArray[np.float64]:
-        raise NotImplementedError
 
 
 class Constant(Expr):
