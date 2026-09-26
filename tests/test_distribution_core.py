@@ -3,7 +3,8 @@ import pytest
 from numpy.testing import assert_allclose
 from scipy import stats
 
-from pykelihood.distributions.core import Normal, ParameterDefault, ScipyDistribution
+from pykelihood.distributions.core import ParameterDefault, ScipyDistribution
+from pykelihood.distributions.scipy_wrappers import Normal
 from pykelihood.effects import linear
 from pykelihood.expr import Constant
 from pykelihood.likelihood import negative_log_likelihood

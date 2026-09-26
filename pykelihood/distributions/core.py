@@ -10,12 +10,11 @@ from typing import Union
 
 import numpy as np
 import numpy.typing as npt
-from scipy import stats
 from scipy.stats import rv_continuous
 
 from pykelihood.expr import Constant, Expr, Node, PathElem
 from pykelihood.parameters import Parameter
-from pykelihood.state import PositiveTransform, Transform
+from pykelihood.state import Transform
 
 ParameterInput = Union[Expr, npt.ArrayLike, None]
 ParameterState = Mapping[Parameter, npt.NDArray[np.float64]]
@@ -182,20 +181,4 @@ class ScipyDistribution(Distribution):
         return np.asarray(
             self._scipy_distribution.ppf(q, **self._evaluated_parameters(state)),
             dtype=np.float64,
-        )
-
-
-class Normal(ScipyDistribution):
-    """Normal distribution with free default location and scale parameters."""
-
-    def __init__(
-        self, loc: ParameterInput = None, scale: ParameterInput = None
-    ) -> None:
-        super().__init__(
-            stats.norm,
-            {"loc": loc, "scale": scale},
-            defaults={
-                "loc": ParameterDefault(0.0),
-                "scale": ParameterDefault(1.0, PositiveTransform()),
-            },
         )
