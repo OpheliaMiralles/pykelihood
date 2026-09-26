@@ -91,6 +91,11 @@ class ScipyDistribution(Distribution):
             if scipy_distribution.shapes is None
             else tuple(name.strip() for name in scipy_distribution.shapes.split(","))
         )
+        unknown = set(parameters) - set(shape_names) - {"loc", "scale"}
+        if unknown:
+            raise TypeError(
+                f"Unknown distribution parameters: {', '.join(sorted(unknown))}"
+            )
         for name in shape_names:
             if parameters.get(name) is None:
                 raise TypeError(f"Missing required distribution parameter: {name}")

@@ -69,6 +69,16 @@ def test_literal_values_become_structural_constants() -> None:
     )
 
 
+def test_constructor_values_are_independent_of_input_arrays() -> None:
+    literal = np.array(2.0)
+    initial = np.array(3.0)
+    distribution = Normal(loc=literal, scale=Parameter(init=initial))
+    literal[...] = 8.0
+    initial[...] = 9.0
+
+    assert_allclose(distribution.pdf(2.0), stats.norm.pdf(2.0, loc=2.0, scale=3.0))
+
+
 def test_shape_parameters_remain_required() -> None:
     with pytest.raises(TypeError, match="Missing required distribution parameter: a"):
         ScipyDistribution(
@@ -79,6 +89,11 @@ def test_shape_parameters_remain_required() -> None:
                 "scale": ParameterDefault(1.0, PositiveTransform()),
             },
         )
+
+
+def test_unknown_scipy_parameter_is_rejected_at_construction() -> None:
+    with pytest.raises(TypeError, match="Unknown distribution parameters: typo"):
+        ScipyDistribution(stats.norm, {"typo": 1.0})
 
 
 def test_evaluation_uses_explicit_state_and_supports_broadcasting() -> None:
@@ -156,7 +171,9 @@ def test_fit_mle_uses_fixed_identity_and_returns_physical_state_without_mutation
 
     assert isinstance(result, FitResult)
     assert result.model is model
-    assert result.optimizer_layout.parameters == (scale,)
+    assert result.optimize_result.success
+    assert tuple(result.fixed) == (location,)
+    assert result.fixed[location] == pytest.approx(0.0)
     assert result.state[location] == pytest.approx(0.0)
     assert result.state[scale] == pytest.approx(np.sqrt(5.0 / 3.0), rel=1e-3)
     assert model.parameters["loc"] is location
@@ -166,4 +183,26 @@ def test_fit_mle_uses_fixed_identity_and_returns_physical_state_without_mutation
     for parameter, value in starting_values.items():
         assert_allclose(starting_state[parameter], value)
 
-    assert isinstance(negative_log_likelihood(model, data, state=result.state), float)
+    assert negative_log_likelihood(model, data, state=result.state) == pytest.approx(
+        -np.sum(stats.norm.logpdf(data, loc=0.0, scale=np.sqrt(5.0 / 3.0)))
+    )
+
+
+def test_fit_result_reports_optimizer_failure() -> None:
+    result = fit_mle(Normal(), [0.0, 1.0, 2.0], scipy_args={"options": {"maxiter": 0}})
+
+    assert not result.optimize_result.success
+
+
+def test_fitting_a_constant_model_has_no_free_state() -> None:
+    model = Normal(loc=2.0, scale=3.0)
+    data = np.array([1.0, 2.0, 3.0])
+
+    result = fit_mle(model, data)
+
+    assert result.state == {}
+    assert result.optimize_result.success
+    assert result.optimize_result.x.size == 0
+    assert result.optimize_result.fun == pytest.approx(
+        -np.sum(stats.norm.logpdf(data, loc=2.0, scale=3.0))
+    )

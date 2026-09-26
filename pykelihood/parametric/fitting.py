@@ -79,26 +79,18 @@ class FitResult:
 
     model: Distribution
     state: State
-    optimizer_layout: ParameterLayout
-    optimizer_x0: npt.NDArray[np.float64]
-    optimize_result: OptimizeResult
     fixed: Mapping[Parameter, npt.NDArray[np.float64]]
+    optimize_result: OptimizeResult
 
     def __post_init__(self) -> None:
         self.state = {
             parameter: np.asarray(value, dtype=np.float64).copy()
             for parameter, value in self.state.items()
         }
-        self.optimizer_x0 = np.asarray(self.optimizer_x0, dtype=np.float64).copy()
         self.fixed = {
             parameter: np.asarray(value, dtype=np.float64).copy()
             for parameter, value in self.fixed.items()
         }
-
-    @property
-    def optimizer_x(self) -> npt.NDArray[np.float64]:
-        """Return the fitted coordinates passed to SciPy's optimizer."""
-        return np.asarray(self.optimize_result.x, dtype=np.float64).copy()
 
 
 def fit_mle(
@@ -144,9 +136,7 @@ def fit_mle(
     _validate_transform_domains(initial, full_layout.parameters)
 
     layout = _free_layout(model, set(fixed_state))
-    if x0 is None:
-        physical_x0 = layout.flatten(initial)
-    else:
+    if x0 is not None:
         physical_x0 = np.asarray(x0, dtype=np.float64).ravel().copy()
         if physical_x0.size != layout.vector_size:
             raise ValueError(
@@ -194,8 +184,6 @@ def fit_mle(
     return FitResult(
         model=model,
         state=final_state,
-        optimizer_layout=layout,
-        optimizer_x0=optimizer_x0,
-        optimize_result=optimize_result,
         fixed=fixed_state,
+        optimize_result=optimize_result,
     )

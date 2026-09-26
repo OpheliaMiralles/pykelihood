@@ -101,7 +101,7 @@ class Constant(Expr):
     """Literal value normalized into a graph node."""
 
     def __init__(self, value: npt.ArrayLike):
-        self.value = np.asarray(value, dtype=np.float64)
+        self.value = np.array(value, dtype=np.float64, copy=True)
 
     def eval(
         self, state: Mapping[Parameter, npt.NDArray[np.float64]]
