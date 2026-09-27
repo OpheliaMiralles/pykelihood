@@ -22,7 +22,7 @@ class InvalidDistributionState(ValueError):
 
 
 class Distribution(Node, ABC):
-    """A sampleable probability law with pointwise log probability scores."""
+    """A probability law with pointwise log probability scores."""
 
     @property
     @abstractmethod
@@ -33,6 +33,17 @@ class Distribution(Node, ABC):
         yield from self.parameters.items()
 
     @abstractmethod
+    def log_prob(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        """Return pointwise log scores, reducing any event coordinates."""
+        raise NotImplementedError
+
+
+class SampleableDistribution(Distribution, ABC):
+    """A probability law that can also generate random observations."""
+
+    @abstractmethod
     def rvs(
         self,
         size: int | tuple[int, ...] | None = None,
@@ -40,13 +51,6 @@ class Distribution(Node, ABC):
         state: ParameterState | None = None,
         random_state: RandomState = None,
     ) -> npt.NDArray[np.generic]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def log_prob(
-        self, x: npt.ArrayLike, *, state: ParameterState | None = None
-    ) -> npt.NDArray[np.float64]:
-        """Return pointwise log scores, reducing any event coordinates."""
         raise NotImplementedError
 
 

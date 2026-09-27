@@ -14,6 +14,7 @@ from pykelihood.distributions.core import (
     ParameterInput,
     ParameterState,
     RandomState,
+    SampleableDistribution,
     UnivariateContinuousDistribution,
 )
 from pykelihood.distributions.scipy_adapter import ScipyDistribution
@@ -36,7 +37,7 @@ def _resolve_parameter(
     return Constant(value)
 
 
-class _ShapeConvenience(UnivariateContinuousDistribution):
+class _ShapeConvenience(UnivariateContinuousDistribution, SampleableDistribution):
     """Map one public statistical shape convention to SciPy's ``c``."""
 
     _scipy_distribution: rv_continuous
