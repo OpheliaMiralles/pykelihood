@@ -63,10 +63,14 @@ def test_sampling_prepends_sample_shape_to_batched_distributions() -> None:
 
 def test_invalid_intervals_and_out_of_bounds_data_are_not_silently_accepted() -> None:
     with pytest.raises(ValueError, match="upper_bound must be greater"):
-        TruncatedContinuousDistribution(Normal(), lower_bound=2.0, upper_bound=1.0).pdf(1.5)
+        TruncatedContinuousDistribution(Normal(), lower_bound=2.0, upper_bound=1.0).pdf(
+            1.5
+        )
 
     with pytest.raises(ValueError, match="no finite likelihood"):
-        fit_mle(TruncatedContinuousDistribution(Normal(loc=0.0, scale=1.0), 2.0, 1.0), [1.5])
+        fit_mle(
+            TruncatedContinuousDistribution(Normal(loc=0.0, scale=1.0), 2.0, 1.0), [1.5]
+        )
 
     model = TruncatedContinuousDistribution(Normal(loc=0.0, scale=1.0), 0.0, 1.0)
     assert np.isinf(negative_log_likelihood(model, [1.5]))
