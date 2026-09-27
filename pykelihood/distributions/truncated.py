@@ -31,7 +31,9 @@ def _rng(random_state: RandomState) -> np.random.Generator | np.random.RandomSta
     return np.random.default_rng(random_state)
 
 
-class TruncatedContinuousDistribution(UnivariateContinuousDistribution, SampleableDistribution):
+class TruncatedContinuousDistribution(
+    UnivariateContinuousDistribution, SampleableDistribution
+):
     """Condition a continuous distribution to lie within ``[lower, upper]``.
 
     Bounds may be literals or state-evaluable expressions. The wrapped model and
