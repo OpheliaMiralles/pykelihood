@@ -144,6 +144,14 @@ def test_sampling_accepts_seeded_generator() -> None:
     assert_allclose(actual, expected)
 
 
+def test_sampling_prepends_sample_shape_to_parameter_batch_shape() -> None:
+    distribution = Normal(loc=np.array([0.0, 1.0]), scale=1.0)
+
+    samples = distribution.rvs(size=5, random_state=0)
+
+    assert samples.shape == (5, 2)
+
+
 def test_fit_mle_uses_fixed_identity_and_returns_physical_state_without_mutation() -> (
     None
 ):
