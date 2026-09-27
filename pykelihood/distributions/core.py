@@ -142,12 +142,12 @@ class ScipyDistribution(Distribution):
         batch_shape = np.broadcast_shapes(
             *(value.shape for value in parameters.values())
         )
-        sample_shape = () if size is None else (size,) if isinstance(size, int) else size
+        sample_shape = (
+            () if size is None else (size,) if isinstance(size, int) else size
+        )
         return np.asarray(
             self._scipy_distribution.rvs(
-                **parameters,
-                size=sample_shape + batch_shape,
-                random_state=random_state,
+                **parameters, size=sample_shape + batch_shape, random_state=random_state
             ),
             dtype=np.float64,
         )
