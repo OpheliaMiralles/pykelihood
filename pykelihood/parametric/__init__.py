@@ -1,4 +1,4 @@
-"""Fitting tools for explicit-state models."""
+"""Fitting, profiling, diagnostics, and scores for explicit-state models."""
 
 from pykelihood.parametric.diagnostics import aic, bic
 from pykelihood.parametric.fitting import FitResult, fit_mle
