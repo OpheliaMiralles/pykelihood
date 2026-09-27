@@ -20,31 +20,6 @@ StateInput = Mapping[Parameter, npt.ArrayLike]
 FixedParameters = Mapping[Parameter, npt.ArrayLike]
 
 
-def _copy_value(parameter: Parameter, value: npt.ArrayLike) -> npt.NDArray[np.float64]:
-    array = np.asarray(value, dtype=np.float64)
-    if array.shape != parameter.shape:
-        raise ValueError(
-            f"Value for {parameter!r} has shape {array.shape}, "
-            f"expected {parameter.shape}."
-        )
-    return array.copy()
-
-
-def _copy_state(
-    state: StateInput, parameters: tuple[Parameter, ...], *, name: str
-) -> State:
-    active = set(parameters)
-    unknown = tuple(parameter for parameter in state if parameter not in active)
-    if unknown:
-        details = ", ".join(repr(parameter) for parameter in unknown)
-        raise ValueError(
-            f"{name} contains parameters not present in the model: {details}"
-        )
-    return {
-        parameter: _copy_value(parameter, value) for parameter, value in state.items()
-    }
-
-
 def _validate_transform_domains(
     state: State, parameters: tuple[Parameter, ...]
 ) -> None:
@@ -57,21 +32,6 @@ def _validate_transform_domains(
             raise ValueError(
                 f"Value for {parameter!r} is outside its transform domain."
             )
-
-
-def _free_layout(
-    full_layout: ParameterLayout, fixed: set[Parameter]
-) -> ParameterLayout:
-    free_parameters = tuple(
-        parameter for parameter in full_layout.parameters if parameter not in fixed
-    )
-    return ParameterLayout(
-        free_parameters,
-        {
-            parameter: full_layout.parameter_paths[parameter]
-            for parameter in free_parameters
-        },
-    )
 
 
 @dataclass
@@ -110,31 +70,16 @@ def fit_mle(
     """
     data_array = np.asarray(data, dtype=np.float64).copy()
     full_layout = ParameterLayout.from_expr(model)
-    initial: State = {
-        parameter: _copy_value(parameter, parameter.init)
-        for parameter in full_layout.parameters
-        if parameter.init is not None
-    }
-    if state is not None:
-        initial.update(_copy_state(state, full_layout.parameters, name="state"))
-
-    requested_fixed = {} if fixed is None else dict(fixed)
-    if any(not isinstance(parameter, Parameter) for parameter in requested_fixed):
+    fixed_values = {} if fixed is None else dict(fixed)
+    if any(not isinstance(parameter, Parameter) for parameter in fixed_values):
         raise TypeError("fixed must be keyed by Parameter objects.")
-    fixed_state = _copy_state(requested_fixed, full_layout.parameters, name="fixed")
-    initial.update(fixed_state)
-
-    missing = tuple(
-        parameter for parameter in full_layout.parameters if parameter not in initial
-    )
-    if missing:
-        details = ", ".join(repr(parameter) for parameter in missing)
-        raise ValueError(
-            f"Cannot build an initial state for uninitialized parameters: {details}"
-        )
+    starting_values = {} if state is None else dict(state)
+    starting_values.update(fixed_values)
+    initial = full_layout.initial_state(starting_values)
+    fixed_state = {parameter: initial[parameter] for parameter in fixed_values}
     _validate_transform_domains(initial, full_layout.parameters)
 
-    layout = _free_layout(full_layout, set(fixed_state))
+    layout = full_layout.without(fixed_state)
     optimizer_x0 = layout.flatten(initial, transform=True)
 
     def evaluate(values: npt.ArrayLike) -> float:
