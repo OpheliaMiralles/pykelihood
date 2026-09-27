@@ -17,42 +17,21 @@ from pykelihood.state import PositiveTransform
 
 
 def _name_from_scipy_dist(scipy_dist: rv_continuous) -> str:
-    raw_name = type(scipy_dist).__name__.removesuffix("_gen")
-    return "".join(part.capitalize() for part in raw_name.split("_"))
+    return "".join(part.capitalize() for part in scipy_dist.name.split("_"))
 
 
 class _WrappedScipyDistribution(ScipyDistribution):
     """Shared constructor for generated plain SciPy distributions."""
 
     _base_module: ClassVar[rv_continuous]
-    _shape_names: ClassVar[tuple[str, ...]]
-    _parameter_names: ClassVar[tuple[str, ...]]
+    __signature__: ClassVar[inspect.Signature]
 
     def __init__(self, *args: ParameterInput, **kwargs: ParameterInput) -> None:
-        names = self._parameter_names
-        if len(args) > len(names):
-            raise TypeError(
-                f"Expected at most {len(names)} positional parameters, got {len(args)}."
-            )
-        supplied = dict(zip(names, args))
-        duplicates = supplied.keys() & kwargs.keys()
-        if duplicates:
-            raise TypeError(f"Parameter {min(duplicates)!r} supplied more than once.")
-        unknown = kwargs.keys() - set(names)
-        if unknown:
-            raise TypeError(f"Unexpected distribution parameter: {min(unknown)}")
-        supplied.update(kwargs)
-        missing = tuple(
-            name for name in self._shape_names if supplied.get(name) is None
-        )
-        if missing:
-            raise TypeError(
-                "Missing required distribution parameter(s): " + ", ".join(missing)
-            )
-        ordered = {name: supplied.get(name) for name in names}
+        bound = self.__signature__.bind(*args, **kwargs)
+        bound.apply_defaults()
         super().__init__(
             self._base_module,
-            ordered,
+            bound.arguments,
             defaults={
                 "loc": ParameterDefault(0.0),
                 "scale": ParameterDefault(1.0, PositiveTransform()),
@@ -89,8 +68,6 @@ def wrap_scipy_distribution(
     wrapper_name = _name_from_scipy_dist(scipy_dist)
     namespace: dict[str, Any] = {
         "_base_module": scipy_dist,
-        "_shape_names": shape_names,
-        "_parameter_names": parameter_names,
         "__doc__": f"Structural wrapper for ``scipy.stats.{scipy_dist.name}``.",
         "__module__": __name__,
         "__signature__": signature,
