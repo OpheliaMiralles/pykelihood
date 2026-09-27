@@ -136,5 +136,7 @@ class TruncatedDistribution(Distribution):
         state: ParameterState | None = None,
         random_state: RandomState = None,
     ) -> npt.NDArray[np.float64]:
-        uniforms = _rng(random_state).uniform(size=size)
+        batch_shape = self._normalizer(state)[2].shape
+        sample_shape = () if size is None else (size,) if isinstance(size, int) else size
+        uniforms = _rng(random_state).uniform(size=sample_shape + batch_shape)
         return self.ppf(uniforms, state=state)

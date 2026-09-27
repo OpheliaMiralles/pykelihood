@@ -50,6 +50,17 @@ def test_ppf_and_seeded_sampling_stay_inside_truncation_interval() -> None:
     assert np.all((first >= -1.0) & (first <= 2.0))
 
 
+def test_sampling_prepends_sample_shape_to_batched_distributions() -> None:
+    model = TruncatedDistribution(
+        Normal(loc=np.array([0.0, 1.0]), scale=1.0), -1.0, 2.0
+    )
+
+    samples = model.rvs(size=5, random_state=0)
+
+    assert samples.shape == (5, 2)
+    assert np.all((samples >= -1.0) & (samples <= 2.0))
+
+
 def test_invalid_intervals_and_out_of_bounds_data_are_not_silently_accepted() -> None:
     with pytest.raises(ValueError, match="upper_bound must be greater"):
         TruncatedDistribution(Normal(), lower_bound=2.0, upper_bound=1.0).pdf(1.5)
