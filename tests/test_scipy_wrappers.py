@@ -19,13 +19,21 @@ def test_factory_builds_named_classes_with_native_parameters_and_alias() -> None
     assert Normal.__name__ == "Norm"
     assert Gamma.__name__ == "Gamma"
     assert Genextreme.__name__ == "Genextreme"
+    assert tuple(inspect.signature(Normal).parameters) == ("loc", "scale")
     assert tuple(inspect.signature(Gamma).parameters) == ("a", "loc", "scale")
     assert tuple(inspect.signature(Genextreme).parameters) == ("c", "loc", "scale")
+    assert_allclose(Norm(1.0, 2.0).pdf(0.5), stats.norm.pdf(0.5, loc=1.0, scale=2.0))
 
 
 def test_generated_wrapper_requires_shape_and_keeps_scipy_parameterization() -> None:
     with pytest.raises(TypeError, match="Missing required.*a"):
         Gamma()
+    with pytest.raises(TypeError, match="Unexpected distribution parameter"):
+        Gamma(a=2.0, typo=1.0)
+    with pytest.raises(TypeError, match="supplied more than once"):
+        Gamma(2.0, a=3.0)
+    with pytest.raises(TypeError, match="at most"):
+        Gamma(2.0, 0.0, 1.0, 4.0)
 
     shape = Parameter(init=2.0)
     distribution = Gamma(a=shape, loc=1.0, scale=3.0)
@@ -42,8 +50,8 @@ def test_generated_wrapper_requires_shape_and_keeps_scipy_parameterization() -> 
     )
 
 
-def test_generated_defaults_are_free_parameters_and_fit_uses_the_wrapper() -> None:
-    distribution = Normal()
+def test_generated_defaults_are_free_parameters() -> None:
+    distribution = Norm()
     location = distribution.parameters["loc"]
     scale = distribution.parameters["scale"]
 
@@ -65,7 +73,8 @@ def test_generated_gamma_fits_its_native_shape_parameter() -> None:
     assert result.model is distribution
     assert result.optimize_result.success
     assert tuple(result.state) == (shape,)
-    assert result.state[shape] > 0.0
+    expected_shape = stats.gamma.fit(data, floc=0.0, fscale=1.0)[0]
+    assert result.state[shape] == pytest.approx(expected_shape, rel=1e-3)
     assert (
         negative_log_likelihood(distribution, data, state=result.state) < initial_score
     )
