@@ -1,16 +1,68 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from types import MappingProxyType
+
 import numpy as np
+import numpy.typing as npt
 import pytest
 from numpy.testing import assert_allclose
 from scipy import stats
 
-from pykelihood.distributions.core import ParameterDefault, ScipyDistribution
+from pykelihood.distributions.core import (
+    Distribution,
+    ParameterDefault,
+    ParameterState,
+    RandomState,
+    ScipyDistribution,
+    UnivariateContinuousDistribution,
+)
 from pykelihood.distributions.scipy_wrappers import Normal
 from pykelihood.effects import linear
 from pykelihood.expr import Constant
-from pykelihood.likelihood import negative_log_likelihood
+from pykelihood.likelihood import log_likelihood, negative_log_likelihood
 from pykelihood.parameters import Parameter
 from pykelihood.parametric import FitResult, fit_mle
 from pykelihood.state import ParameterLayout, PositiveTransform
+
+
+class LogProbOnlyDistribution(Distribution):
+    @property
+    def parameters(self) -> Mapping[str, Constant]:
+        return MappingProxyType({})
+
+    def rvs(
+        self,
+        size: int | tuple[int, ...] | None = None,
+        *,
+        state: ParameterState | None = None,
+        random_state: RandomState = None,
+    ) -> np.ndarray:
+        return np.asarray(
+            stats.bernoulli.rvs(0.25, size=size, random_state=random_state)
+        )
+
+    def log_prob(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> np.ndarray:
+        return np.asarray(stats.bernoulli.logpmf(x, 0.25))
+
+
+def test_distribution_contract_needs_only_pointwise_log_prob_and_sampling() -> None:
+    model = LogProbOnlyDistribution()
+    observations = [0, 1, 0]
+    expected = np.log(0.75 * 0.25 * 0.75)
+
+    assert log_likelihood(model, observations) == pytest.approx(expected)
+    assert negative_log_likelihood(model, observations) == pytest.approx(-expected)
+    assert fit_mle(model, observations).optimize_result.fun == pytest.approx(-expected)
+
+
+def test_scipy_distribution_is_continuous_and_log_prob_uses_logpdf() -> None:
+    model = Normal(loc=0.0, scale=1.0)
+
+    assert isinstance(model, UnivariateContinuousDistribution)
+    assert_allclose(model.log_prob(40.0), stats.norm.logpdf(40.0))
 
 
 def test_distribution_children_expose_shared_parameters_to_traversal() -> None:
