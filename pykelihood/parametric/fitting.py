@@ -20,6 +20,10 @@ StateInput = Mapping[Parameter, npt.ArrayLike]
 FixedParameters = Mapping[Parameter, npt.ArrayLike]
 
 
+class NonFiniteInitialLikelihood(ValueError):
+    """The supplied starting state cannot be scored against the data."""
+
+
 def _validate_transform_domains(
     state: State, parameters: tuple[Parameter, ...]
 ) -> None:
@@ -94,7 +98,9 @@ def fit_mle(
 
     initial_objective = evaluate(optimizer_x0)
     if not np.isfinite(initial_objective):
-        raise ValueError("The model has no finite likelihood at its initial state.")
+        raise NonFiniteInitialLikelihood(
+            "The model has no finite likelihood at its initial state."
+        )
 
     options = dict(scipy_args or {})
     options.setdefault("method", "Nelder-Mead")
