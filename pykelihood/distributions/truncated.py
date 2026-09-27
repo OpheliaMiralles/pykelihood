@@ -10,10 +10,10 @@ import numpy as np
 import numpy.typing as npt
 
 from pykelihood.distributions.core import (
-    Distribution,
     InvalidDistributionState,
     ParameterState,
     RandomState,
+    UnivariateContinuousDistribution,
 )
 from pykelihood.expr import Constant, Expr, Node, PathElem
 
@@ -30,7 +30,7 @@ def _rng(random_state: RandomState) -> np.random.Generator | np.random.RandomSta
     return np.random.default_rng(random_state)
 
 
-class TruncatedContinuousDistribution(Distribution):
+class TruncatedContinuousDistribution(UnivariateContinuousDistribution):
     """Condition a continuous distribution to lie within ``[lower, upper]``.
 
     Bounds may be literals or state-evaluable expressions. The wrapped model and
@@ -40,7 +40,7 @@ class TruncatedContinuousDistribution(Distribution):
 
     def __init__(
         self,
-        distribution: Distribution,
+        distribution: UnivariateContinuousDistribution,
         lower_bound: BoundInput = -np.inf,
         upper_bound: BoundInput = np.inf,
     ) -> None:

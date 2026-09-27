@@ -11,10 +11,10 @@ import numpy.typing as npt
 from scipy.stats import rv_continuous
 
 from pykelihood.distributions.core import (
-    Distribution,
     ParameterInput,
     ParameterState,
     RandomState,
+    UnivariateContinuousDistribution,
 )
 from pykelihood.expr import Constant, Expr
 from pykelihood.parameters import Parameter
@@ -29,7 +29,7 @@ class ParameterDefault:
     transform: Transform | None = None
 
 
-class ScipyDistribution(Distribution):
+class ScipyDistribution(UnivariateContinuousDistribution):
     """Continuous SciPy distribution evaluated from expression parameters."""
 
     def __init__(
