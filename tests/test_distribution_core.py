@@ -13,7 +13,7 @@ from pykelihood.distributions.core import (
     Distribution,
     ParameterDefault,
     ParameterState,
-    RandomState,
+    SampleableDistribution,
     ScipyDistribution,
     UnivariateContinuousDistribution,
 )
@@ -31,24 +31,13 @@ class LogProbOnlyDistribution(Distribution):
     def parameters(self) -> Mapping[str, Constant]:
         return MappingProxyType({})
 
-    def rvs(
-        self,
-        size: int | tuple[int, ...] | None = None,
-        *,
-        state: ParameterState | None = None,
-        random_state: RandomState = None,
-    ) -> np.ndarray:
-        return np.asarray(
-            stats.bernoulli.rvs(0.25, size=size, random_state=random_state)
-        )
-
     def log_prob(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> np.ndarray:
         return np.asarray(stats.bernoulli.logpmf(x, 0.25))
 
 
-def test_distribution_contract_needs_only_pointwise_log_prob_and_sampling() -> None:
+def test_distribution_contract_needs_only_pointwise_log_prob() -> None:
     model = LogProbOnlyDistribution()
     observations = [0, 1, 0]
     expected = np.log(0.75 * 0.25 * 0.75)
@@ -62,6 +51,7 @@ def test_scipy_distribution_is_continuous_and_log_prob_uses_logpdf() -> None:
     model = Normal(loc=0.0, scale=1.0)
 
     assert isinstance(model, UnivariateContinuousDistribution)
+    assert isinstance(model, SampleableDistribution)
     assert_allclose(model.log_prob(40.0), stats.norm.logpdf(40.0))
 
 

@@ -10,15 +10,15 @@ import numpy.typing as npt
 from scipy.special import xlog1py, xlogy
 
 from pykelihood.distributions.core import (
-    Distribution,
     InvalidDistributionState,
     ParameterState,
     RandomState,
+    SampleableDistribution,
 )
 from pykelihood.expr import Constant, Expr
 
 
-class Bernoulli(Distribution):
+class Bernoulli(SampleableDistribution):
     """Bernoulli law with probability parameter ``p`` and integer samples."""
 
     def __init__(self, p: Expr | npt.ArrayLike) -> None:
