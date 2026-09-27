@@ -299,7 +299,6 @@ __all__ = [
     "WeibullMax",
     "WeibullMin",
     "Wrapcauchy",
-    "_name_from_scipy_dist",
     "wrap_scipy_distribution",
 ]
 
