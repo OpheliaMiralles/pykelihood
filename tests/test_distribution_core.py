@@ -206,3 +206,16 @@ def test_fitting_a_constant_model_has_no_free_state() -> None:
     assert result.optimize_result.fun == pytest.approx(
         -np.sum(stats.norm.logpdf(data, loc=2.0, scale=3.0))
     )
+
+
+def test_state_supplies_a_start_for_an_uninitialized_parameter() -> None:
+    location = Parameter()
+    model = Normal(loc=location, scale=1.0)
+
+    with pytest.raises(ValueError, match="uninitialized parameters"):
+        fit_mle(model, [1.0, 2.0, 3.0])
+
+    result = fit_mle(model, [1.0, 2.0, 3.0], state={location: 0.0})
+
+    assert result.optimize_result.success
+    assert result.state[location] == pytest.approx(2.0, abs=1e-3)

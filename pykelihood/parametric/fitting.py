@@ -59,8 +59,9 @@ def _validate_transform_domains(
             )
 
 
-def _free_layout(model: Distribution, fixed: set[Parameter]) -> ParameterLayout:
-    full_layout = ParameterLayout.from_expr(model)
+def _free_layout(
+    full_layout: ParameterLayout, fixed: set[Parameter]
+) -> ParameterLayout:
     free_parameters = tuple(
         parameter for parameter in full_layout.parameters if parameter not in fixed
     )
@@ -99,15 +100,13 @@ def fit_mle(
     *,
     state: StateInput | None = None,
     fixed: FixedParameters | None = None,
-    x0: npt.ArrayLike | None = None,
     scipy_args: OptimizerArgs | None = None,
 ) -> FitResult:
     """Fit free parameters while keeping model structure unchanged.
 
     ``state`` and ``fixed`` values are physical values keyed by the actual
     ``Parameter`` nodes. ``state`` supplies optimizer starting values; ``fixed``
-    also removes those parameters from the optimizer layout. ``x0`` is flattened
-    in parameter order and expressed in physical values.
+    also removes those parameters from the optimizer layout.
     """
     data_array = np.asarray(data, dtype=np.float64).copy()
     full_layout = ParameterLayout.from_expr(model)
@@ -135,24 +134,13 @@ def fit_mle(
         )
     _validate_transform_domains(initial, full_layout.parameters)
 
-    layout = _free_layout(model, set(fixed_state))
-    if x0 is not None:
-        physical_x0 = np.asarray(x0, dtype=np.float64).ravel().copy()
-        if physical_x0.size != layout.vector_size:
-            raise ValueError(
-                f"Expected {layout.vector_size} values in x0, got {physical_x0.size}."
-            )
-        initial.update(layout.unflatten(physical_x0))
-        _validate_transform_domains(initial, full_layout.parameters)
+    layout = _free_layout(full_layout, set(fixed_state))
     optimizer_x0 = layout.flatten(initial, transform=True)
 
     def evaluate(values: npt.ArrayLike) -> float:
         current = dict(initial)
         current.update(layout.unflatten(values, transform=True))
-        value = np.asarray(negative_log_likelihood(model, data_array, state=current))
-        if value.ndim != 0:
-            raise TypeError("The fitting objective must return one scalar value.")
-        scalar = float(value)
+        scalar = negative_log_likelihood(model, data_array, state=current)
         if np.isnan(scalar):
             raise ValueError("The fitting objective returned NaN.")
         return scalar
@@ -168,18 +156,18 @@ def fit_mle(
             message="No free parameters.",
             nfev=1,
         )
-        final_state = dict(initial)
     else:
         scipy_minimize = cast(Callable[..., OptimizeResult], minimize)
         optimize_result = scipy_minimize(evaluate, optimizer_x0, **options)
-        optimizer_x = np.asarray(optimize_result.x, dtype=np.float64).ravel()
-        if optimizer_x.size != layout.vector_size:
-            raise ValueError(
-                "The optimizer returned an unexpected number of parameter values: "
-                f"expected {layout.vector_size}, got {optimizer_x.size}."
-            )
-        final_state = dict(initial)
-        final_state.update(layout.unflatten(optimizer_x, transform=True))
+
+    optimizer_x = np.asarray(optimize_result.x, dtype=np.float64).ravel()
+    if optimizer_x.size != layout.vector_size:
+        raise ValueError(
+            "The optimizer returned an unexpected number of parameter values: "
+            f"expected {layout.vector_size}, got {optimizer_x.size}."
+        )
+    final_state = dict(initial)
+    final_state.update(layout.unflatten(optimizer_x, transform=True))
 
     return FitResult(
         model=model,
