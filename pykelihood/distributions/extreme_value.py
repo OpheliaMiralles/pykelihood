@@ -15,8 +15,8 @@ from pykelihood.distributions.core import (
     ParameterInput,
     ParameterState,
     RandomState,
-    ScipyDistribution,
 )
+from pykelihood.distributions.scipy_adapter import ScipyDistribution
 from pykelihood.expr import Constant, Expr, Node, PathElem
 from pykelihood.parameters import Parameter
 from pykelihood.state import PositiveTransform, Transform
