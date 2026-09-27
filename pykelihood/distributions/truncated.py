@@ -9,7 +9,12 @@ from typing import Union
 import numpy as np
 import numpy.typing as npt
 
-from pykelihood.distributions.core import Distribution, ParameterState, RandomState
+from pykelihood.distributions.core import (
+    Distribution,
+    InvalidDistributionState,
+    ParameterState,
+    RandomState,
+)
 from pykelihood.expr import Constant, Expr, Node, PathElem
 
 BoundInput = Union[Expr, npt.ArrayLike]
@@ -60,7 +65,9 @@ class TruncatedDistribution(Distribution):
         lower = np.asarray(self.lower_bound.eval(parameter_state), dtype=np.float64)
         upper = np.asarray(self.upper_bound.eval(parameter_state), dtype=np.float64)
         if np.any(upper <= lower):
-            raise ValueError("upper_bound must be greater than lower_bound.")
+            raise InvalidDistributionState(
+                "upper_bound must be greater than lower_bound."
+            )
         return lower, upper
 
     def _normalizer(
@@ -73,7 +80,9 @@ class TruncatedDistribution(Distribution):
             dtype=np.float64,
         )
         if np.any(~np.isfinite(mass)) or np.any(mass <= 0.0):
-            raise ValueError("Truncation interval must have positive probability mass.")
+            raise InvalidDistributionState(
+                "Truncation interval must have positive probability mass."
+            )
         return lower, upper, mass
 
     def pdf(
@@ -110,11 +119,14 @@ class TruncatedDistribution(Distribution):
     ) -> npt.NDArray[np.float64]:
         lower, _upper, mass = self._normalizer(state)
         lower_cdf = self.distribution.cdf(lower, state=state)
+        quantiles = np.asarray(q, dtype=np.float64)
+        base_quantiles = np.where(
+            (quantiles >= 0.0) & (quantiles <= 1.0),
+            lower_cdf + quantiles * mass,
+            np.nan,
+        )
         return np.asarray(
-            self.distribution.ppf(
-                lower_cdf + np.asarray(q, dtype=np.float64) * mass, state=state
-            ),
-            dtype=np.float64,
+            self.distribution.ppf(base_quantiles, state=state), dtype=np.float64
         )
 
     def rvs(
