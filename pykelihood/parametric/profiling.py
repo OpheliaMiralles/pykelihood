@@ -12,7 +12,7 @@ from scipy.stats import chi2
 
 from pykelihood.likelihood import negative_log_likelihood
 from pykelihood.parameters import Parameter
-from pykelihood.parametric.fitting import FitResult, fit_mle
+from pykelihood.parametric.fitting import FitResult, NonFiniteInitialLikelihood, fit_mle
 from pykelihood.state import ParameterLayout, State
 
 
@@ -21,8 +21,12 @@ class ProfilePoint:
     """A profile score and nuisance refit at one fixed parameter value."""
 
     value: float
-    log_likelihood: float
     fit_result: FitResult
+
+    @property
+    def log_likelihood(self) -> float:
+        """Return the likelihood found by the nuisance refit."""
+        return -float(self.fit_result.optimize_result.fun)
 
     @property
     def state(self) -> State:
@@ -36,6 +40,8 @@ class Profiler:
     def __init__(
         self, fit_result: FitResult, data: npt.ArrayLike, confidence: float = 0.95
     ) -> None:
+        if not fit_result.optimize_result.success:
+            raise ValueError("Profiling requires a successful initial fit.")
         if not 0.0 < confidence < 1.0:
             raise ValueError("confidence must be between 0 and 1.")
         self.fit_result = fit_result
@@ -46,6 +52,8 @@ class Profiler:
         self._max_log_likelihood = -negative_log_likelihood(
             fit_result.model, self.data, state=fit_result.state
         )
+        if not np.isfinite(self._max_log_likelihood):
+            raise ValueError("Profiling requires a finite initial likelihood.")
         self._log_likelihood_threshold = (
             self._max_log_likelihood - float(chi2.ppf(confidence, df=1)) / 2.0
         )
@@ -80,15 +88,18 @@ class Profiler:
         profiled_fit = fit_mle(
             self.fit_result.model, self.data, state=self.fit_result.state, fixed=fixed
         )
-        log_likelihood = -negative_log_likelihood(
-            self.fit_result.model, self.data, state=profiled_fit.state
-        )
-        point = ProfilePoint(float(value), float(log_likelihood), profiled_fit)
+        if not profiled_fit.optimize_result.success or not np.isfinite(
+            profiled_fit.optimize_result.fun
+        ):
+            raise RuntimeError(f"Nuisance fit failed at profile value {value}.")
+        point = ProfilePoint(float(value), profiled_fit)
         self._cache[key] = point
         return point
 
     @staticmethod
     def _in_transform_domain(parameter: Parameter, value: float) -> bool:
+        if not np.isfinite(value):
+            return False
         if parameter.transform is None:
             return True
         with np.errstate(all="ignore"):
@@ -107,6 +118,8 @@ class Profiler:
             candidates = candidates.reshape(1)
         if candidates.ndim != 1:
             raise ValueError("Profile candidate values must be one-dimensional.")
+        if not np.all(np.isfinite(candidates)):
+            raise ValueError("Profile candidate values must be finite.")
         return tuple(self._profile_one(parameter, float(value)) for value in candidates)
 
     def confidence_interval(
@@ -123,8 +136,8 @@ class Profiler:
         each subsequent step doubles until the profile falls below the cutoff.
         """
         self._validate_parameter(parameter)
-        if precision <= 0.0:
-            raise ValueError("precision must be positive.")
+        if not np.isfinite(precision) or precision <= 0.0:
+            raise ValueError("precision must be finite and positive.")
         if max_expansions < 1:
             raise ValueError("max_expansions must be positive.")
 
@@ -136,32 +149,44 @@ class Profiler:
         if center_point.log_likelihood < self._log_likelihood_threshold:
             raise RuntimeError("The fitted optimum is below its own profile cutoff.")
 
+        def score(value: float) -> float | None:
+            if not self._in_transform_domain(parameter, value):
+                return None
+            try:
+                return self._profile_one(parameter, value).log_likelihood
+            except NonFiniteInitialLikelihood:
+                return None
+
         def find_bracket(direction: float) -> tuple[float, float]:
             inside = center
             distance = initial_step
             for _ in range(max_expansions):
                 outside = center + direction * distance
-                if not self._in_transform_domain(parameter, outside):
+                outside_score = score(outside)
+                if outside_score is None:
                     valid = inside
                     invalid = outside
                     for _ in range(64):
                         midpoint = (valid + invalid) / 2.0
                         if midpoint == valid or midpoint == invalid:
                             break
-                        if self._in_transform_domain(parameter, midpoint):
+                        midpoint_score = score(midpoint)
+                        if midpoint_score is not None:
                             valid = midpoint
+                            outside_score = midpoint_score
                         else:
                             invalid = midpoint
-                    boundary_point = self._profile_one(parameter, valid)
-                    if boundary_point.log_likelihood < self._log_likelihood_threshold:
+                    if (
+                        outside_score is not None
+                        and outside_score < self._log_likelihood_threshold
+                    ):
                         return (valid, inside) if direction < 0 else (inside, valid)
                     side = "lower" if direction < 0 else "upper"
                     raise RuntimeError(
                         f"The {side} profile interval reaches the parameter's "
-                        "transform boundary without crossing the likelihood cutoff."
+                        "valid domain boundary without crossing the likelihood cutoff."
                     )
-                point = self._profile_one(parameter, outside)
-                if point.log_likelihood < self._log_likelihood_threshold:
+                if outside_score < self._log_likelihood_threshold:
                     return (outside, inside) if direction < 0 else (inside, outside)
                 inside = outside
                 distance *= 2.0
