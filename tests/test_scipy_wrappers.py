@@ -5,7 +5,7 @@ import pytest
 from numpy.testing import assert_allclose
 from scipy import stats
 
-from pykelihood.distributions.core import ScipyDistribution
+from pykelihood.distributions.scipy_adapter import ScipyDistribution
 from pykelihood.distributions.scipy_wrappers import Gamma, Genextreme, Norm, Normal
 from pykelihood.expr import Constant
 from pykelihood.likelihood import negative_log_likelihood

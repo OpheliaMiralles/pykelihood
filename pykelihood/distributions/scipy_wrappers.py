@@ -8,11 +8,8 @@ from typing import Any, ClassVar
 from scipy import stats
 from scipy.stats import rv_continuous
 
-from pykelihood.distributions.core import (
-    ParameterDefault,
-    ParameterInput,
-    ScipyDistribution,
-)
+from pykelihood.distributions.core import ParameterInput
+from pykelihood.distributions.scipy_adapter import ParameterDefault, ScipyDistribution
 from pykelihood.state import PositiveTransform
 
 
