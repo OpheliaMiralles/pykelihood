@@ -10,7 +10,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.optimize import OptimizeResult, minimize
 
-from pykelihood.distributions.core import Distribution
+from pykelihood.distributions.core import Distribution, InvalidDistributionState
 from pykelihood.likelihood import negative_log_likelihood
 from pykelihood.parameters import Parameter
 from pykelihood.state import ParameterLayout, State
@@ -85,7 +85,10 @@ def fit_mle(
     def evaluate(values: npt.ArrayLike) -> float:
         current = dict(initial)
         current.update(layout.unflatten(values, transform=True))
-        scalar = negative_log_likelihood(model, data_array, state=current)
+        try:
+            scalar = negative_log_likelihood(model, data_array, state=current)
+        except InvalidDistributionState:
+            return np.inf
         if np.isnan(scalar):
             return np.inf
         return scalar

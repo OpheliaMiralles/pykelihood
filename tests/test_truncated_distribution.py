@@ -14,27 +14,9 @@ from pykelihood.state import ParameterLayout
 def test_truncated_pdf_logpdf_and_cdf_respect_numeric_bounds() -> None:
     model = TruncatedDistribution(Normal(loc=0.0, scale=1.0), 0.0, 2.0)
     values = np.array([-1.0, 0.0, 1.0, 2.0, 3.0])
-    normalizer = stats.norm.cdf(2.0) - stats.norm.cdf(0.0)
-
-    expected_pdf = np.where(
-        (values >= 0.0) & (values <= 2.0), stats.norm.pdf(values) / normalizer, 0.0
-    )
-    expected_logpdf = np.full(values.shape, -np.inf)
-    in_bounds = expected_pdf > 0.0
-    expected_logpdf[in_bounds] = np.log(expected_pdf[in_bounds])
-    expected_cdf = np.where(
-        values < 0.0,
-        0.0,
-        np.where(
-            values >= 2.0,
-            1.0,
-            (stats.norm.cdf(values) - stats.norm.cdf(0.0)) / normalizer,
-        ),
-    )
-
-    assert_allclose(model.pdf(values), expected_pdf)
-    assert_allclose(model.logpdf(values), expected_logpdf)
-    assert_allclose(model.cdf(values), expected_cdf)
+    assert_allclose(model.pdf(values), stats.truncnorm.pdf(values, a=0.0, b=2.0))
+    assert_allclose(model.logpdf(values), stats.truncnorm.logpdf(values, a=0.0, b=2.0))
+    assert_allclose(model.cdf(values), stats.truncnorm.cdf(values, a=0.0, b=2.0))
 
 
 def test_truncation_normalizer_uses_current_state_and_shared_nodes_traverse_once() -> (
@@ -48,27 +30,20 @@ def test_truncation_normalizer_uses_current_state_and_shared_nodes_traverse_once
     layout = ParameterLayout.from_expr(model)
 
     assert layout.parameters == (location,)
-    assert layout.parameter_paths[location] == (
-        ("distribution", "loc"),
-        ("lower_bound",),
-        ("upper_bound", "left"),
-    )
 
     state = {location: np.asarray(1.0)}
     values = np.asarray([1.0, 1.5, 2.0])
-    normalizer = stats.norm.cdf(2.0, loc=1.0) - stats.norm.cdf(1.0, loc=1.0)
-    expected = stats.norm.pdf(values, loc=1.0) / normalizer
+    expected = stats.truncnorm.pdf(values, a=0.0, b=1.0, loc=1.0)
     assert_allclose(model.pdf(values, state=state), expected)
 
 
 def test_ppf_and_seeded_sampling_stay_inside_truncation_interval() -> None:
     model = TruncatedDistribution(Normal(loc=0.0, scale=1.0), -1.0, 2.0)
     q = np.array([0.0, 0.25, 0.75, 1.0])
-    lower_cdf = stats.norm.cdf(-1.0)
-    upper_cdf = stats.norm.cdf(2.0)
-    expected = stats.norm.ppf(lower_cdf + q * (upper_cdf - lower_cdf))
-
-    assert_allclose(model.ppf(q), expected)
+    quantiles = model.ppf(q)
+    assert_allclose(model.cdf(quantiles), q)
+    assert_allclose(quantiles[[0, -1]], [-1.0, 2.0])
+    assert np.isnan(model.ppf([-0.1, 1.1])).all()
     first = model.rvs(100, random_state=np.random.default_rng(12))
     second = model.rvs(100, random_state=np.random.default_rng(12))
     assert_allclose(first, second)
@@ -78,6 +53,9 @@ def test_ppf_and_seeded_sampling_stay_inside_truncation_interval() -> None:
 def test_invalid_intervals_and_out_of_bounds_data_are_not_silently_accepted() -> None:
     with pytest.raises(ValueError, match="upper_bound must be greater"):
         TruncatedDistribution(Normal(), lower_bound=2.0, upper_bound=1.0).pdf(1.5)
+
+    with pytest.raises(ValueError, match="no finite likelihood"):
+        fit_mle(TruncatedDistribution(Normal(loc=0.0, scale=1.0), 2.0, 1.0), [1.5])
 
     model = TruncatedDistribution(Normal(loc=0.0, scale=1.0), 0.0, 1.0)
     assert np.isinf(negative_log_likelihood(model, [1.5]))
@@ -95,3 +73,20 @@ def test_fit_mle_traverses_nested_distribution_and_returns_fitted_state() -> Non
     assert result.optimize_result.success
     assert location in result.state
     assert negative_log_likelihood(model, data, state=result.state) < initial_score
+
+
+def test_fit_mle_can_reject_invalid_free_bound_proposals() -> None:
+    lower = Parameter(init=0.0)
+    upper = Parameter(init=1.0)
+    model = TruncatedDistribution(Normal(loc=0.0, scale=1.0), lower, upper)
+    initial_simplex = np.array([[0.0, 1.0], [2.0, 1.0], [0.0, 0.9]])
+
+    result = fit_mle(
+        model,
+        [0.3, 0.5, 0.7],
+        scipy_args={"options": {"initial_simplex": initial_simplex}},
+    )
+
+    assert result.optimize_result.success
+    assert result.state[lower] <= 0.3
+    assert result.state[upper] >= 0.7

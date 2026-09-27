@@ -21,6 +21,10 @@ ParameterState = Mapping[Parameter, npt.NDArray[np.float64]]
 RandomState = Union[int, np.random.Generator, np.random.RandomState, None]
 
 
+class InvalidDistributionState(ValueError):
+    """A state gives a distribution invalid parameter values."""
+
+
 @dataclass(frozen=True)
 class ParameterDefault:
     """Initial value and optional transform for an omitted parameter."""
