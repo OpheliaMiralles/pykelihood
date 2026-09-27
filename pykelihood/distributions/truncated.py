@@ -45,11 +45,17 @@ class TruncatedDistribution(Distribution):
         upper_bound: BoundInput = np.inf,
     ) -> None:
         self.distribution = distribution
-        self.lower_bound = _as_expr(lower_bound)
-        self.upper_bound = _as_expr(upper_bound)
         self._parameters = MappingProxyType(
-            {"lower_bound": self.lower_bound, "upper_bound": self.upper_bound}
+            {"lower_bound": _as_expr(lower_bound), "upper_bound": _as_expr(upper_bound)}
         )
+
+    @property
+    def lower_bound(self) -> Expr:
+        return self._parameters["lower_bound"]
+
+    @property
+    def upper_bound(self) -> Expr:
+        return self._parameters["upper_bound"]
 
     @property
     def parameters(self) -> Mapping[str, Expr]:
@@ -137,6 +143,8 @@ class TruncatedDistribution(Distribution):
         random_state: RandomState = None,
     ) -> npt.NDArray[np.float64]:
         batch_shape = self._normalizer(state)[2].shape
-        sample_shape = () if size is None else (size,) if isinstance(size, int) else size
+        sample_shape = (
+            () if size is None else (size,) if isinstance(size, int) else size
+        )
         uniforms = _rng(random_state).uniform(size=sample_shape + batch_shape)
         return self.ppf(uniforms, state=state)
