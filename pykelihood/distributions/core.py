@@ -53,22 +53,15 @@ class Distribution(Node, ABC):
 class UnivariateContinuousDistribution(Distribution, ABC):
     """A univariate continuous law with density, CDF, and quantile operations."""
 
-    def log_prob(
-        self, x: npt.ArrayLike, *, state: ParameterState | None = None
-    ) -> npt.NDArray[np.float64]:
-        return self.logpdf(x, state=state)
-
-    @abstractmethod
     def pdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        raise NotImplementedError
+        return np.exp(self.log_prob(x, state=state))
 
-    @abstractmethod
     def logpdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        raise NotImplementedError
+        return self.log_prob(x, state=state)
 
     @abstractmethod
     def cdf(

@@ -98,12 +98,12 @@ class TruncatedContinuousDistribution(UnivariateContinuousDistribution):
         density = self.distribution.pdf(values, state=state) / mass
         return np.asarray(np.where((values >= lower) & (values <= upper), density, 0.0))
 
-    def logpdf(
+    def log_prob(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
         lower, upper, _lower_cdf, mass = self._normalizer(state)
         values = np.asarray(x, dtype=np.float64)
-        log_density = self.distribution.logpdf(values, state=state) - np.log(mass)
+        log_density = self.distribution.log_prob(values, state=state) - np.log(mass)
         return np.asarray(
             np.where((values >= lower) & (values <= upper), log_density, -np.inf)
         )

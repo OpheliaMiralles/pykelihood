@@ -113,7 +113,7 @@ class ScipyDistribution(UnivariateContinuousDistribution):
             dtype=np.float64,
         )
 
-    def logpdf(
+    def log_prob(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
         return np.asarray(

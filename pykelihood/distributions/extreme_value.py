@@ -86,10 +86,10 @@ class _ShapeConvenience(UnivariateContinuousDistribution):
     ) -> npt.NDArray[np.float64]:
         return self._scipy_model.pdf(x, state=state)
 
-    def logpdf(
+    def log_prob(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        return self._scipy_model.logpdf(x, state=state)
+        return self._scipy_model.log_prob(x, state=state)
 
     def cdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
