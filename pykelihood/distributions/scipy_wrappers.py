@@ -81,6 +81,7 @@ Alpha = wrap_scipy_distribution(stats.alpha)
 Anglit = wrap_scipy_distribution(stats.anglit)
 Arcsine = wrap_scipy_distribution(stats.arcsine)
 Argus = wrap_scipy_distribution(stats.argus)
+Beta = wrap_scipy_distribution(stats.beta)
 Betaprime = wrap_scipy_distribution(stats.betaprime)
 Bradford = wrap_scipy_distribution(stats.bradford)
 Burr = wrap_scipy_distribution(stats.burr)
@@ -153,6 +154,7 @@ Norm = wrap_scipy_distribution(stats.norm)
 Normal = Norm
 Gamma = wrap_scipy_distribution(stats.gamma)
 Norminvgauss = wrap_scipy_distribution(stats.norminvgauss)
+Pareto = wrap_scipy_distribution(stats.pareto)
 Pearson3 = wrap_scipy_distribution(stats.pearson3)
 Powerlaw = wrap_scipy_distribution(stats.powerlaw)
 Powerlognorm = wrap_scipy_distribution(stats.powerlognorm)
@@ -199,6 +201,7 @@ __all__ = [
     "Anglit",
     "Arcsine",
     "Argus",
+    "Beta",
     "Betaprime",
     "Bradford",
     "Burr",
@@ -272,6 +275,7 @@ __all__ = [
     "Norm",
     "Normal",
     "Norminvgauss",
+    "Pareto",
     "Pearson3",
     "Powerlaw",
     "Powerlognorm",
