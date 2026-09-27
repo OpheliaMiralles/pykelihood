@@ -8,7 +8,6 @@ from packaging.version import Version
 from scipy import stats
 
 import pykelihood.distributions.scipy_wrappers as wrappers
-
 from pykelihood.distributions.scipy_adapter import ScipyDistribution
 from pykelihood.distributions.scipy_wrappers import (
     Burr,
