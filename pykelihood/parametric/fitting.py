@@ -87,15 +87,19 @@ def fit_mle(
         current.update(layout.unflatten(values, transform=True))
         scalar = negative_log_likelihood(model, data_array, state=current)
         if np.isnan(scalar):
-            raise ValueError("The fitting objective returned NaN.")
+            return np.inf
         return scalar
+
+    initial_objective = evaluate(optimizer_x0)
+    if not np.isfinite(initial_objective):
+        raise ValueError("The model has no finite likelihood at its initial state.")
 
     options = dict(scipy_args or {})
     options.setdefault("method", "Nelder-Mead")
     if layout.vector_size == 0:
         optimize_result = OptimizeResult(
             x=np.array([], dtype=np.float64),
-            fun=evaluate(optimizer_x0),
+            fun=initial_objective,
             success=True,
             status=0,
             message="No free parameters.",
