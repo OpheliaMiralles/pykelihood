@@ -70,6 +70,7 @@ def test_gpd_shape_can_be_fitted_without_mutating_the_model() -> None:
     assert result.model is model
     assert result.optimize_result.success
     assert tuple(result.state) == (shape,)
-    assert np.isfinite(result.state[shape])
+    expected_shape = stats.genpareto.fit(data, floc=0.0, fscale=1.0)[0]
+    assert_allclose(result.state[shape], expected_shape, rtol=1e-3)
     assert negative_log_likelihood(model, data, state=result.state) < initial_score
     assert shape.init == 0.0
