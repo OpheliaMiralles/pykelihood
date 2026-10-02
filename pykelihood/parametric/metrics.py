@@ -14,6 +14,8 @@ from pykelihood.distributions.core import (
 
 def _observations(data: npt.ArrayLike) -> npt.NDArray[np.float64]:
     observations = np.asarray(data, dtype=np.float64)
+    if observations.ndim > 1:
+        raise ValueError("Scores require scalar or one-dimensional observations.")
     if observations.size == 0 or not np.all(np.isfinite(observations)):
         raise ValueError("Scores require finite, nonempty observations.")
     return observations
@@ -72,7 +74,7 @@ def crps(
     *,
     state: ParameterState | None = None,
 ) -> float:
-    """Mean continuous ranked probability score, one forecast per observation."""
+    """Mean CRPS for scalar or one-dimensional data, one forecast per value."""
     observations = _observations(data)
 
     def squared_cdf_error(value: float) -> float:
@@ -81,7 +83,13 @@ def crps(
         )
         return float(np.mean((forecast - (observations <= value)) ** 2))
 
-    values = np.unique(observations)
+    breakpoints = [observations.ravel()]
+    for probability in (0.0, 0.5, 1.0):
+        quantiles = _prediction_for_observations(
+            model.ppf(probability, state=state), observations
+        ).ravel()
+        breakpoints.append(quantiles[np.isfinite(quantiles)])
+    values = np.unique(np.concatenate(breakpoints))
     left, _ = quad(squared_cdf_error, -np.inf, values[0])
     right, _ = quad(squared_cdf_error, values[-1], np.inf)
     middle = 0.0

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from scipy import stats
 
-from pykelihood.distributions.scipy_wrappers import Normal
+from pykelihood.distributions.scipy_wrappers import Normal, Uniform
 from pykelihood.parameters import Parameter
 from pykelihood.parametric import brier_score, crps, quantile_score
 
@@ -52,3 +52,23 @@ def test_predictive_scores_reject_misaligned_model_batch() -> None:
 def test_brier_rejects_nonfinite_threshold() -> None:
     with pytest.raises(ValueError, match="threshold must be finite"):
         brier_score(Normal(loc=0.0, scale=1.0), [0.0, 1.0], np.nan)
+
+
+@pytest.mark.parametrize("width", [1.0, 0.001])
+def test_crps_resolves_bounded_support_at_different_scales(width: float) -> None:
+    model = Uniform(loc=-width / 2, scale=width)
+
+    assert crps(model, 0.0) == pytest.approx(width / 12, rel=1e-6)
+
+
+@pytest.mark.parametrize(
+    "score,args", [(brier_score, (0.5,)), (quantile_score, (0.5,)), (crps, ())]
+)
+def test_predictive_scores_reject_ambiguous_multidimensional_observations(
+    score, args
+) -> None:
+    observations = np.array([[0.0, 1.0], [2.0, 3.0]])
+    model = Normal(loc=observations, scale=1.0)
+
+    with pytest.raises(ValueError, match="scalar or one-dimensional"):
+        score(model, observations, *args)
