@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from types import MappingProxyType
 
 import numpy as np
@@ -17,7 +17,7 @@ from pykelihood.distributions.core import (
     RandomState,
 )
 from pykelihood.distributions.scipy_adapter import ScipyDistribution
-from pykelihood.expr import Constant, Expr, Node, PathElem
+from pykelihood.expr import Constant, Expr
 from pykelihood.parameters import Parameter
 from pykelihood.state import PositiveTransform, Transform
 
@@ -71,9 +71,6 @@ class _ShapeConvenience(Distribution):
     def parameters(self) -> Mapping[str, Expr]:
         """Public statistical parameters, including the unmodified shape node."""
         return self._parameters
-
-    def iter_children(self) -> Iterator[tuple[PathElem, Node]]:
-        yield from self.parameters.items()
 
     def rvs(
         self,
