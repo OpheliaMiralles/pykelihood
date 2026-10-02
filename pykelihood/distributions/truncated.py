@@ -78,23 +78,23 @@ class TruncatedContinuousDistribution(Distribution):
 
     def _normalizer(
         self, state: ParameterState | None
-    ) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
+    ) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
         lower, upper = self._bounds(state)
+        lower_cdf = self.distribution.cdf(lower, state=state)
         mass = np.asarray(
-            self.distribution.cdf(upper, state=state)
-            - self.distribution.cdf(lower, state=state),
+            self.distribution.cdf(upper, state=state) - lower_cdf,
             dtype=np.float64,
         )
         if np.any(~np.isfinite(mass)) or np.any(mass <= 0.0):
             raise InvalidDistributionState(
                 "Truncation interval must have positive probability mass."
             )
-        return lower, upper, mass
+        return lower, upper, lower_cdf, mass
 
     def pdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        lower, upper, mass = self._normalizer(state)
+        lower, upper, _lower_cdf, mass = self._normalizer(state)
         values = np.asarray(x, dtype=np.float64)
         density = self.distribution.pdf(values, state=state) / mass
         return np.asarray(np.where((values >= lower) & (values <= upper), density, 0.0))
@@ -102,7 +102,7 @@ class TruncatedContinuousDistribution(Distribution):
     def logpdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        lower, upper, mass = self._normalizer(state)
+        lower, upper, _lower_cdf, mass = self._normalizer(state)
         values = np.asarray(x, dtype=np.float64)
         log_density = self.distribution.logpdf(values, state=state) - np.log(mass)
         return np.asarray(
@@ -112,9 +112,8 @@ class TruncatedContinuousDistribution(Distribution):
     def cdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        lower, upper, mass = self._normalizer(state)
+        lower, upper, lower_cdf, mass = self._normalizer(state)
         values = np.asarray(x, dtype=np.float64)
-        lower_cdf = self.distribution.cdf(lower, state=state)
         conditional = (self.distribution.cdf(values, state=state) - lower_cdf) / mass
         return np.asarray(
             np.where(values < lower, 0.0, np.where(values >= upper, 1.0, conditional))
@@ -123,8 +122,7 @@ class TruncatedContinuousDistribution(Distribution):
     def ppf(
         self, q: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        lower, _upper, mass = self._normalizer(state)
-        lower_cdf = self.distribution.cdf(lower, state=state)
+        _lower, _upper, lower_cdf, mass = self._normalizer(state)
         quantiles = np.asarray(q, dtype=np.float64)
         base_quantiles = np.where(
             (quantiles >= 0.0) & (quantiles <= 1.0),
@@ -142,9 +140,12 @@ class TruncatedContinuousDistribution(Distribution):
         state: ParameterState | None = None,
         random_state: RandomState = None,
     ) -> npt.NDArray[np.float64]:
-        batch_shape = self._normalizer(state)[2].shape
+        _lower, _upper, lower_cdf, mass = self._normalizer(state)
         sample_shape = (
             () if size is None else (size,) if isinstance(size, int) else size
         )
-        uniforms = _rng(random_state).uniform(size=sample_shape + batch_shape)
-        return self.ppf(uniforms, state=state)
+        uniforms = _rng(random_state).uniform(size=sample_shape + mass.shape)
+        return np.asarray(
+            self.distribution.ppf(lower_cdf + uniforms * mass, state=state),
+            dtype=np.float64,
+        )
