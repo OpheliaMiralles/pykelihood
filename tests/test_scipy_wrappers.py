@@ -2,11 +2,21 @@ import inspect
 
 import numpy as np
 import pytest
+import scipy
 from numpy.testing import assert_allclose
+from packaging.version import Version
 from scipy import stats
 
+import pykelihood.distributions.scipy_wrappers as wrappers
 from pykelihood.distributions.scipy_adapter import ScipyDistribution
-from pykelihood.distributions.scipy_wrappers import Gamma, Genextreme, Norm, Normal
+from pykelihood.distributions.scipy_wrappers import (
+    Burr,
+    Gamma,
+    Genextreme,
+    Laplace,
+    Norm,
+    Normal,
+)
 from pykelihood.expr import Constant
 from pykelihood.likelihood import negative_log_likelihood
 from pykelihood.parameters import Parameter
@@ -80,3 +90,25 @@ def test_generated_gamma_fits_its_native_shape_parameter() -> None:
     )
     assert shape.init is not None
     assert_allclose(shape.init, 1.0)
+
+
+def test_catalog_has_multi_shape_and_no_shape_signatures() -> None:
+    assert tuple(inspect.signature(Burr).parameters) == ("c", "d", "loc", "scale")
+    assert tuple(inspect.signature(Laplace).parameters) == ("loc", "scale")
+
+    burr = Burr(2.0, 3.0, loc=1.0, scale=2.0)
+    values = np.array([1.0, 2.0, 4.0])
+    assert_allclose(
+        burr.pdf(values), stats.burr.pdf(values, 2.0, 3.0, loc=1.0, scale=2.0)
+    )
+    laplace = Laplace()
+    assert_allclose(laplace.pdf(values), stats.laplace.pdf(values))
+
+
+def test_scipy_version_gated_catalog_entries() -> None:
+    gated_names = ("DparetoLognorm", "Landau", "Irwinhall")
+    if Version(scipy.__version__) >= Version("1.15.0"):
+        assert all(hasattr(wrappers, name) for name in gated_names)
+        assert all(name in wrappers.__all__ for name in gated_names)
+    else:
+        assert all(not hasattr(wrappers, name) for name in gated_names)
