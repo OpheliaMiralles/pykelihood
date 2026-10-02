@@ -14,18 +14,22 @@ def _fit_summary(fit: FitResult, data: npt.ArrayLike) -> tuple[float, int]:
     if not fit.optimize_result.success or not np.isfinite(fit.optimize_result.fun):
         raise ValueError("Information criteria require a successful finite fit.")
     log_score = log_likelihood(fit.model, data, state=fit.state)
+    if not np.isfinite(log_score):
+        raise ValueError(
+            "Information criteria require a finite likelihood for the data."
+        )
     free_count = ParameterLayout.from_expr(fit.model).without(fit.fixed).vector_size
     return log_score, free_count
 
 
 def aic(fit: FitResult, data: npt.ArrayLike) -> float:
-    """Akaike information criterion using the fit's free coordinates."""
+    """Akaike information criterion on the dataset used to obtain ``fit``."""
     log_score, free_count = _fit_summary(fit, data)
     return float(2 * free_count - 2 * log_score)
 
 
 def bic(fit: FitResult, data: npt.ArrayLike) -> float:
-    """Bayesian information criterion using the fit's free coordinates."""
+    """Bayesian information criterion on the dataset used to obtain ``fit``."""
     observations = np.asarray(data)
     count = 1 if observations.ndim == 0 else len(observations)
     if count == 0:

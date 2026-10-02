@@ -42,3 +42,14 @@ def test_information_criteria_reject_failed_fits(criterion) -> None:
 
     with pytest.raises(ValueError, match="successful finite fit"):
         criterion(fit, observations)
+
+
+@pytest.mark.parametrize("criterion", [aic, bic])
+@pytest.mark.parametrize("observation", [np.nan, np.inf])
+def test_information_criteria_reject_nonfinite_evaluated_likelihood(
+    criterion, observation
+) -> None:
+    fit = fit_mle(Normal(loc=0.0, scale=1.0), [0.0, 1.0])
+
+    with pytest.raises(ValueError, match="finite likelihood"):
+        criterion(fit, [observation])
