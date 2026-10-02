@@ -9,7 +9,7 @@ import pykelihood.parametric.profiling as profiling
 from pykelihood.distributions.scipy_wrappers import Gamma, Normal
 from pykelihood.parameters import Parameter
 from pykelihood.parametric import ProfilePoint, Profiler, fit_mle
-from pykelihood.state import ParameterLayout, PositiveTransform
+from pykelihood.state import ParameterLayout, PositiveTransform, ProbabilityTransform
 
 
 def test_normal_mean_profile_and_interval_at_zero_mle() -> None:
@@ -126,3 +126,32 @@ def test_profiler_rejects_fixed_or_non_scalar_parameters() -> None:
     vector_fit = fit_mle(vector_model, [0.0, 1.0])
     with pytest.raises(ValueError, match="Only scalar parameters"):
         Profiler(vector_fit, [0.0, 1.0]).profile(vector, [0.0])
+
+
+def test_profile_candidates_are_physical_values_not_optimizer_coordinates() -> None:
+    location = Parameter(init=0.5, transform=ProbabilityTransform())
+    model = Normal(loc=location, scale=1.0)
+    data = [-0.5, 0.5, 1.5]
+    profiler = Profiler(fit_mle(model, data), data)
+
+    points = profiler.profile(location, [0.0, 1.0])
+
+    assert_allclose(
+        [point.log_likelihood for point in points],
+        [np.sum(stats.norm.logpdf(data, loc=value)) for value in [0.0, 1.0]],
+    )
+
+
+def test_profile_interval_follows_feasible_nuisance_states() -> None:
+    location = Parameter(init=1.0)
+    spread = Parameter(init=2.0)
+    model = Normal(loc=location, scale=spread - location)
+    data = np.array([0.0, 1.0, 2.0])
+    profiler = Profiler(fit_mle(model, data), data)
+
+    interval = profiler.confidence_interval(location)
+
+    half_width = np.sqrt(np.var(data) * np.expm1(chi2.ppf(0.95, 1) / len(data)))
+    assert_allclose(
+        interval, np.mean(data) + np.array([-half_width, half_width]), atol=2e-3
+    )

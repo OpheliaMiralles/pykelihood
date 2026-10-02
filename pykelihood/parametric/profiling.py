@@ -85,8 +85,16 @@ class Profiler:
 
         fixed = dict(self.fit_result.fixed)
         fixed[parameter] = np.asarray(value, dtype=np.float64)
+        nearby = [
+            point for (node, _), point in self._cache.items() if node is parameter
+        ]
+        starting_state = (
+            min(nearby, key=lambda point: abs(point.value - value)).state
+            if nearby
+            else self.fit_result.state
+        )
         profiled_fit = fit_mle(
-            self.fit_result.model, self.data, state=self.fit_result.state, fixed=fixed
+            self.fit_result.model, self.data, state=starting_state, fixed=fixed
         )
         if not profiled_fit.optimize_result.success or not np.isfinite(
             profiled_fit.optimize_result.fun
@@ -96,22 +104,10 @@ class Profiler:
         self._cache[key] = point
         return point
 
-    @staticmethod
-    def _in_transform_domain(parameter: Parameter, value: float) -> bool:
-        if not np.isfinite(value):
-            return False
-        if parameter.transform is None:
-            return True
-        with np.errstate(all="ignore"):
-            optimizer_value = parameter.transform.inverse_transform(
-                np.asarray(value, dtype=np.float64)
-            )
-        return bool(np.all(np.isfinite(optimizer_value)))
-
     def profile(
         self, parameter: Parameter, values: npt.ArrayLike
     ) -> tuple[ProfilePoint, ...]:
-        """Fix ``parameter`` at each candidate and refit all nuisance parameters."""
+        """Fix each candidate and refit nuisance parameters from nearby fits."""
         self._validate_parameter(parameter)
         candidates = np.asarray(values, dtype=np.float64)
         if candidates.ndim == 0:
@@ -150,7 +146,7 @@ class Profiler:
             raise RuntimeError("The fitted optimum is below its own profile cutoff.")
 
         def score(value: float) -> float | None:
-            if not self._in_transform_domain(parameter, value):
+            if not np.isfinite(value):
                 return None
             try:
                 return self._profile_one(parameter, value).log_likelihood
@@ -172,19 +168,20 @@ class Profiler:
                             break
                         midpoint_score = score(midpoint)
                         if midpoint_score is not None:
+                            if midpoint_score < self._log_likelihood_threshold:
+                                return (
+                                    (midpoint, inside)
+                                    if direction < 0
+                                    else (inside, midpoint)
+                                )
                             valid = midpoint
-                            outside_score = midpoint_score
                         else:
                             invalid = midpoint
-                    if (
-                        outside_score is not None
-                        and outside_score < self._log_likelihood_threshold
-                    ):
-                        return (valid, inside) if direction < 0 else (inside, valid)
                     side = "lower" if direction < 0 else "upper"
                     raise RuntimeError(
-                        f"The {side} profile interval reaches the parameter's "
-                        "valid domain boundary without crossing the likelihood cutoff."
+                        f"Unable to bracket the {side} confidence limit before an "
+                        "unscorable refit. A failed nuisance starting state need "
+                        "not indicate a parameter domain boundary."
                     )
                 if outside_score < self._log_likelihood_threshold:
                     return (outside, inside) if direction < 0 else (inside, outside)
