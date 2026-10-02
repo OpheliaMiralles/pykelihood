@@ -17,6 +17,10 @@ ParameterState = Mapping[Parameter, npt.NDArray[np.float64]]
 RandomState = Union[int, np.random.Generator, np.random.RandomState, None]
 
 
+class InvalidDistributionState(ValueError):
+    """A state gives a distribution invalid parameter values."""
+
+
 class Distribution(Node, ABC):
     """A probability law whose parameter expressions form a graph node."""
 
