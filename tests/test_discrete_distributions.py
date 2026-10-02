@@ -4,7 +4,7 @@ from numpy.testing import assert_allclose
 from scipy import stats
 
 from pykelihood.distributions.core import InvalidDistributionState
-from pykelihood.distributions.discrete import Bernoulli
+from pykelihood.distributions.scipy_wrappers import Bernoulli
 from pykelihood.parameters import Parameter
 from pykelihood.parametric import fit_mle
 
