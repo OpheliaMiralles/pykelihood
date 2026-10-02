@@ -107,6 +107,21 @@ def test_parameter_layout_initial_state_requires_initial_values() -> None:
         initial_state(alpha)
 
 
+def test_layout_builds_independent_state_and_excludes_fixed_parameters() -> None:
+    location = parameters.Parameter(1.0)
+    scale = parameters.Parameter(shape=(2,))
+    layout = ParameterLayout.from_expr(location + scale)
+    supplied = np.array([2.0, 3.0])
+
+    state = layout.initial_state({scale: supplied})
+    supplied[0] = 9.0
+    free_layout = layout.without({location})
+
+    np.testing.assert_allclose(state[location], 1.0)
+    np.testing.assert_allclose(state[scale], [2.0, 3.0])
+    np.testing.assert_allclose(free_layout.flatten(state), [2.0, 3.0])
+
+
 def test_state_indexing() -> None:
     alpha = parameters.Parameter(1.0)
     state = initial_state(alpha)
