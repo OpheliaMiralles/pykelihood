@@ -82,8 +82,7 @@ class TruncatedContinuousDistribution(Distribution):
         lower, upper = self._bounds(state)
         lower_cdf = self.distribution.cdf(lower, state=state)
         mass = np.asarray(
-            self.distribution.cdf(upper, state=state) - lower_cdf,
-            dtype=np.float64,
+            self.distribution.cdf(upper, state=state) - lower_cdf, dtype=np.float64
         )
         if np.any(~np.isfinite(mass)) or np.any(mass <= 0.0):
             raise InvalidDistributionState(
