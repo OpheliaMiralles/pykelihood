@@ -77,9 +77,8 @@ def fit_mle(
     starting_values.update(fixed_values)
     initial = full_layout.initial_state(starting_values)
     fixed_state = {parameter: initial[parameter] for parameter in fixed_values}
-    _validate_transform_domains(initial, full_layout.parameters)
-
     layout = full_layout.without(fixed_state)
+    _validate_transform_domains(initial, layout.parameters)
     optimizer_x0 = layout.flatten(initial, transform=True)
 
     def evaluate(values: npt.ArrayLike) -> float:

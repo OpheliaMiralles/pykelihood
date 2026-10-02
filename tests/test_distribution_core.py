@@ -9,7 +9,7 @@ from pykelihood.expr import Constant
 from pykelihood.likelihood import negative_log_likelihood
 from pykelihood.parameters import Parameter
 from pykelihood.parametric import FitResult, fit_mle
-from pykelihood.state import ParameterLayout, PositiveTransform
+from pykelihood.state import ParameterLayout, PositiveTransform, ProbabilityTransform
 
 
 def test_distribution_children_expose_shared_parameters_to_traversal() -> None:
@@ -193,6 +193,26 @@ def test_fit_result_reports_optimizer_failure() -> None:
     result = fit_mle(Normal(), [0.0, 1.0, 2.0], scipy_args={"options": {"maxiter": 0}})
 
     assert not result.optimize_result.success
+
+
+def test_fixed_physical_values_do_not_require_finite_optimizer_coordinates() -> None:
+    location = Parameter(init=0.5, transform=ProbabilityTransform())
+    scale = Parameter(init=1.0, transform=PositiveTransform())
+    model = Normal(loc=location, scale=scale)
+    data = [0.0, 1.0, 2.0]
+
+    result = fit_mle(model, data, fixed={location: 0.0})
+
+    assert result.optimize_result.success
+    assert result.state[location] == 0.0
+    assert result.state[scale] == pytest.approx(np.sqrt(5.0 / 3.0), rel=1e-3)
+
+
+def test_free_values_still_require_finite_optimizer_coordinates() -> None:
+    location = Parameter(init=0.5, transform=ProbabilityTransform())
+
+    with pytest.raises(ValueError, match="outside its transform domain"):
+        fit_mle(Normal(loc=location, scale=1.0), [0.0, 1.0], state={location: 0.0})
 
 
 def test_fitting_penalizes_invalid_optimizer_proposals() -> None:
