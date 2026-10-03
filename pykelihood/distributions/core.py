@@ -22,7 +22,7 @@ class InvalidDistributionState(ValueError):
 
 
 class Distribution(Node, ABC):
-    """A probability law whose parameter expressions form a graph node."""
+    """A sampleable probability law with pointwise log probability scores."""
 
     @property
     @abstractmethod
@@ -39,20 +39,29 @@ class Distribution(Node, ABC):
         *,
         state: ParameterState | None = None,
         random_state: RandomState = None,
-    ) -> npt.NDArray[np.float64]:
+    ) -> npt.NDArray[np.generic]:
         raise NotImplementedError
 
     @abstractmethod
+    def log_prob(
+        self, x: npt.ArrayLike, *, state: ParameterState | None = None
+    ) -> npt.NDArray[np.float64]:
+        """Return pointwise log scores, reducing any event coordinates."""
+        raise NotImplementedError
+
+
+class UnivariateContinuousDistribution(Distribution, ABC):
+    """A univariate continuous law with density, CDF, and quantile operations."""
+
     def pdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        raise NotImplementedError
+        return np.exp(self.log_prob(x, state=state))
 
-    @abstractmethod
     def logpdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        raise NotImplementedError
+        return self.log_prob(x, state=state)
 
     @abstractmethod
     def cdf(
