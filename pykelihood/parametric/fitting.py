@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, cast
 
 import numpy as np
@@ -18,6 +18,10 @@ from pykelihood.state import ParameterLayout, State
 OptimizerArgs = Mapping[str, object]
 StateInput = Mapping[Parameter, npt.ArrayLike]
 FixedParameters = Mapping[Parameter, npt.ArrayLike]
+
+
+class NonFiniteInitialLikelihood(ValueError):
+    """The supplied starting state cannot be scored against the data."""
 
 
 def _validate_transform_domains(
@@ -36,9 +40,10 @@ def _validate_transform_domains(
 
 @dataclass
 class FitResult:
-    """A structural model paired with its fitted physical-value state."""
+    """A fitted model, physical state, and read-only fitting observations."""
 
     model: Distribution
+    data: npt.NDArray[np.float64] = field(repr=False)
     state: State
     fixed: Mapping[Parameter, npt.NDArray[np.float64]]
     optimize_result: OptimizeResult
@@ -67,8 +72,23 @@ def fit_mle(
     ``state`` and ``fixed`` values are physical values keyed by the actual
     ``Parameter`` nodes. ``state`` supplies optimizer starting values; ``fixed``
     also removes those parameters from the optimizer layout.
+
+    The result retains an independent, read-only snapshot of ``data``.
     """
     data_array = np.asarray(data, dtype=np.float64).copy()
+    data_array.setflags(write=False)
+    return _fit_mle(model, data_array, state=state, fixed=fixed, scipy_args=scipy_args)
+
+
+def _fit_mle(
+    model: Distribution,
+    data: npt.NDArray[np.float64],
+    *,
+    state: StateInput | None = None,
+    fixed: FixedParameters | None = None,
+    scipy_args: OptimizerArgs | None = None,
+) -> FitResult:
+    """Fit on an owned read-only snapshot, shared by profile refits."""
     full_layout = ParameterLayout.from_expr(model)
     fixed_values = {} if fixed is None else dict(fixed)
     if any(not isinstance(parameter, Parameter) for parameter in fixed_values):
@@ -85,7 +105,7 @@ def fit_mle(
         current = dict(initial)
         current.update(layout.unflatten(values, transform=True))
         try:
-            scalar = negative_log_likelihood(model, data_array, state=current)
+            scalar = negative_log_likelihood(model, data, state=current)
         except InvalidDistributionState:
             return np.inf
         if np.isnan(scalar):
@@ -94,7 +114,9 @@ def fit_mle(
 
     initial_objective = evaluate(optimizer_x0)
     if not np.isfinite(initial_objective):
-        raise ValueError("The model has no finite likelihood at its initial state.")
+        raise NonFiniteInitialLikelihood(
+            "The model has no finite likelihood at its initial state."
+        )
 
     options = dict(scipy_args or {})
     options.setdefault("method", "Nelder-Mead")
@@ -122,6 +144,7 @@ def fit_mle(
 
     return FitResult(
         model=model,
+        data=data,
         state=final_state,
         fixed=fixed_state,
         optimize_result=optimize_result,
