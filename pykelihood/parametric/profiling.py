@@ -12,7 +12,11 @@ from scipy.stats import chi2
 
 from pykelihood.likelihood import negative_log_likelihood
 from pykelihood.parameters import Parameter
-from pykelihood.parametric.fitting import FitResult, NonFiniteInitialLikelihood, fit_mle
+from pykelihood.parametric.fitting import (
+    FitResult,
+    NonFiniteInitialLikelihood,
+    _fit_mle,
+)
 from pykelihood.state import ParameterLayout, State
 
 
@@ -37,20 +41,17 @@ class ProfilePoint:
 class Profiler:
     """Profile scalar parameters from an existing maximum-likelihood fit."""
 
-    def __init__(
-        self, fit_result: FitResult, data: npt.ArrayLike, confidence: float = 0.95
-    ) -> None:
+    def __init__(self, fit_result: FitResult, *, confidence: float = 0.95) -> None:
         if not fit_result.optimize_result.success:
             raise ValueError("Profiling requires a successful initial fit.")
         if not 0.0 < confidence < 1.0:
             raise ValueError("confidence must be between 0 and 1.")
         self.fit_result = fit_result
-        self.data = np.asarray(data, dtype=np.float64).copy()
         self.confidence = float(confidence)
         self._parameters = ParameterLayout.from_expr(fit_result.model).parameters
         self._cache: dict[tuple[Parameter, float], ProfilePoint] = {}
         self._max_log_likelihood = -negative_log_likelihood(
-            fit_result.model, self.data, state=fit_result.state
+            fit_result.model, fit_result.data, state=fit_result.state
         )
         if not np.isfinite(self._max_log_likelihood):
             raise ValueError("Profiling requires a finite initial likelihood.")
@@ -93,8 +94,11 @@ class Profiler:
             if nearby
             else self.fit_result.state
         )
-        profiled_fit = fit_mle(
-            self.fit_result.model, self.data, state=starting_state, fixed=fixed
+        profiled_fit = _fit_mle(
+            self.fit_result.model,
+            self.fit_result.data,
+            state=starting_state,
+            fixed=fixed,
         )
         if not profiled_fit.optimize_result.success or not np.isfinite(
             profiled_fit.optimize_result.fun
