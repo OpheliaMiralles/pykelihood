@@ -16,11 +16,11 @@ from scipy.special import xlog1py, xlogy
 from scipy.stats import rv_continuous
 
 from pykelihood.distributions.core import (
-    Distribution,
     InvalidDistributionState,
     ParameterInput,
     ParameterState,
     RandomState,
+    SampleableDistribution,
 )
 from pykelihood.distributions.scipy_adapter import ParameterDefault, ScipyDistribution
 from pykelihood.expr import Constant, Expr
@@ -204,7 +204,7 @@ if Version(scipy.__version__) >= Version("1.15.0"):
     )
 
 
-class Bernoulli(Distribution):
+class Bernoulli(SampleableDistribution):
     """Bernoulli law with probability parameter ``p`` and integer samples."""
 
     def __init__(self, p: Expr | npt.ArrayLike) -> None:
