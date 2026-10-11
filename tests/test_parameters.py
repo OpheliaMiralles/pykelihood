@@ -10,6 +10,12 @@ def test_parameter():
     assert p() == 3.0
 
 
+def test_parameter_default_and_explicit_uninitialized_site() -> None:
+    assert parameters.Parameter().value == 0.0
+    assert parameters.Parameter(init=None).init is None
+    assert parameters.Parameter(shape=(2,)).init is None
+
+
 def test_parameter_with_params():
     p = parameters.Parameter(1)
     assert p.with_params([5.0])() == 5.0

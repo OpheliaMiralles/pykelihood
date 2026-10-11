@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import warnings
+import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, Protocol, TypeVar, overload
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -16,10 +16,48 @@ from pykelihood.metrics import opposite_log_likelihood
 from pykelihood.parameters import Parametrized, ensure_parametrized
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 
 _T = TypeVar("_T")
 SomeDistribution = TypeVar("SomeDistribution", bound="Distribution")
+
+
+class _FitMethod:
+    """Keep released class fitting alongside instance fitting."""
+
+    @overload
+    def __get__(
+        self, instance: None, owner: type[SomeDistribution]
+    ) -> Callable[..., SomeDistribution]: ...
+
+    @overload
+    def __get__(
+        self, instance: SomeDistribution, owner: type[SomeDistribution]
+    ) -> Callable[..., Fit[SomeDistribution]]: ...
+
+    def __get__(self, instance, owner):
+        if instance is not None:
+            return instance._fit
+
+        def fit(
+            data: Obs,
+            x0: Sequence[float] | None = None,
+            score: Callable = opposite_log_likelihood,
+            scipy_args: dict | None = None,
+            **fixed_values,
+        ):
+            constructor_names = inspect.signature(owner).parameters
+            constructor_values = {
+                name: value
+                for name, value in fixed_values.items()
+                if name in constructor_names
+            }
+            result = owner(**constructor_values)._fit(
+                data, x0=x0, score=score, scipy_args=scipy_args, **fixed_values
+            )
+            return result.fitted
+
+        return fit
 
 
 class Distribution(Parametrized, ABC):
@@ -100,7 +138,10 @@ class Distribution(Parametrized, ABC):
     def _apply_constraints(self, data):
         return data
 
-    def fit(
+    fit = _FitMethod()
+    fit_result: OptimizeResult
+
+    def _fit(
         self,
         data: Obs,
         x0: Sequence[float] | None = None,
@@ -151,16 +192,12 @@ class Distribution(Parametrized, ABC):
         minimize_args.update(scipy_args or {})
         optimization_result = minimize(to_minimize, x0, **minimize_args)
         dist = init.with_params(optimization_result.x)
+        dist.fit_result = optimization_result
 
         return Fit(dist, data, score, x0=x0, optimize_result=optimization_result)
 
     def fit_instance(self, *args, **kwargs):
-        warnings.warn(
-            "fit_instance is deprecated, use fit instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.fit(*args, **kwargs)
+        return self._fit(*args, **kwargs).fitted
 
     def _process_fit_params(self, **kwds):
         out_dict = self.param_dict.copy()
@@ -311,6 +348,8 @@ class ScipyDistribution(Distribution, ABC):
         super().__init__(*params.values())
 
     def _build_instance(self, **params) -> Self:
+        if type(self)._to_scipy_args is not ScipyDistribution._to_scipy_args:
+            return type(self)(**params)
         return type(self)(reparametrization=self.reparametrization, **params)
 
     @property

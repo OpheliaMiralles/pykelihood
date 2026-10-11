@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 from collections import ChainMap
 from collections.abc import Iterable, Iterator, Mapping
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 import numpy as np
@@ -15,6 +16,10 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
 _T = TypeVar("_T")
+
+
+class _Unset(Enum):
+    VALUE = 0
 
 
 def ensure_parametrized(x: Any, constant=False) -> Parametrized:
@@ -320,9 +325,9 @@ class Parameter(Parametrized):
 
     def __init__(
         self,
-        value: npt.ArrayLike | None = None,
+        value: npt.ArrayLike | None | _Unset = _Unset.VALUE,
         *,
-        init: npt.ArrayLike | None = None,
+        init: npt.ArrayLike | None | _Unset = _Unset.VALUE,
         shape: tuple[int, ...] | None = None,
         transform: Transform | None = None,
         name: str | None = None,
@@ -333,12 +338,22 @@ class Parameter(Parametrized):
         Parameters
         ----------
         value : float or ndarray
-            Initial value of the parameter
+            Initial value of the parameter. The released default is zero.
+            Use ``init=None`` for an explicitly uninitialized parameter.
         """
-        if value is not None and init is not None:
+        if (
+            not isinstance(value, _Unset)
+            and value is not None
+            and not isinstance(init, _Unset)
+        ):
             raise ValueError("Please provide only one of `value` or `init`.")
 
-        init_value = value if init is None else init
+        if not isinstance(init, _Unset):
+            init_value = init
+        elif not isinstance(value, _Unset):
+            init_value = value
+        else:
+            init_value = 0.0 if shape is None else None
         self.transform = transform
         self.name = name
 
