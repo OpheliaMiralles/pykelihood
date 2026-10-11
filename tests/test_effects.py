@@ -195,7 +195,7 @@ def test_bound_linear_effect_discovers_slope_parameter() -> None:
     x = np.array([0.0, 1.0, 2.0])
     slope = Parameter(2.0)
     effect = linear(slope=slope).with_covariate(x)
-    layout = ParameterLayout.from_expr(effect)
+    layout = ParameterLayout.from_node(effect)
 
     assert isinstance(effect, BoundEffect)
     assert layout.parameters == (slope,)
@@ -206,7 +206,7 @@ def test_effect_layout_tracks_all_paths_for_shared_parameter() -> None:
     x = np.array([0.0, 1.0, 2.0])
     shared = Parameter(2.0)
     effect = (constant(shared) + linear(slope=shared)).with_covariate(x)
-    layout = ParameterLayout.from_expr(effect)
+    layout = ParameterLayout.from_node(effect)
 
     assert layout.parameters == (shared,)
     assert layout.parameter_paths[shared] == (("left", "value"), ("right", "slope"))

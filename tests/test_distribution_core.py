@@ -6,9 +6,9 @@ from scipy import stats
 from pykelihood.distributions.core import Normal, ParameterDefault, ScipyDistribution
 from pykelihood.effects import linear
 from pykelihood.expr import Constant
+from pykelihood.inference import FitResult, fit_mle
 from pykelihood.likelihood import negative_log_likelihood
 from pykelihood.parameters import Parameter
-from pykelihood.parametric import FitResult, fit_mle
 from pykelihood.state import ParameterLayout, PositiveTransform, ProbabilityTransform
 
 
@@ -16,7 +16,7 @@ def test_distribution_children_expose_shared_parameters_to_traversal() -> None:
     location = Parameter(init=1.0)
     distribution = Normal(loc=location, scale=location)
 
-    layout = ParameterLayout.from_expr(distribution)
+    layout = ParameterLayout.from_node(distribution)
 
     assert layout.parameters == (location,)
 
@@ -53,7 +53,7 @@ def test_literal_values_become_structural_constants() -> None:
 
     assert isinstance(distribution.parameters["loc"], Constant)
     assert isinstance(distribution.parameters["scale"], Constant)
-    assert ParameterLayout.from_expr(distribution).parameters == ()
+    assert ParameterLayout.from_node(distribution).parameters == ()
 
     location = Parameter(init=0.0)
     mixed_distribution = Normal(loc=location, scale=3.0)
@@ -130,7 +130,7 @@ def test_expression_and_bound_effect_parameters_share_explicit_state() -> None:
         effect_distribution.pdf(0.0, state=effect_state),
         stats.norm.pdf(0.0, loc=np.array([0.0, 2.0, 4.0])),
     )
-    assert ParameterLayout.from_expr(effect_distribution).parameters == (slope,)
+    assert ParameterLayout.from_node(effect_distribution).parameters == (slope,)
 
 
 def test_sampling_accepts_seeded_generator() -> None:

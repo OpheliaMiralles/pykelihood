@@ -86,8 +86,8 @@ class ParameterLayout:
         self.vector_size = offset
 
     @classmethod
-    def from_expr(cls, expr: Node) -> ParameterLayout:
-        parameter_paths = collect_parameter_paths(expr)
+    def from_node(cls, node: Node) -> ParameterLayout:
+        parameter_paths = collect_parameter_paths(node)
         return cls(tuple(parameter_paths), parameter_paths)
 
     def without(self, excluded: Collection[Parameter]) -> ParameterLayout:
@@ -176,4 +176,4 @@ class ParameterLayout:
 
 
 def initial_state(expr: Node) -> State:
-    return ParameterLayout.from_expr(expr).initial_state()
+    return ParameterLayout.from_node(expr).initial_state()

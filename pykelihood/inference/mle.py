@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Callable, cast
+from typing import Callable, Generic, TypeVar, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -19,26 +19,14 @@ OptimizerArgs = Mapping[str, object]
 StateInput = Mapping[Parameter, npt.ArrayLike]
 FixedParameters = Mapping[Parameter, npt.ArrayLike]
 
-
-def _validate_transform_domains(
-    state: State, parameters: tuple[Parameter, ...]
-) -> None:
-    for parameter in parameters:
-        if parameter.transform is None:
-            continue
-        with np.errstate(all="ignore"):
-            transformed = parameter.transform.inverse_transform(state[parameter])
-        if not np.all(np.isfinite(transformed)):
-            raise ValueError(
-                f"Value for {parameter!r} is outside its transform domain."
-            )
+_ModelT = TypeVar("_ModelT", bound=Distribution)
 
 
 @dataclass
-class FitResult:
+class FitResult(Generic[_ModelT]):
     """A structural model paired with its fitted physical-value state."""
 
-    model: Distribution
+    model: _ModelT
     state: State
     fixed: Mapping[Parameter, npt.NDArray[np.float64]]
     optimize_result: OptimizeResult
@@ -55,13 +43,13 @@ class FitResult:
 
 
 def fit_mle(
-    model: Distribution,
+    model: _ModelT,
     data: npt.ArrayLike,
     *,
     state: StateInput | None = None,
     fixed: FixedParameters | None = None,
     scipy_args: OptimizerArgs | None = None,
-) -> FitResult:
+) -> FitResult[_ModelT]:
     """Fit free parameters while keeping model structure unchanged.
 
     ``state`` and ``fixed`` values are physical values keyed by the actual
@@ -69,7 +57,7 @@ def fit_mle(
     also removes those parameters from the optimizer layout.
     """
     data_array = np.asarray(data, dtype=np.float64).copy()
-    full_layout = ParameterLayout.from_expr(model)
+    full_layout = ParameterLayout.from_node(model)
     fixed_values = {} if fixed is None else dict(fixed)
     if any(not isinstance(parameter, Parameter) for parameter in fixed_values):
         raise TypeError("fixed must be keyed by Parameter objects.")
@@ -78,8 +66,14 @@ def fit_mle(
     initial = full_layout.initial_state(starting_values)
     fixed_state = {parameter: initial[parameter] for parameter in fixed_values}
     layout = full_layout.without(fixed_state)
-    _validate_transform_domains(initial, layout.parameters)
-    optimizer_x0 = layout.flatten(initial, transform=True)
+    with np.errstate(all="ignore"):
+        optimizer_x0 = layout.flatten(initial, transform=True)
+    for parameter in layout.parameters:
+        coordinates = optimizer_x0[layout.parameter_slices[parameter]]
+        if parameter.transform is not None and not np.all(np.isfinite(coordinates)):
+            raise ValueError(
+                f"Value for {parameter!r} is outside its transform domain."
+            )
 
     def evaluate(values: npt.ArrayLike) -> float:
         current = dict(initial)
