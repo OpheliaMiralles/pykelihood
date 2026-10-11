@@ -14,6 +14,7 @@ from pykelihood.distributions.core import (
     ParameterInput,
     ParameterState,
     RandomState,
+    SampleableDistribution,
     UnivariateContinuousDistribution,
 )
 from pykelihood.expr import Constant, Expr
@@ -29,7 +30,7 @@ class ParameterDefault:
     transform: Transform | None = None
 
 
-class ScipyDistribution(UnivariateContinuousDistribution):
+class ScipyDistribution(UnivariateContinuousDistribution, SampleableDistribution):
     """Continuous SciPy distribution evaluated from expression parameters."""
 
     def __init__(
