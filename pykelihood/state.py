@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
@@ -86,9 +86,54 @@ class ParameterLayout:
         self.vector_size = offset
 
     @classmethod
-    def from_expr(cls, expr: Node) -> ParameterLayout:
-        parameter_paths = collect_parameter_paths(expr)
+    def from_node(cls, node: Node) -> ParameterLayout:
+        parameter_paths = collect_parameter_paths(node)
         return cls(tuple(parameter_paths), parameter_paths)
+
+    def without(self, excluded: Collection[Parameter]) -> ParameterLayout:
+        """Return a layout for parameters outside ``excluded``."""
+        remaining = tuple(
+            parameter for parameter in self.parameters if parameter not in excluded
+        )
+        return ParameterLayout(
+            remaining,
+            {parameter: self.parameter_paths[parameter] for parameter in remaining},
+        )
+
+    def initial_state(
+        self, overrides: Mapping[Parameter, npt.ArrayLike] | None = None
+    ) -> State:
+        """Build a complete physical-value state from initial values and overrides."""
+        supplied = {} if overrides is None else overrides
+        unknown = tuple(
+            parameter for parameter in supplied if parameter not in self.parameters
+        )
+        if unknown:
+            details = ", ".join(repr(parameter) for parameter in unknown)
+            raise ValueError(
+                f"State contains parameters not present in the model: {details}"
+            )
+
+        values: State = {}
+        missing: list[Parameter] = []
+        for parameter in self.parameters:
+            value = supplied[parameter] if parameter in supplied else parameter.init
+            if value is None:
+                missing.append(parameter)
+                continue
+            array = np.array(value, dtype=np.float64, copy=True)
+            if array.shape != parameter.shape:
+                raise ValueError(
+                    f"Value for {parameter!r} has shape {array.shape}, "
+                    f"expected {parameter.shape}."
+                )
+            values[parameter] = array
+        if missing:
+            details = ", ".join(repr(parameter) for parameter in missing)
+            raise ValueError(
+                f"Cannot build an initial state for uninitialized parameters: {details}"
+            )
+        return values
 
     def flatten(
         self,
@@ -131,16 +176,4 @@ class ParameterLayout:
 
 
 def initial_state(expr: Node) -> State:
-    values: dict[Parameter, npt.NDArray[np.float64]] = {}
-    missing: list[Parameter] = []
-    for parameter in collect_parameters(expr):
-        if parameter.init is None:
-            missing.append(parameter)
-        else:
-            values[parameter] = parameter.init
-    if missing:
-        details = ", ".join(repr(parameter) for parameter in missing)
-        raise ValueError(
-            f"Cannot build an initial state for uninitialized parameters: {details}"
-        )
-    return values
+    return ParameterLayout.from_node(expr).initial_state()

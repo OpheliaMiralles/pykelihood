@@ -346,7 +346,7 @@ class Parameter(Parametrized):
             self.init = None
             self.shape = shape or ()
         else:
-            init_array = np.asarray(init_value, dtype=np.float64)
+            init_array = np.array(init_value, dtype=np.float64, copy=True)
             if shape is not None and shape != init_array.shape:
                 raise ValueError(
                     f"Parameter shape {shape} does not match init shape {init_array.shape}."
