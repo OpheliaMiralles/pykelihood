@@ -12,7 +12,7 @@ def log_likelihood(
     model: Distribution, data: npt.ArrayLike, *, state: ParameterState | None = None
 ) -> float:
     """Return the summed log likelihood for ``data`` under ``model``."""
-    return float(np.sum(model.logpdf(data, state=state)))
+    return float(np.sum(model.log_prob(data, state=state)))
 
 
 def negative_log_likelihood(

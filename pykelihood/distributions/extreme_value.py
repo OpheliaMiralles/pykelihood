@@ -11,10 +11,10 @@ from scipy import stats
 from scipy.stats import rv_continuous
 
 from pykelihood.distributions.core import (
-    Distribution,
     ParameterInput,
     ParameterState,
     RandomState,
+    UnivariateContinuousDistribution,
 )
 from pykelihood.distributions.scipy_adapter import ScipyDistribution
 from pykelihood.expr import Constant, Expr
@@ -36,7 +36,7 @@ def _resolve_parameter(
     return Constant(value)
 
 
-class _ShapeConvenience(Distribution):
+class _ShapeConvenience(UnivariateContinuousDistribution):
     """Map one public statistical shape convention to SciPy's ``c``."""
 
     _scipy_distribution: rv_continuous
@@ -86,10 +86,10 @@ class _ShapeConvenience(Distribution):
     ) -> npt.NDArray[np.float64]:
         return self._scipy_model.pdf(x, state=state)
 
-    def logpdf(
+    def log_prob(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
     ) -> npt.NDArray[np.float64]:
-        return self._scipy_model.logpdf(x, state=state)
+        return self._scipy_model.log_prob(x, state=state)
 
     def cdf(
         self, x: npt.ArrayLike, *, state: ParameterState | None = None
