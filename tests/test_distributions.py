@@ -1,14 +1,18 @@
 import numpy as np
 import pytest
+from numpy.testing import assert_allclose
 from scipy import stats
 
 from pykelihood import distributions, kernels
 from pykelihood.distributions import (
     GEV,
+    Gamma,
+    LogNormale,
     Normal,
     TruncatedDistribution,
     _name_from_scipy_dist,
 )
+from pykelihood.distributions.base import Fit
 from pykelihood.kernels import linear
 from pykelihood.parameters import ConstantParameter, Parameter
 
@@ -233,3 +237,61 @@ def test_distributions_naming_from_scipy():
     assert not issues, (
         f"Distribution class names do not match their defined names: {issues}"
     )
+
+
+def test_class_fit_returns_a_distribution_with_optimizer_result() -> None:
+    fitted = Normal.fit(np.array([-1.0, 0.0, 1.0]), loc=0.0)
+
+    assert isinstance(fitted, Normal)
+    assert fitted.loc() == 0.0
+    assert isinstance(fitted.loc, ConstantParameter)
+    assert fitted.fit_result.success
+
+
+def test_fit_instance_preserves_fixed_parameters_and_input_model() -> None:
+    model = Normal(loc=ConstantParameter(2.0))
+    fitted = model.fit_instance(np.array([1.0, 2.0, 3.0]))
+
+    assert isinstance(fitted, Normal)
+    assert fitted.loc() == 2.0
+    assert fitted.fit_result.success
+    assert model.scale() == 1.0
+
+
+def test_instance_fit_exposes_optimizer_result() -> None:
+    result = Normal().fit(np.array([-1.0, 0.0, 1.0]))
+
+    assert isinstance(result, Fit)
+    assert result.fitted.fit_result is result.optimize_result
+
+
+def test_lognormale_maps_scale_to_scipy_shape() -> None:
+    model = LogNormale(loc=1.0, scale=2.0)
+    values = np.array([1.5, 2.0, 3.0])
+
+    assert_allclose(model.pdf(values), stats.lognorm.pdf(values, s=2.0, loc=1.0))
+    assert_allclose(model.cdf(values), stats.lognorm.cdf(values, s=2.0, loc=1.0))
+    updated = model.with_params(scale=3.0)
+    assert_allclose(updated.pdf(values), stats.lognorm.pdf(values, s=3.0, loc=1.0))
+
+
+def test_gamma_class_fit_accepts_named_shape_parameter() -> None:
+    fitted = Gamma.fit(np.array([1.0, 2.0, 3.0]), loc=0.0, shape=2.0)
+
+    assert isinstance(fitted, Gamma)
+    assert fitted.shape() == 2.0
+    assert fitted.fit_result.success
+
+
+def test_truncated_class_fit_accepts_constructor_arguments() -> None:
+    fitted = TruncatedDistribution.fit(
+        np.array([0.2, 0.4, 0.7, 0.8]),
+        distribution=Normal(scale=ConstantParameter(1.0)),
+        lower_bound=0.0,
+        upper_bound=1.0,
+    )
+
+    assert isinstance(fitted, TruncatedDistribution)
+    assert fitted.lower_bound == 0.0
+    assert fitted.upper_bound == 1.0
+    assert fitted.fit_result.success

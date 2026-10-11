@@ -10,6 +10,7 @@ from pykelihood.utils import ifnone
 __all__ = [
     "Exponential",
     "Gamma",
+    "LogNormale",
     "Pareto",
     "Beta",
     "GEV",
@@ -106,6 +107,29 @@ class Gamma(ScipyDistribution):
             "loc": ifnone(loc, self.loc()),
             "scale": ifnone(scale, self.scale()),
         }
+
+
+class LogNormale(ScipyDistribution):
+    """Released lognormal spelling, with ``scale`` as SciPy's shape ``s``."""
+
+    _base_module = _stats.lognorm
+
+    def __init__(self, loc=0.0, scale=1.0):
+        super().__init__(
+            loc=loc,
+            scale=scale,
+            reparametrization=lambda params: {
+                "loc": params["loc"],
+                "s": params["scale"],
+            },
+        )
+
+    @property
+    def params_names(self):
+        return ("loc", "scale")
+
+    def _to_scipy_args(self, loc=None, scale=None):
+        return {"s": ifnone(scale, self.scale()), "loc": ifnone(loc, self.loc())}
 
 
 class Pareto(ScipyDistribution):
@@ -426,7 +450,7 @@ class TruncatedDistribution(Distribution):
         """
         return x[self._valid_indices(x)]
 
-    def fit(self, *args, **kwargs):
+    def _fit(self, *args, **kwargs):
         """
         Fit the instance to the data.
 
@@ -443,7 +467,7 @@ class TruncatedDistribution(Distribution):
             The fitted instance.
         """
         kwargs.update(lower_bound=self.lower_bound, upper_bound=self.upper_bound)
-        return super().fit(*args, **kwargs)
+        return super()._fit(*args, **kwargs)
 
     def rvs(self, size: int, *args, **kwargs):
         """

@@ -148,8 +148,8 @@ def test_effects_can_mix_with_exprs() -> None:
 
 def test_effect_evaluation_accepts_full_explicit_state() -> None:
     x = np.array([0.0, 1.0, 2.0])
-    c = Parameter()
-    slope = Parameter()
+    c = Parameter(init=None)
+    slope = Parameter(init=None)
     effect = constant(c) + linear(slope)
     bound = effect.with_covariate(x)
     state = {c: np.array(1.0), slope: np.array(2.0)}
@@ -170,7 +170,7 @@ def test_effect_evaluation_uses_explicitly_merged_initial_state() -> None:
 def test_effect_composition_uses_nested_bound_covariate_over_outer_one() -> None:
     inner_x = np.array([0.0, 1.0, 2.0])
     outer_x = np.array([10.0, 20.0, 30.0])
-    slope = Parameter()
+    slope = Parameter(init=None)
     nested = linear(slope=slope).with_covariate(inner_x)
     effect = constant(1.0) + nested
 

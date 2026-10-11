@@ -289,7 +289,7 @@ def test_constant_model_with_impossible_data_cannot_report_a_successful_fit() ->
 
 
 def test_state_supplies_a_start_for_an_uninitialized_parameter() -> None:
-    location = Parameter()
+    location = Parameter(init=None)
     model = Normal(loc=location, scale=1.0)
 
     with pytest.raises(ValueError, match="uninitialized parameters"):
