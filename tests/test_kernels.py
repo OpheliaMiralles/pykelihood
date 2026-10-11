@@ -177,3 +177,29 @@ def test_categorical_with_bool(categorical_data_boolean):
         cat_kernel.with_params(values)()
         == categorical_data_boolean.apply(mapping.__getitem__)
     ).all()
+
+
+def test_kernel_decorator_applies_free_defaults_and_fixed_overrides() -> None:
+    @kernels.kernel(intercept=2.0, slope=3.0)
+    def affine(x, intercept, slope):
+        return intercept + slope * x
+
+    first = affine(np.array([0.0, 1.0]), intercept=5.0)
+    second = affine(np.array([0.0, 1.0]))
+
+    np.testing.assert_allclose(first(), [5.0, 8.0])
+    np.testing.assert_allclose(second(), [2.0, 5.0])
+    assert isinstance(first.intercept, parameters.ConstantParameter)
+    assert first.slope is not second.slope
+    assert len(first.optimisation_params) == 1
+
+
+def test_kernel_aliases_and_initial_values() -> None:
+    covariate = np.array([0.0, 1.0])
+
+    np.testing.assert_allclose(kernels.expo(covariate)(), [1.0, 1.0])
+    np.testing.assert_allclose(kernels.expo_ratio(covariate)(), [1.0, 1.0])
+    np.testing.assert_allclose(kernels.hawkes_with_exp_kernel(covariate)(), [0.0, 0.0])
+    np.testing.assert_allclose(
+        kernels.hawkes2(1.0, [0.0, 1.0, 2.0], 2.0, 3.0, 1.0), 2 + 3 / np.e
+    )

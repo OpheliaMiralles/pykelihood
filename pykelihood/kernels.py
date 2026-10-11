@@ -4,7 +4,7 @@ import inspect
 import re
 from collections.abc import Collection, Hashable, Mapping, Sequence
 from functools import wraps
-from typing import Any, Callable, Union
+from typing import Any, Callable, Union, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -229,7 +229,24 @@ def _kernel_arguments(
     }
 
 
-def kernel(function: Callable[..., Any]) -> Callable[..., Kernel]:
+@overload
+def kernel(
+    function: Callable[..., Any], **parameter_defaults: KernelArg
+) -> Callable[..., Kernel]: ...
+
+
+@overload
+def kernel(
+    function: None = None, **parameter_defaults: KernelArg
+) -> Callable[[Callable[..., Any]], Callable[..., Kernel]]: ...
+
+
+def kernel(
+    function: Callable[..., Any] | None = None, **parameter_defaults: KernelArg
+) -> Callable[..., Kernel] | Callable[[Callable[..., Any]], Callable[..., Kernel]]:
+    if function is None:
+        return lambda wrapped: kernel(wrapped, **parameter_defaults)
+
     signature = inspect.signature(function)
     parameters = tuple(signature.parameters.values())
     if not parameters:
@@ -237,15 +254,25 @@ def kernel(function: Callable[..., Any]) -> Callable[..., Kernel]:
     kernel_parameters = parameters[1:]
     kernel_signature = inspect.Signature(parameters=kernel_parameters)
     parameter_names = tuple(parameter.name for parameter in kernel_parameters)
+    unknown = set(parameter_defaults) - set(parameter_names)
+    if unknown:
+        raise TypeError(f"Unknown kernel defaults: {', '.join(sorted(unknown))}")
 
     @wraps(function)
     def build(x: npt.ArrayLike | None = None, *args: Any, **kwargs: Any) -> Kernel:
         bound = kernel_signature.bind_partial(*args, **kwargs)
+        arguments = _kernel_arguments(**bound.arguments)
+        for name, default in parameter_defaults.items():
+            if name not in arguments:
+                value = _unwrap_kernel_arg(default)
+                arguments[name] = (
+                    value if isinstance(value, (Effect, Expr)) else Parameter(value)
+                )
         effect = build_effect(
             function,
             name=function.__name__,
             parameter_names=parameter_names,
-            arguments=_kernel_arguments(**bound.arguments),
+            arguments=arguments,
         )
         return Kernel(effect, x)
 
@@ -393,7 +420,7 @@ def exponential(
     return np.exp(a + b * x)
 
 
-@kernel
+@kernel(a=0.0, b=1.0, c=1.0)
 def exponential_ratio(
     x: npt.ArrayLike, a: Any = None, b: Any = None, c: Any = None
 ) -> npt.NDArray[np.float64]:
@@ -494,7 +521,7 @@ def trigonometric(
     return a + b * np.cos(2 * np.pi * x_value) + c * np.sin(2 * np.pi * x_value)
 
 
-@kernel
+@kernel(mu=0.0, alpha=0.0, theta=1.0)
 def hawkes(
     x: npt.NDArray, mu: Any = None, alpha: Any = None, theta: Any = None
 ) -> npt.NDArray[np.float64]:
@@ -524,6 +551,19 @@ def hawkes(
     return mu + alpha * theta * np.array(
         [np.sum(np.exp(-theta * (x[i] - x[:i]))) for i in range(len(x))]
     )
+
+
+expo = exponential
+expo_ratio = exponential_ratio
+hawkes_with_exp_kernel = hawkes
+
+
+def hawkes2(
+    t: float, tau: npt.ArrayLike, mu: float, alpha: float, theta: float
+) -> float:
+    """Released scalar Hawkes intensity evaluated at time ``t``."""
+    times = np.asarray(tau, dtype=np.float64)
+    return float(mu + alpha * theta * np.sum(np.exp(-theta * (t - times[times < t]))))
 
 
 def linear_regression(
